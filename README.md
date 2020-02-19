@@ -1,1 +1,1 @@
-# react-native-pushy-cli
+# react-native-update-cli
