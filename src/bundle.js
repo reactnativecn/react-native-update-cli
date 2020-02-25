@@ -218,7 +218,9 @@ async function diffFromPPK(origin, next, output) {
     }
   });
 
-  originSource = originSource || new Buffer(0);
+  if (!originSource) {
+    throw new Error(`Bundle file not found! Please use default bundle file name and path.`);
+  }
 
   const copies = {};
 
@@ -342,7 +344,9 @@ async function diffFromPackage(origin, next, output, originBundleName, transform
     }
   });
 
-  originSource = originSource || new Buffer(0);
+  if (!originSource) {
+    throw new Error(`Bundle file not found! Please use default bundle file name and path.`);
+  }
 
   const copies = {};
 
