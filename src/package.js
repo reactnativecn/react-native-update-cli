@@ -3,7 +3,7 @@
  */
 
 const { get, post, uploadFile } = require('./api');
-import { question } from './utils';
+import { question, saveToLocal } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 
@@ -60,6 +60,7 @@ export const commands = {
       hash,
       buildTime,
     });
+    saveToLocal(fn, `${appId}/${id}.ipa`);
     console.log(`Ipa uploaded: ${id}`);
   },
   uploadApk: async function({ args }) {
@@ -77,6 +78,7 @@ export const commands = {
       hash,
       buildTime,
     });
+    saveToLocal(fn, `${appId}/${id}.apk`);
     console.log(`Apk uploaded: ${id}`);
   },
   packages: async function({ options }) {

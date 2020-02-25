@@ -4,6 +4,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import os from 'os';
+import path from 'path';
 const AppInfoParser = require('app-info-parser');
 
 var read = require('read');
@@ -40,7 +42,9 @@ export function translateOptions(options) {
 }
 
 export function getRNVersion() {
-  const version = JSON.parse(fs.readFileSync(path.resolve('node_modules/react-native/package.json'))).version;
+  const version = JSON.parse(
+    fs.readFileSync(path.resolve('node_modules/react-native/package.json')),
+  ).version;
 
   // We only care about major and minor version.
   const match = /^(\d+)\.(\d+)\./.exec(version);
@@ -70,15 +74,29 @@ export async function getApkInfo(fn) {
 
 export async function getIpaInfo(fn) {
   const appInfoParser = new AppInfoParser(fn);
-  const { CFBundleShortVersionString: versionName } = await appInfoParser.parse();
-  let buildTimeTxtBuffer = await appInfoParser.parser.getEntry(/payload\/.+?\.app\/pushy_build_time.txt/);
+  const {
+    CFBundleShortVersionString: versionName,
+  } = await appInfoParser.parse();
+  let buildTimeTxtBuffer = await appInfoParser.parser.getEntry(
+    /payload\/.+?\.app\/pushy_build_time.txt/,
+  );
   if (!buildTimeTxtBuffer) {
     // Not in root bundle when use `use_frameworks`
-    buildTimeTxtBuffer = await appInfoParser.parser.getEntry(/payload\/.+?\.app\/frameworks\/react_native_update.framework\/pushy_build_time.txt/);
+    buildTimeTxtBuffer = await appInfoParser.parser.getEntry(
+      /payload\/.+?\.app\/frameworks\/react_native_update.framework\/pushy_build_time.txt/,
+    );
   }
   if (!buildTimeTxtBuffer) {
     throw new Error('Can not get build time for this app.');
   }
   const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
   return { versionName, buildTime };
+}
+
+const localDir = path.resolve(os.homedir(), '.pushy');
+fs.ensureDirSync(localDir);
+export function saveToLocal(originPath, destName) {
+  const destPath = path.join(localDir, destName);
+  fs.ensureDirSync(path.dirname(destPath));
+  fs.copyFileSync(originPath, destPath);
 }
