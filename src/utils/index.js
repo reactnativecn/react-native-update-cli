@@ -2,7 +2,6 @@
  * Created by tdzl2003 on 2/13/16.
  */
 
-import * as path from 'path';
 import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
