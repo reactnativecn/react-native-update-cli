@@ -312,7 +312,7 @@ async function diffFromPPK(origin, next, output) {
   }
 
   //console.log({copies, deletes});
-  zipfile.addBuffer(new Buffer(JSON.stringify({ copies, deletes })), '__diff.json');
+  zipfile.addBuffer(Buffer.from(JSON.stringify({ copies, deletes })), '__diff.json');
   zipfile.end();
   await writePromise;
 }
@@ -399,7 +399,7 @@ async function diffFromPackage(origin, next, output, originBundleName, transform
     }
   });
 
-  zipfile.addBuffer(new Buffer(JSON.stringify({ copies })), '__diff.json');
+  zipfile.addBuffer(Buffer.from(JSON.stringify({ copies })), '__diff.json');
   zipfile.end();
   await writePromise;
 }
