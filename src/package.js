@@ -47,7 +47,7 @@ export async function choosePackage(appId) {
 export const commands = {
   uploadIpa: async function({ args }) {
     const fn = args[0];
-    if (!fn) {
+    if (!fn || !fn.endsWith('.ipa')) {
       throw new Error('Usage: pushy uploadIpa <ipaFile>');
     }
     const { versionName, buildTime } = await getIpaInfo(fn);
@@ -60,12 +60,12 @@ export const commands = {
       hash,
       buildTime,
     });
-    saveToLocal(fn, `${appId}/${id}.ipa`);
+    saveToLocal(fn, `${appId}/package/${id}.ipa`);
     console.log(`Ipa uploaded: ${id}`);
   },
   uploadApk: async function({ args }) {
     const fn = args[0];
-    if (!fn) {
+    if (!fn || !fn.endsWith('.apk')) {
       throw new Error('Usage: pushy uploadApk <apkFile>');
     }
     const { versionName, buildTime } = await getApkInfo(fn);
@@ -78,7 +78,7 @@ export const commands = {
       hash,
       buildTime,
     });
-    saveToLocal(fn, `${appId}/${id}.apk`);
+    saveToLocal(fn, `${appId}/package/${id}.apk`);
     console.log(`Apk uploaded: ${id}`);
   },
   packages: async function({ options }) {

@@ -95,7 +95,8 @@ export async function getIpaInfo(fn) {
 const localDir = path.resolve(os.homedir(), '.pushy');
 fs.ensureDirSync(localDir);
 export function saveToLocal(originPath, destName) {
-  const destPath = path.join(localDir, destName);
-  fs.ensureDirSync(path.dirname(destPath));
-  fs.copyFileSync(originPath, destPath);
+  // TODO
+  // const destPath = path.join(localDir, destName);
+  // fs.ensureDirSync(path.dirname(destPath));
+  // fs.copyFileSync(originPath, destPath);
 }

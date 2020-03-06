@@ -8,7 +8,7 @@ const {
   put,
   uploadFile,
 } = require('./api');
-import { question } from './utils';
+import { question, saveToLocal } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
@@ -86,6 +86,8 @@ export const commands = {
       description: description || await question('Enter description:'),
       metaInfo: metaInfo || await question('Enter meta info:'),
     });
+    // TODO local diff
+    saveToLocal(fn, `${appId}/ppk/${id}.ppk`);
     console.log(`Version published: ${id}`);
 
     const v = await question('Would you like to bind packages to this version?(Y/N)');

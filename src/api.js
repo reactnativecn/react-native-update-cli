@@ -2,7 +2,7 @@
  * Created by tdzl2003 on 2/13/16.
  */
 
-const fetch = require('isomorphic-fetch');
+const fetch = require('node-fetch');
 let host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn/api';
 const fs = require('fs-extra');
 import request from 'request';
@@ -17,7 +17,9 @@ exports.loadSession = async function() {
       exports.replaceSession(JSON.parse(fs.readFileSync('.update', 'utf8')));
       savedSession = session;
     } catch (e) {
-      console.error('Failed to parse file `.update`. Try to remove it manually.');
+      console.error(
+        'Failed to parse file `.update`. Try to remove it manually.',
+      );
       throw e;
     }
   }
@@ -54,7 +56,9 @@ async function query(url, options) {
   const resp = await fetch(url, options);
   const json = await resp.json();
   if (resp.status !== 200) {
-    throw Object.assign(new Error(json.message || json.error), { status: resp.status });
+    throw Object.assign(new Error(json.message || json.error), {
+      status: resp.status,
+    });
   }
   return json;
 }
@@ -89,7 +93,7 @@ exports.put = queryWithBody('PUT');
 exports.doDelete = queryWithBody('DELETE');
 
 async function uploadFile(fn) {
-  const { url, fieldName, formData } = await exports.post('/upload', {});
+  const { url, formData } = await exports.post('/upload', {});
   let realUrl = url;
 
   if (!/^https?\:\/\//.test(url)) {
@@ -120,9 +124,17 @@ async function uploadFile(fn) {
           return reject(err);
         }
         if (resp.statusCode > 299) {
-          return reject(Object.assign(new Error(body), { status: resp.statusCode }));
+          return reject(
+            Object.assign(new Error(body), { status: resp.statusCode }),
+          );
         }
-        resolve(JSON.parse(body));
+        resolve(
+          body
+            ? // qiniu
+              JSON.parse(body)
+            : // aliyun oss
+              { hash: formData.key },
+        );
       },
     );
   });

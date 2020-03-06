@@ -32,31 +32,25 @@
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
   "dependencies": {
-    "app-info-parser": "^0.3.8",
+    "app-info-parser": "^0.3.9",
     "cli-arguments": "^0.2.1",
     "fs-extra": "^8.1.0",
     "gradle-to-js": "^2.0.0",
-    "isomorphic-fetch": "^2.2.1",
-    "progress": "^1.1.8",
+    "node-fetch": "^2.6.0",
+    "progress": "^2.0.3",
     "read": "^1.0.7",
-    "request": "^2.69.0",
-    "tty-table": "^2.7.0",
+    "request": "^2.88.2",
+    "tty-table": "^3.2.0",
     "update-notifier": "^4.1.0",
     "yauzl": "^2.10.0",
-    "yazl": "2.3.0"
+    "yazl": "2.5.1"
   },
   "devDependencies": {
-    "babel-cli": "^6.5.1",
-    "babel-eslint": "^4.1.6",
-    "babel-plugin-syntax-async-functions": "^6.5.0",
-    "babel-plugin-syntax-object-rest-spread": "^6.5.0",
-    "babel-plugin-transform-async-to-generator": "^6.3.13",
-    "babel-plugin-transform-es2015-arrow-functions": "^6.5.2",
-    "babel-plugin-transform-es2015-destructuring": "^6.3.15",
-    "babel-plugin-transform-es2015-modules-commonjs": "^6.3.16",
-    "babel-plugin-transform-es2015-parameters": "^6.5.0",
-    "babel-plugin-transform-es2015-spread": "^6.5.2",
-    "babel-plugin-transform-object-rest-spread": "^6.5.0",
-    "babel-plugin-transform-strict-mode": "^6.5.2"
+    "babel-cli": "^6.26.0",
+    "babel-eslint": "^10.1.0",
+    "babel-plugin-syntax-object-rest-spread": "^6.13.0",
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.26.2",
+    "babel-plugin-transform-es2015-spread": "^6.22.0",
+    "babel-plugin-transform-object-rest-spread": "^6.26.0"
   }
 }
