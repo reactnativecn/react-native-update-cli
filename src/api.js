@@ -7,9 +7,12 @@ let host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn/api';
 const fs = require('fs-extra');
 import request from 'request';
 import ProgressBar from 'progress';
+const packageJson = require('../package.json');
 
 let session = undefined;
 let savedSession = undefined;
+
+const userAgent = `react-native-update-cli/${packageJson.version}`;
 
 exports.loadSession = async function() {
   if (fs.existsSync('.update')) {
@@ -68,6 +71,7 @@ function queryWithoutBody(method) {
     return query(host + api, {
       method,
       headers: {
+        'User-Agent': userAgent,
         'X-AccessToken': session ? session.token : '',
       },
     });
@@ -79,6 +83,7 @@ function queryWithBody(method) {
     return query(host + api, {
       method,
       headers: {
+        'User-Agent': userAgent,
         'Content-Type': 'application/json',
         'X-AccessToken': session ? session.token : '',
       },
