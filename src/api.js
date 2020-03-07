@@ -8,6 +8,10 @@ const fs = require('fs-extra');
 import request from 'request';
 import ProgressBar from 'progress';
 const packageJson = require('../package.json');
+const tcpp = require('tcp-ping');
+const util = require('util');
+
+const tcpPing = util.promisify(tcpp.ping);
 
 let session = undefined;
 let savedSession = undefined;
@@ -98,11 +102,20 @@ exports.put = queryWithBody('PUT');
 exports.doDelete = queryWithBody('DELETE');
 
 async function uploadFile(fn) {
-  const { url, formData } = await exports.post('/upload', {});
+  const { url, backupUrl, formData } = await exports.post('/upload', {});
   let realUrl = url;
 
-  if (!/^https?\:\/\//.test(url)) {
-    realUrl = host + url;
+  if (backupUrl) {
+    const pingResult = await tcpPing({
+      address: url.replace('https://', ''),
+      attempts: 3,
+      timeout: 3000,
+    });
+    // console.log({pingResult});
+    if (pingResult.avg > 100) {
+      realUrl = backupUrl;
+    }
+    // console.log({realUrl});
   }
 
   const fileSize = fs.statSync(fn).size;

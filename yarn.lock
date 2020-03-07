@@ -116,11 +116,6 @@ ajv@^6.5.5:
     json-schema-traverse "^0.4.1"
     uri-js "^4.2.2"
 
-amdefine@~1.0.0:
-  version "1.0.1"
-  resolved "https://registry.yarnpkg.com/amdefine/-/amdefine-1.0.1.tgz#4a5282ac164729e93619bcfd3ad151f817ce91f5"
-  integrity sha1-SlKCrBZHKek2Gbz9OtFR+BfOkfU=
-
 ansi-align@^3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/ansi-align/-/ansi-align-3.0.0.tgz#b536b371cf687caaef236c18d3e21fe3797467cb"
@@ -777,25 +772,10 @@ commander@^2.11.0:
   resolved "https://registry.yarnpkg.com/commander/-/commander-2.20.3.tgz#fd485e84c03eb4881c20722ba48035e8531aeb33"
   integrity sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==
 
-commander@~2.8.1:
-  version "2.8.1"
-  resolved "https://registry.yarnpkg.com/commander/-/commander-2.8.1.tgz#06be367febfda0c330aa1e2a072d3dc9762425d4"
-  integrity sha1-Br42f+v9oMMwqh4qBy09yXYkJdQ=
-  dependencies:
-    graceful-readlink ">= 1.0.0"
-
 component-emitter@^1.2.1:
   version "1.3.0"
   resolved "https://registry.yarnpkg.com/component-emitter/-/component-emitter-1.3.0.tgz#16e4070fba8ae29b679f2215853ee181ab2eabc0"
   integrity sha512-Rd3se6QB+sO1TwqZjscQrurpEPIfO0/yYnSin6Q/rD3mOutHvUrCAhJub3r90uNb+SESBuE0QYoB90YdfatsRg==
-
-compressjs@^1.0.3:
-  version "1.0.3"
-  resolved "https://registry.yarnpkg.com/compressjs/-/compressjs-1.0.3.tgz#95db74dd5b9038cf80bca321ab0ede271b4959b6"
-  integrity sha1-ldt03VuQOM+AvKMhqw7eJxtJWbY=
-  dependencies:
-    amdefine "~1.0.0"
-    commander "~2.8.1"
 
 concat-map@0.0.1:
   version "0.0.1"
@@ -1309,11 +1289,6 @@ graceful-fs@^4.1.11, graceful-fs@^4.1.2, graceful-fs@^4.1.4, graceful-fs@^4.1.6,
   version "4.2.3"
   resolved "https://registry.yarnpkg.com/graceful-fs/-/graceful-fs-4.2.3.tgz#4a12ff1b60376ef09862c2093edd908328be8423"
   integrity sha512-a30VEBm4PEdx1dRB7MFK7BejejvCvBronbLjht+sHuGYj8PHs7M/5Z+rt5lw551vZ7yfTCj4Vuyy3mSJytDWRQ==
-
-"graceful-readlink@>= 1.0.0":
-  version "1.0.1"
-  resolved "https://registry.yarnpkg.com/graceful-readlink/-/graceful-readlink-1.0.1.tgz#4cafad76bc62f02fa039b2f94e9a3dd3a391a725"
-  integrity sha1-TK+tdrxi8C+gObL5Tpo906ORpyU=
 
 gradle-to-js@^2.0.0:
   version "2.0.0"
@@ -1950,7 +1925,7 @@ mute-stream@~0.0.4:
   resolved "https://registry.yarnpkg.com/mute-stream/-/mute-stream-0.0.8.tgz#1630c42b2251ff81e2a283de96a5497ea92e5e0d"
   integrity sha512-nnbWWOkoWyUsTjKrhgD0dcz22mdkSnpYqbEjIm2nhwhuxlSkpywJmBo8h0ZqJdkp73mb90SssHkN4rsRaBAfAA==
 
-nan@^2.12.1, nan@^2.14.0:
+nan@^2.12.1:
   version "2.14.0"
   resolved "https://registry.yarnpkg.com/nan/-/nan-2.14.0.tgz#7818f722027b2459a86f0295d434d1fc2336c52c"
   integrity sha512-INOFj37C7k3AfaNTtX8RhsTw7qRy7eLET14cROi9+5HAVbbHuIWUHEauBv5qT4Av2tWasiTY1Jw6puUNqRJXQg==
@@ -1971,13 +1946,6 @@ nanomatch@^1.2.9:
     regex-not "^1.0.0"
     snapdragon "^0.8.1"
     to-regex "^3.0.1"
-
-"node-bsdiff@https://github.com/tdzl2003/node-bsdiff":
-  version "0.1.5"
-  resolved "https://github.com/tdzl2003/node-bsdiff#75fe1403451887ec6047cd7d18401b9a2255ad73"
-  dependencies:
-    compressjs "^1.0.3"
-    nan "^2.14.0"
 
 node-fetch@^2.6.0:
   version "2.6.0"
@@ -2626,6 +2594,11 @@ supports-color@^7.1.0:
   integrity sha512-oRSIpR8pxT1Wr2FquTNnGet79b3BWljqOuoW/h4oBhxJ/HUbX5nX6JSruTkvXDCFMwDPvsaTTbvMLKZWSy0R5g==
   dependencies:
     has-flag "^4.0.0"
+
+tcp-ping@^0.1.1:
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/tcp-ping/-/tcp-ping-0.1.1.tgz#02dd7f42b5bf7d7cb78d5b7aacefa155fd8f7c0c"
+  integrity sha1-At1/QrW/fXy3jVt6rO+hVf2PfAw=
 
 term-size@^2.1.0:
   version "2.2.0"
