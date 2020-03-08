@@ -108,11 +108,11 @@ async function uploadFile(fn) {
   if (backupUrl) {
     const pingResult = await tcpPing({
       address: url.replace('https://', ''),
-      attempts: 3,
-      timeout: 3000,
+      attempts: 4,
+      timeout: 1000,
     });
     // console.log({pingResult});
-    if (pingResult.avg > 100) {
+    if (pingResult.avg > 150) {
       realUrl = backupUrl;
     }
     // console.log({realUrl});
