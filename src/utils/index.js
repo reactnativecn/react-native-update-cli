@@ -66,7 +66,7 @@ export async function getApkInfo(fn) {
     }
   }
   if (buildTime == 0) {
-    throw new Error('Can not get build time for this app.');
+    throw new Error('无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。');
   }
   return { versionName, buildTime };
 }
@@ -86,7 +86,7 @@ export async function getIpaInfo(fn) {
     );
   }
   if (!buildTimeTxtBuffer) {
-    throw new Error('Can not get build time for this app.');
+    throw new Error('无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。');
   }
   const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
   return { versionName, buildTime };
