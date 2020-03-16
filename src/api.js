@@ -101,7 +101,7 @@ exports.post = queryWithBody('POST');
 exports.put = queryWithBody('PUT');
 exports.doDelete = queryWithBody('DELETE');
 
-async function uploadFile(fn) {
+async function uploadFile(fn, key) {
   const { url, backupUrl, formData } = await exports.post('/upload', {});
   let realUrl = url;
 
@@ -112,7 +112,7 @@ async function uploadFile(fn) {
       timeout: 1000,
     });
     // console.log({pingResult});
-    if (pingResult.avg > 150) {
+    if (isNaN(pingResult.avg) || pingResult.avg > 150) {
       realUrl = backupUrl;
     }
     // console.log({realUrl});
@@ -127,6 +127,9 @@ async function uploadFile(fn) {
   });
 
   const info = await new Promise((resolve, reject) => {
+    if (key) {
+      formData.key = key;
+    }
     formData.file = fs.createReadStream(fn);
 
     formData.file.on('data', function(data) {
