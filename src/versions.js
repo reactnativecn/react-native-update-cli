@@ -12,8 +12,6 @@ import { question, saveToLocal } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
-import uid from 'uid-safe';
-const uidSync = uid.sync;
 
 async function showVersion(appId, offset) {
   const { data, count } = await get(`/app/${appId}/version/list`);
@@ -80,7 +78,7 @@ export const commands = {
     const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
     const { appId } = await getSelectedApp(platform);
 
-    const { hash } = await uploadFile(fn, `v/${uidSync(19)}`);
+    const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/version/create`, {
       name: name || await question('Enter version name:') || '(未命名)',

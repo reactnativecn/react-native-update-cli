@@ -8,10 +8,6 @@ import { question, saveToLocal } from './utils';
 import { checkPlatform, getSelectedApp } from './app';
 
 import { getApkInfo, getIpaInfo } from './utils';
-
-import uid from 'uid-safe';
-const uidSync = uid.sync;
-
 const Table = require('tty-table');
 
 export async function listPackage(appId) {
@@ -57,7 +53,7 @@ export const commands = {
     const { versionName, buildTime } = await getIpaInfo(fn);
     const { appId } = await getSelectedApp('ios');
 
-    const { hash } = await uploadFile(fn, `i/${uidSync(19)}`);
+    const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/package/create`, {
       name: versionName,
@@ -75,7 +71,7 @@ export const commands = {
     const { versionName, buildTime } = await getApkInfo(fn);
     const { appId } = await getSelectedApp('android');
 
-    const { hash } = await uploadFile(fn, `a/${uidSync(19)}`);
+    const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/package/create`, {
       name: versionName,

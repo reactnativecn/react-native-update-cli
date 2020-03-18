@@ -42,7 +42,6 @@
     "request": "^2.88.2",
     "tcp-ping": "^0.1.1",
     "tty-table": "2.8",
-    "uid-safe": "^2.1.5",
     "update-notifier": "^4.1.0",
     "yauzl": "^2.10.0",
     "yazl": "2.5.1"
