@@ -56,6 +56,12 @@ export function getRNVersion() {
 
 export async function getApkInfo(fn) {
   const appInfoParser = new AppInfoParser(fn);
+  const bundleFile = await appInfoParser.parser.getEntry(
+    /assets\/index.android.bundle/,
+  );
+  if (!bundleFile) {
+    throw new Error('找不到bundle文件。请确保此apk为release版本，且bundle文件名为默认的index.android.bundle');
+  }
   const { versionName, application } = await appInfoParser.parse();
   let buildTime = 0;
   if (Array.isArray(application.metaData)) {
@@ -73,6 +79,12 @@ export async function getApkInfo(fn) {
 
 export async function getIpaInfo(fn) {
   const appInfoParser = new AppInfoParser(fn);
+  const bundleFile = await appInfoParser.parser.getEntry(
+    /payload\/.+?\.app\/main.jsbundle/,
+  );
+  if (!bundleFile) {
+    throw new Error('找不到bundle文件。请确保此ipa为release版本，且bundle文件名为默认的main.jsbundle');
+  }
   const {
     CFBundleShortVersionString: versionName,
   } = await appInfoParser.parse();
