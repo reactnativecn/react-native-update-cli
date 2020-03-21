@@ -7,7 +7,7 @@ const {loadSession} = require('./api');
 const updateNotifier = require('update-notifier');
 const pkg = require('../package.json');
 
-updateNotifier({pkg}).notify();
+updateNotifier({pkg}).notify({isGlobal: true});
 
 function printUsage({args}) {
   // const commandName = args[0];
