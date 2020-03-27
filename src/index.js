@@ -5,6 +5,7 @@
 
 const {loadSession} = require('./api');
 const updateNotifier = require('update-notifier');
+import { printVersionCommand } from './utils/index.js';
 const pkg = require('../package.json');
 
 updateNotifier({pkg}).notify({isGlobal: true});
@@ -18,25 +19,6 @@ function printUsage({args}) {
   process.exit(1);
 }
 
-
-function printVersionCommand() {
-  if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
-    console.log('react-native-update-cli: ' + pkg.version);
-    try {
-      const PACKAGE_JSON_PATH = path.resolve(
-        process.cwd(),
-        'node_modules',
-        'react-native-update',
-        'package.json'
-      );
-      console.log('react-native-update: ' + require(PACKAGE_JSON_PATH).version);
-    } catch (e) {
-      console.log('react-native-update: n/a - not inside a React Native project directory')
-    }
-    process.exit();
-  }
-}
-
 const commands = {
   ...require('./user').commands,
   ...require('./bundle').commands,
@@ -47,7 +29,10 @@ const commands = {
 };
 
 function run() {
-  printVersionCommand();
+  if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
+    printVersionCommand();
+    process.exit();
+  }
   
   const argv = require('cli-arguments').parse(require('../cli.json'));
   global.NO_INTERACTIVE = argv.options['no-interactive'];

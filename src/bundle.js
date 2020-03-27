@@ -7,7 +7,7 @@ import { getRNVersion, translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
-import { question } from './utils';
+import { question, printVersionCommand } from './utils';
 import { checkPlatform } from './app';
 const { spawn, spawnSync, execSync } = require('child_process');
 const g2js = require('gradle-to-js/lib/parser');
@@ -22,7 +22,9 @@ try {
     console.warn(
       'This function needs "node-bsdiff". Please run "npm i node-bsdiff" from your project directory first!',
     );
-    throw new Error('This function needs module "node-bsdiff". Please install it first.');
+    throw new Error(
+      'This function needs module "node-bsdiff". Please install it first.',
+    );
   };
 }
 
@@ -50,14 +52,17 @@ async function runReactNativeBundleCommand(
   let envArgs = process.env.PUSHY_ENV_ARGS;
 
   if (envArgs) {
-    Array.prototype.push.apply(reactNativeBundleArgs, envArgs.trim().split(/\s+/));
+    Array.prototype.push.apply(
+      reactNativeBundleArgs,
+      envArgs.trim().split(/\s+/),
+    );
   }
 
   fs.emptyDirSync(outputFolder);
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
-    path.join("node_modules", "react-native", "local-cli", "cli.js"), 
-    "bundle",
+    path.join('node_modules', 'react-native', 'local-cli', 'cli.js'),
+    'bundle',
     '--assets-dest',
     outputFolder,
     '--bundle-output',
@@ -80,7 +85,9 @@ async function runReactNativeBundleCommand(
   }
 
   const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
-  console.log(`Running bundle command: node ${reactNativeBundleArgs.join(' ')}`);
+  console.log(
+    `Running bundle command: node ${reactNativeBundleArgs.join(' ')}`,
+  );
 
   return new Promise((resolve, reject) => {
     reactNativeBundleProcess.stdout.on('data', data => {
@@ -93,7 +100,11 @@ async function runReactNativeBundleCommand(
 
     reactNativeBundleProcess.on('close', async exitCode => {
       if (exitCode) {
-        reject(new Error(`"react-native bundle" command exited with code ${exitCode}.`));
+        reject(
+          new Error(
+            `"react-native bundle" command exited with code ${exitCode}.`,
+          ),
+        );
       } else {
         if (platform === 'android') {
           await compileHermesByteCode(bundleName, outputFolder);
@@ -116,7 +127,10 @@ async function compileHermesByteCode(bundleName, outputFolder) {
     const gradleConfig = await g2js.parseFile('android/app/build.gradle');
     const projectConfig = gradleConfig['project.ext.react'];
     for (const packagerConfig of projectConfig) {
-      if (packagerConfig.includes('enableHermes') && packagerConfig.includes('true')) {
+      if (
+        packagerConfig.includes('enableHermes') &&
+        packagerConfig.includes('true')
+      ) {
         enableHermes = true;
         break;
       }
@@ -164,9 +178,11 @@ async function pack(dir, output) {
     addDirectory(dir, '');
 
     zipfile.outputStream.on('error', err => reject(err));
-    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', function() {
-      resolve();
-    });
+    zipfile.outputStream
+      .pipe(fs.createWriteStream(output))
+      .on('close', function() {
+        resolve();
+      });
     zipfile.end();
   });
   console.log('Bundled saved to: ' + output);
@@ -219,7 +235,9 @@ async function diffFromPPK(origin, next, output) {
   });
 
   if (!originSource) {
-    throw new Error(`Bundle file not found! Please use default bundle file name and path.`);
+    throw new Error(
+      `Bundle file not found! Please use default bundle file name and path.`,
+    );
   }
 
   const copies = {};
@@ -230,9 +248,11 @@ async function diffFromPPK(origin, next, output) {
     zipfile.outputStream.on('error', err => {
       throw err;
     });
-    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', function() {
-      resolve();
-    });
+    zipfile.outputStream
+      .pipe(fs.createWriteStream(output))
+      .on('close', function() {
+        resolve();
+      });
   });
 
   const addedEntry = {};
@@ -263,7 +283,10 @@ async function diffFromPPK(origin, next, output) {
       //console.log('Found bundle');
       return readEntire(entry, nextZipfile).then(newSource => {
         //console.log('Begin diff');
-        zipfile.addBuffer(diff(originSource, newSource), 'index.bundlejs.patch');
+        zipfile.addBuffer(
+          diff(originSource, newSource),
+          'index.bundlejs.patch',
+        );
         //console.log('End diff');
       });
     } else {
@@ -312,12 +335,21 @@ async function diffFromPPK(origin, next, output) {
   }
 
   //console.log({copies, deletes});
-  zipfile.addBuffer(Buffer.from(JSON.stringify({ copies, deletes })), '__diff.json');
+  zipfile.addBuffer(
+    Buffer.from(JSON.stringify({ copies, deletes })),
+    '__diff.json',
+  );
   zipfile.end();
   await writePromise;
 }
 
-async function diffFromPackage(origin, next, output, originBundleName, transformPackagePath = v => v) {
+async function diffFromPackage(
+  origin,
+  next,
+  output,
+  originBundleName,
+  transformPackagePath = v => v,
+) {
   fs.ensureDirSync(path.dirname(output));
 
   const originEntries = {};
@@ -345,7 +377,9 @@ async function diffFromPackage(origin, next, output, originBundleName, transform
   });
 
   if (!originSource) {
-    throw new Error(`Bundle file not found! Please use default bundle file name and path.`);
+    throw new Error(
+      `Bundle file not found! Please use default bundle file name and path.`,
+    );
   }
 
   const copies = {};
@@ -356,9 +390,11 @@ async function diffFromPackage(origin, next, output, originBundleName, transform
     zipfile.outputStream.on('error', err => {
       throw err;
     });
-    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', function() {
-      resolve();
-    });
+    zipfile.outputStream
+      .pipe(fs.createWriteStream(output))
+      .on('close', function() {
+        resolve();
+      });
   });
 
   await enumZipEntries(next, (entry, nextZipfile) => {
@@ -369,7 +405,10 @@ async function diffFromPackage(origin, next, output, originBundleName, transform
       //console.log('Found bundle');
       return readEntire(entry, nextZipfile).then(newSource => {
         //console.log('Begin diff');
-        zipfile.addBuffer(diff(originSource, newSource), 'index.bundlejs.patch');
+        zipfile.addBuffer(
+          diff(originSource, newSource),
+          'index.bundlejs.patch',
+        );
         //console.log('End diff');
       });
     } else {
@@ -427,9 +466,18 @@ function enumZipEntries(zipFn, callback) {
 
 export const commands = {
   bundle: async function({ options }) {
-    const platform = checkPlatform(options.platform || (await question('Platform(ios/android):')));
+    const platform = checkPlatform(
+      options.platform || (await question('Platform(ios/android):')),
+    );
 
-    let { bundleName, entryFile, intermediaDir, output, dev, verbose } = translateOptions({
+    let {
+      bundleName,
+      entryFile,
+      intermediaDir,
+      output,
+      dev,
+      verbose,
+    } = translateOptions({
       ...options,
       platform,
     });
@@ -444,9 +492,16 @@ export const commands = {
 
     const { version, major, minor } = getRNVersion();
 
-    console.log('Bundling with React Native version: ', version);
+    console.log('Bundling with react-native: ', version);
+    printVersionCommand();
 
-    await runReactNativeBundleCommand(bundleName, dev, entryFile, intermediaDir, platform);
+    await runReactNativeBundleCommand(
+      bundleName,
+      dev,
+      entryFile,
+      intermediaDir,
+      platform,
+    );
 
     await pack(path.resolve(intermediaDir), realOutput);
 
@@ -487,7 +542,12 @@ export const commands = {
       process.exit(1);
     }
 
-    await diffFromPackage(origin, next, realOutput, 'assets/index.android.bundle');
+    await diffFromPackage(
+      origin,
+      next,
+      realOutput,
+      'assets/index.android.bundle',
+    );
     console.log(`${realOutput} generated.`);
   },
 

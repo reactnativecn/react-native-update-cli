@@ -5,6 +5,7 @@
 import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
+const pkg = require('../../package.json');
 const AppInfoParser = require('app-info-parser');
 
 var read = require('read');
@@ -111,4 +112,19 @@ export function saveToLocal(originPath, destName) {
   // const destPath = path.join(localDir, destName);
   // fs.ensureDirSync(path.dirname(destPath));
   // fs.copyFileSync(originPath, destPath);
+}
+
+export function printVersionCommand() {
+  console.log('react-native-update-cli: ' + pkg.version);
+  try {
+    const PACKAGE_JSON_PATH = path.resolve(
+      process.cwd(),
+      'node_modules',
+      'react-native-update',
+      'package.json'
+    );
+    console.log('react-native-update: ' + require(PACKAGE_JSON_PATH).version);
+  } catch (e) {
+    console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令')
+  }
 }
