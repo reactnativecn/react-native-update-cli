@@ -3,7 +3,7 @@
  */
 
 const fetch = require('node-fetch');
-let host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn/api';
+let host = process.env.PUSHY_REGISTRY || 'https://update.react-native.cn/api';
 const fs = require('fs-extra');
 import request from 'request';
 import ProgressBar from 'progress';
