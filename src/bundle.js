@@ -138,11 +138,17 @@ async function compileHermesByteCode(bundleName, outputFolder) {
   } catch (e) {}
   if (enableHermes) {
     console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
-    const hermesPath = fs.existsSync('node_modules/hermes-engine')
-      ? 'node_modules/hermes-engine'
-      : 'node_modules/hermesvm';
+    const hermesPackage = fs.existsSync('node_modules/hermes-engine')
+      ? 'node_modules/hermes-engine' // 0.2+
+      : 'node_modules/hermesvm'; // < 0.2
+    const hermesPath = `${hermesPackage}/${getHermesOSBin()}`;
+    
+    const hermesCommand = fs.existsSync(`${hermesPath}/hermesc`)
+    ? `${hermesPath}/hermesc` // 0.5+
+    : `${hermesPath}/hermes`; // < 0.5
+
     execSync(
-      `${hermesPath}/${getHermesOSBin()}/hermes -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O`,
+      `${hermesCommand} -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O`,
       { stdio: 'ignore' },
     );
   }
