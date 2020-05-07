@@ -11,6 +11,8 @@ const packageJson = require('../package.json');
 const tcpp = require('tcp-ping');
 const util = require('util');
 const path = require('path');
+import filesizeParser from 'filesize-parser';
+import { pricingPageUrl } from './utils';
 
 const tcpPing = util.promisify(tcpp.ping);
 
@@ -103,7 +105,7 @@ exports.put = queryWithBody('PUT');
 exports.doDelete = queryWithBody('DELETE');
 
 async function uploadFile(fn, key) {
-  const { url, backupUrl, formData } = await exports.post('/upload', {
+  const { url, backupUrl, formData, maxSize } = await exports.post('/upload', {
     ext: path.extname(fn)
   });
   let realUrl = url;
@@ -122,6 +124,9 @@ async function uploadFile(fn, key) {
   }
 
   const fileSize = fs.statSync(fn).size;
+  if (maxSize && fileSize > filesizeParser(maxSize)) {
+    throw new Error(`此文件大小超出上限${maxSize}。您可以考虑购买付费业务以提升此限制。详情请访问：${pricingPageUrl}`)
+  }
 
   const bar = new ProgressBar('  Uploading [:bar] :percent :etas', {
     complete: '=',

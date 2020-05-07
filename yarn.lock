@@ -1104,6 +1104,11 @@ filename-regex@^2.0.0:
   resolved "https://registry.yarnpkg.com/filename-regex/-/filename-regex-2.0.1.tgz#c1c4b9bee3e09725ddb106b75c1e301fe2f18b26"
   integrity sha1-wcS5vuPglyXdsQa3XB4wH+LxiyY=
 
+filesize-parser@^1.5.0:
+  version "1.5.0"
+  resolved "https://registry.yarnpkg.com/filesize-parser/-/filesize-parser-1.5.0.tgz#97ad66d5b0d7154b2e8b1b4e83f526aed33c62f3"
+  integrity sha512-UTDpJB22VvozK7t31slU9WCAPSdcUWuwD7P7S6LBXswdgzUz+YhoziLOohknFcx0Kq5LWCAj4MEKY9q3zGq47Q==
+
 fill-range@^2.1.0:
   version "2.2.4"
   resolved "https://registry.yarnpkg.com/fill-range/-/fill-range-2.2.4.tgz#eb1e773abb056dcd8df2bfdf6af59b8b3a936565"

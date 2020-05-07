@@ -128,3 +128,5 @@ export function printVersionCommand() {
     console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令')
   }
 }
+
+export const pricingPageUrl = 'https://pushy.reactnative.cn/pricing'
