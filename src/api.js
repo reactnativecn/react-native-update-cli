@@ -10,6 +10,7 @@ import ProgressBar from 'progress';
 const packageJson = require('../package.json');
 const tcpp = require('tcp-ping');
 const util = require('util');
+const path = require('path');
 
 const tcpPing = util.promisify(tcpp.ping);
 
@@ -102,7 +103,9 @@ exports.put = queryWithBody('PUT');
 exports.doDelete = queryWithBody('DELETE');
 
 async function uploadFile(fn, key) {
-  const { url, backupUrl, formData } = await exports.post('/upload', {});
+  const { url, backupUrl, formData } = await exports.post('/upload', {
+    ext: path.extname(fn)
+  });
   let realUrl = url;
 
   if (backupUrl) {
