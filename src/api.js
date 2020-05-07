@@ -125,7 +125,7 @@ async function uploadFile(fn, key) {
 
   const fileSize = fs.statSync(fn).size;
   if (maxSize && fileSize > filesizeParser(maxSize)) {
-    throw new Error(`此文件大小超出上限${maxSize}。您可以考虑购买付费业务以提升此限制。详情请访问：${pricingPageUrl}`)
+    throw new Error(`此文件大小超出上限${maxSize}。您可以考虑升级付费业务以提升此限制。详情请访问：${pricingPageUrl}`)
   }
 
   const bar = new ProgressBar('  Uploading [:bar] :percent :etas', {
