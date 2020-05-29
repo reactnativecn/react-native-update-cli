@@ -37,6 +37,13 @@ function exec(command) {
     throw commandResult.error;
   }
 }
+function emptyDir(dir) {
+  return new Promise((resolve) => {
+    fs.rmdir(dir, () => {
+      fs.mkdir(dir, resolve);
+    });
+  });
+}
 
 async function runReactNativeBundleCommand(
   bundleName,
@@ -47,11 +54,7 @@ async function runReactNativeBundleCommand(
   sourcemapOutput,
   config,
 ) {
-  // empty output folder
-  fs.unlink(outputFolder, () => {
-    fs.mkdir(outputFolder, () => {});
-  });
-
+  await emptyDir(outputFolder);
   let reactNativeBundleArgs = [];
 
   let envArgs = process.env.PUSHY_ENV_ARGS;
