@@ -39,7 +39,7 @@ function exec(command) {
 }
 function emptyDir(dir) {
   return new Promise((resolve) => {
-    fs.rmdir(dir, () => {
+    fs.rmdir(dir, { recursive: true }, () => {
       fs.mkdir(dir, resolve);
     });
   });
