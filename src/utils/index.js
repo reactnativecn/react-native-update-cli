@@ -137,4 +137,4 @@ export function printVersionCommand() {
   }
 }
 
-export const pricingPageUrl = 'https://pushy.reactnative.cn/pricing';
+export const pricingPageUrl = 'https://pushy.reactnative.cn/pricing.html';
