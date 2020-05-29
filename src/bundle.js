@@ -4,7 +4,7 @@
 
 const path = require('path');
 import { getRNVersion, translateOptions } from './utils';
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
 import { question, printVersionCommand } from './utils';
@@ -18,7 +18,7 @@ try {
   var bsdiff = require('node-bsdiff');
   diff = typeof bsdiff != 'function' ? bsdiff.diff : bsdiff;
 } catch (e) {
-  diff = function() {
+  diff = function () {
     console.warn(
       'This function needs "node-bsdiff". Please run "npm i node-bsdiff" from your project directory first!',
     );
@@ -47,6 +47,11 @@ async function runReactNativeBundleCommand(
   sourcemapOutput,
   config,
 ) {
+  // empty output folder
+  fs.unlink(outputFolder, () => {
+    fs.mkdir(outputFolder, () => {});
+  });
+
   let reactNativeBundleArgs = [];
 
   let envArgs = process.env.PUSHY_ENV_ARGS;
@@ -57,8 +62,6 @@ async function runReactNativeBundleCommand(
       envArgs.trim().split(/\s+/),
     );
   }
-
-  fs.emptyDirSync(outputFolder);
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
     path.join('node_modules', 'react-native', 'local-cli', 'cli.js'),
@@ -90,15 +93,15 @@ async function runReactNativeBundleCommand(
   );
 
   return new Promise((resolve, reject) => {
-    reactNativeBundleProcess.stdout.on('data', data => {
+    reactNativeBundleProcess.stdout.on('data', (data) => {
       console.log(data.toString().trim());
     });
 
-    reactNativeBundleProcess.stderr.on('data', data => {
+    reactNativeBundleProcess.stderr.on('data', (data) => {
       console.error(data.toString().trim());
     });
 
-    reactNativeBundleProcess.on('close', async exitCode => {
+    reactNativeBundleProcess.on('close', async (exitCode) => {
       if (exitCode) {
         reject(
           new Error(
@@ -142,10 +145,10 @@ async function compileHermesByteCode(bundleName, outputFolder) {
       ? 'node_modules/hermes-engine' // 0.2+
       : 'node_modules/hermesvm'; // < 0.2
     const hermesPath = `${hermesPackage}/${getHermesOSBin()}`;
-    
+
     const hermesCommand = fs.existsSync(`${hermesPath}/hermesc`)
-    ? `${hermesPath}/hermesc` // 0.5+
-    : `${hermesPath}/hermes`; // < 0.5
+      ? `${hermesPath}/hermesc` // 0.5+
+      : `${hermesPath}/hermes`; // < 0.5
 
     execSync(
       `${hermesCommand} -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O`,
@@ -183,10 +186,10 @@ async function pack(dir, output) {
 
     addDirectory(dir, '');
 
-    zipfile.outputStream.on('error', err => reject(err));
+    zipfile.outputStream.on('error', (err) => reject(err));
     zipfile.outputStream
       .pipe(fs.createWriteStream(output))
-      .on('close', function() {
+      .on('close', function () {
         resolve();
       });
     zipfile.end();
@@ -235,7 +238,7 @@ async function diffFromPPK(origin, next, output) {
 
       if (entry.fileName === 'index.bundlejs') {
         // This is source.
-        return readEntire(entry, zipFile).then(v => (originSource = v));
+        return readEntire(entry, zipFile).then((v) => (originSource = v));
       }
     }
   });
@@ -251,12 +254,12 @@ async function diffFromPPK(origin, next, output) {
   var zipfile = new ZipFile();
 
   const writePromise = new Promise((resolve, reject) => {
-    zipfile.outputStream.on('error', err => {
+    zipfile.outputStream.on('error', (err) => {
       throw err;
     });
     zipfile.outputStream
       .pipe(fs.createWriteStream(output))
-      .on('close', function() {
+      .on('close', function () {
         resolve();
       });
   });
@@ -287,7 +290,7 @@ async function diffFromPPK(origin, next, output) {
       }
     } else if (entry.fileName === 'index.bundlejs') {
       //console.log('Found bundle');
-      return readEntire(entry, nextZipfile).then(newSource => {
+      return readEntire(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
@@ -317,7 +320,7 @@ async function diffFromPPK(origin, next, output) {
       addEntry(basename(entry.fileName));
 
       return new Promise((resolve, reject) => {
-        nextZipfile.openReadStream(entry, function(err, readStream) {
+        nextZipfile.openReadStream(entry, function (err, readStream) {
           if (err) {
             return reject(err);
           }
@@ -354,7 +357,7 @@ async function diffFromPackage(
   next,
   output,
   originBundleName,
-  transformPackagePath = v => v,
+  transformPackagePath = (v) => v,
 ) {
   fs.ensureDirSync(path.dirname(output));
 
@@ -377,7 +380,7 @@ async function diffFromPackage(
 
       if (fn === originBundleName) {
         // This is source.
-        return readEntire(entry, zipFile).then(v => (originSource = v));
+        return readEntire(entry, zipFile).then((v) => (originSource = v));
       }
     }
   });
@@ -393,12 +396,12 @@ async function diffFromPackage(
   var zipfile = new ZipFile();
 
   const writePromise = new Promise((resolve, reject) => {
-    zipfile.outputStream.on('error', err => {
+    zipfile.outputStream.on('error', (err) => {
       throw err;
     });
     zipfile.outputStream
       .pipe(fs.createWriteStream(output))
-      .on('close', function() {
+      .on('close', function () {
         resolve();
       });
   });
@@ -409,7 +412,7 @@ async function diffFromPackage(
       zipfile.addEmptyDirectory(entry.fileName);
     } else if (entry.fileName === 'index.bundlejs') {
       //console.log('Found bundle');
-      return readEntire(entry, nextZipfile).then(newSource => {
+      return readEntire(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
@@ -430,7 +433,7 @@ async function diffFromPackage(
       }
 
       return new Promise((resolve, reject) => {
-        nextZipfile.openReadStream(entry, function(err, readStream) {
+        nextZipfile.openReadStream(entry, function (err, readStream) {
           if (err) {
             return reject(err);
           }
@@ -457,7 +460,7 @@ function enumZipEntries(zipFn, callback) {
       }
       zipfile.on('end', resolve);
       zipfile.on('error', reject);
-      zipfile.on('entry', entry => {
+      zipfile.on('entry', (entry) => {
         const result = callback(entry, zipfile);
         if (result && typeof result.then === 'function') {
           result.then(() => zipfile.readEntry());
@@ -471,7 +474,7 @@ function enumZipEntries(zipFn, callback) {
 }
 
 export const commands = {
-  bundle: async function({ options }) {
+  bundle: async function ({ options }) {
     const platform = checkPlatform(
       options.platform || (await question('Platform(ios/android):')),
     );
@@ -568,7 +571,7 @@ export const commands = {
       process.exit(1);
     }
 
-    await diffFromPackage(origin, next, realOutput, 'main.jsbundle', v => {
+    await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
       return m && m[1];
     });

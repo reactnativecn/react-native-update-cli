@@ -2,7 +2,7 @@
  * Created by tdzl2003 on 2/13/16.
  */
 
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 const pkg = require('../../package.json');
@@ -31,7 +31,7 @@ export function translateOptions(options) {
   for (let key in options) {
     const v = options[key];
     if (typeof v === 'string') {
-      ret[key] = v.replace(/\$\{(\w+)\}/g, function(v, n) {
+      ret[key] = v.replace(/\$\{(\w+)\}/g, function (v, n) {
         return options[n] || process.env[n] || v;
       });
     } else {
@@ -61,7 +61,9 @@ export async function getApkInfo(fn) {
     /assets\/index.android.bundle/,
   );
   if (!bundleFile) {
-    throw new Error('找不到bundle文件。请确保此apk为release版本，且bundle文件名为默认的index.android.bundle');
+    throw new Error(
+      '找不到bundle文件。请确保此apk为release版本，且bundle文件名为默认的index.android.bundle',
+    );
   }
   const { versionName, application } = await appInfoParser.parse();
   let buildTime = 0;
@@ -73,7 +75,9 @@ export async function getApkInfo(fn) {
     }
   }
   if (buildTime == 0) {
-    throw new Error('无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。');
+    throw new Error(
+      '无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。',
+    );
   }
   return { versionName, buildTime };
 }
@@ -84,7 +88,9 @@ export async function getIpaInfo(fn) {
     /payload\/.+?\.app\/main.jsbundle/,
   );
   if (!bundleFile) {
-    throw new Error('找不到bundle文件。请确保此ipa为release版本，且bundle文件名为默认的main.jsbundle');
+    throw new Error(
+      '找不到bundle文件。请确保此ipa为release版本，且bundle文件名为默认的main.jsbundle',
+    );
   }
   const {
     CFBundleShortVersionString: versionName,
@@ -99,14 +105,16 @@ export async function getIpaInfo(fn) {
     );
   }
   if (!buildTimeTxtBuffer) {
-    throw new Error('无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。');
+    throw new Error(
+      '无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。',
+    );
   }
   const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
   return { versionName, buildTime };
 }
 
 const localDir = path.resolve(os.homedir(), '.pushy');
-fs.ensureDirSync(localDir);
+fs.mkdir(localDir, () => {});
 export function saveToLocal(originPath, destName) {
   // TODO
   // const destPath = path.join(localDir, destName);
@@ -121,12 +129,12 @@ export function printVersionCommand() {
       process.cwd(),
       'node_modules',
       'react-native-update',
-      'package.json'
+      'package.json',
     );
     console.log('react-native-update: ' + require(PACKAGE_JSON_PATH).version);
   } catch (e) {
-    console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令')
+    console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
   }
 }
 
-export const pricingPageUrl = 'https://pushy.reactnative.cn/pricing'
+export const pricingPageUrl = 'https://pushy.reactnative.cn/pricing';

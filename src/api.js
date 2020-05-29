@@ -4,7 +4,7 @@
 
 const fetch = require('node-fetch');
 let host = process.env.PUSHY_REGISTRY || 'https://update.react-native.cn/api';
-const fs = require('fs-extra');
+const fs = require('fs');
 import request from 'request';
 import ProgressBar from 'progress';
 const packageJson = require('../package.json');

@@ -3,7 +3,7 @@
  */
 
 import {question} from './utils';
-import * as fs from 'fs-extra';
+import fs from 'fs';
 
 const {
   post,
