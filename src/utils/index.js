@@ -2,7 +2,7 @@
  * Created by tdzl2003 on 2/13/16.
  */
 
-import fs from 'fs';
+import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 const pkg = require('../../package.json');
@@ -114,7 +114,7 @@ export async function getIpaInfo(fn) {
 }
 
 const localDir = path.resolve(os.homedir(), '.pushy');
-fs.mkdir(localDir, () => {});
+fs.ensureDirSync(localDir);
 export function saveToLocal(originPath, destName) {
   // TODO
   // const destPath = path.join(localDir, destName);
