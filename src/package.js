@@ -81,6 +81,22 @@ export const commands = {
     saveToLocal(fn, `${appId}/package/${id}.apk`);
     console.log(`Apk uploaded: ${id}`);
   },
+  parseIpa:  async function({ args }) {
+    const fn = args[0];
+    if (!fn || !fn.endsWith('.ipa')) {
+      throw new Error('Usage: pushy parseIpa <ipaFile>');
+    }
+    const { versionName, buildTime } = await getIpaInfo(fn);
+    console.log(`版本号: ${versionName}, 编译时间戳: ${buildTime}`);
+  },
+  parseApk:  async function({ args }) {
+    const fn = args[0];
+    if (!fn || !fn.endsWith('.apk')) {
+      throw new Error('Usage: pushy parseApk <apkFile>');
+    }
+    const { versionName, buildTime } = await getApkInfo(fn);
+    console.log(`版本号: ${versionName}, 编译时间戳: ${buildTime}`);
+  },
   packages: async function({ options }) {
     const platform = checkPlatform(options.platform || (await question('Platform(ios/android):')));
     const { appId } = await getSelectedApp(platform);

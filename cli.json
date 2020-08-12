@@ -2,15 +2,11 @@
   "useCommand": true,
   "defaultCommand": "help",
   "commands": {
-    "help": {
-    },
+    "help": {},
 
-    "login":{
-    },
-    "logout": {
-    },
-    "me": {
-    },
+    "login": {},
+    "logout": {},
+    "me": {},
 
     "createApp": {
       "options": {
@@ -29,8 +25,7 @@
         }
       }
     },
-    "deleteApp": {
-    },
+    "deleteApp": {},
     "selectApp": {
       "options": {
         "platform": {
@@ -39,10 +34,10 @@
       }
     },
 
-    "uploadIpa": {
-    },
-    "uploadApk": {
-    },
+    "uploadIpa": {},
+    "uploadApk": {},
+    "parseIpa": {},
+    "parseApk": {},
     "packages": {
       "options": {
         "platform": {
@@ -102,7 +97,7 @@
         "platform": {
           "hasValue": true
         },
-        "bundleName":{
+        "bundleName": {
           "default": "index.bundlejs",
           "hasValue": true
         },
@@ -118,9 +113,7 @@
           "default": "build/output/${platform}.${time}.ppk",
           "hasValue": true
         },
-        "verbose": {
-
-        }
+        "verbose": {}
       }
     },
     "release": {
@@ -154,7 +147,7 @@
       }
     }
   },
-  "globalOptions":{
+  "globalOptions": {
     "no-interactive": {
       "default": false
     }
