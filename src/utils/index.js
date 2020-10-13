@@ -68,10 +68,10 @@ export async function getApkInfo(fn) {
   const updateJsonFile = await appInfoParser.parser.getEntry(
     /res\/raw\/update.json/,
   );
-  if (!updateJsonFile) {
-    throw new Error('找不到update.json文件');
+  let appCredential = {};
+  if (updateJsonFile) {
+    appCredential = JSON.parse(updateJsonFile.toString()).android;
   }
-  const appCredential = JSON.parse(updateJsonFile.toString()).android;
   const { versionName, application } = await appInfoParser.parse();
   let buildTime = 0;
   if (Array.isArray(application.metaData)) {
@@ -102,10 +102,10 @@ export async function getIpaInfo(fn) {
   const updateJsonFile = await appInfoParser.parser.getEntry(
     /payload\/.+?\.app\/assets\/update.json/,
   );
-  if (!updateJsonFile) {
-    throw new Error('找不到update.json文件');
+  let appCredential = {};
+  if (updateJsonFile) {
+    appCredential = JSON.parse(updateJsonFile.toString()).ios;
   }
-  const appCredential = JSON.parse(updateJsonFile.toString()).ios;
   const {
     CFBundleShortVersionString: versionName,
   } = await appInfoParser.parse();
