@@ -147,6 +147,10 @@ async function uploadFile(fn, key) {
       realUrl,
       {
         formData,
+        headers: {
+          'User-Agent': userAgent,
+          'X-AccessToken': session ? session.token : '',
+        },
       },
       (err, resp, body) => {
         if (err) {
