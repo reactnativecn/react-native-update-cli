@@ -37,6 +37,14 @@ async function runReactNativeBundleCommand(
   sourcemapOutput,
   config,
 ) {
+  let gradleConfig = {};
+  if (platform === 'android') {
+    gradleConfig = await checkGradleConfig();
+    if (gradleConfig.crunchPngs !== false) {
+      throw new Error('请先禁用android的crunchPngs优化，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8android%E7%9A%84crunch%E4%BC%98%E5%8C%96')
+    }
+  }
+
   let reactNativeBundleArgs = [];
 
   let envArgs = process.env.PUSHY_ENV_ARGS;
@@ -96,7 +104,7 @@ async function runReactNativeBundleCommand(
           ),
         );
       } else {
-        if (platform === 'android') {
+        if (gradleConfig.enableHermes) {
           await compileHermesByteCode(bundleName, outputFolder);
         }
         resolve(null);
@@ -111,11 +119,13 @@ function getHermesOSBin() {
   if (os.platform() === 'linux') return 'linux64-bin';
 }
 
-async function compileHermesByteCode(bundleName, outputFolder) {
+async function checkGradleConfig() {
   let enableHermes = false;
+  let crunchPngs;
   try {
     const gradleConfig = await g2js.parseFile('android/app/build.gradle');
     const projectConfig = gradleConfig['project.ext.react'];
+    crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;
     for (const packagerConfig of projectConfig) {
       if (
         packagerConfig.includes('enableHermes') &&
@@ -126,29 +136,34 @@ async function compileHermesByteCode(bundleName, outputFolder) {
       }
     }
   } catch (e) {}
-  if (enableHermes) {
-    console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
-    const hermesPackage = fs.existsSync('node_modules/hermes-engine')
-      ? 'node_modules/hermes-engine' // 0.2+
-      : 'node_modules/hermesvm'; // < 0.2
-    const hermesPath = `${hermesPackage}/${getHermesOSBin()}`;
-
-    const hermesCommand = fs.existsSync(`${hermesPath}/hermesc`)
-      ? `${hermesPath}/hermesc` // 0.5+
-      : `${hermesPath}/hermes`; // < 0.5
-
-    spawnSync(
-      path.join.apply(null, hermesCommand.split('/')),
-      [
-        '-emit-binary',
-        '-out',
-        path.join(outputFolder, bundleName),
-        path.join(outputFolder, bundleName),
-        '-O',
-      ],
-      { stdio: 'ignore' },
-    );
+  return {
+    enableHermes,
+    crunchPngs,
   }
+}
+
+async function compileHermesByteCode(bundleName, outputFolder) {
+  console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
+  const hermesPackage = fs.existsSync('node_modules/hermes-engine')
+    ? 'node_modules/hermes-engine' // 0.2+
+    : 'node_modules/hermesvm'; // < 0.2
+  const hermesPath = `${hermesPackage}/${getHermesOSBin()}`;
+
+  const hermesCommand = fs.existsSync(`${hermesPath}/hermesc`)
+    ? `${hermesPath}/hermesc` // 0.5+
+    : `${hermesPath}/hermes`; // < 0.5
+
+  spawnSync(
+    path.join.apply(null, hermesCommand.split('/')),
+    [
+      '-emit-binary',
+      '-out',
+      path.join(outputFolder, bundleName),
+      path.join(outputFolder, bundleName),
+      '-O',
+    ],
+    { stdio: 'ignore' },
+  );
 }
 
 async function pack(dir, output) {
