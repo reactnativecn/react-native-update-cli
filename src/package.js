@@ -19,7 +19,9 @@ export async function listPackage(appId) {
     const { version } = pkg;
     let versionInfo = '';
     if (version) {
-      versionInfo = ` - ${version.id} ${version.hash.slice(0, 8)} ${version.name}`;
+      versionInfo = ` - ${version.id} ${version.hash.slice(0, 8)} ${
+        version.name
+      }`;
     } else {
       versionInfo = ' (newest)';
     }
@@ -37,7 +39,7 @@ export async function choosePackage(appId) {
 
   while (true) {
     const id = await question('Enter Package Id:');
-    const app = list.find(v => v.id === (id | 0));
+    const app = list.find((v) => v.id === (id | 0));
     if (app) {
       return app;
     }
@@ -45,7 +47,7 @@ export async function choosePackage(appId) {
 }
 
 export const commands = {
-  uploadIpa: async function({ args }) {
+  uploadIpa: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
       throw new Error('Usage: pushy uploadIpa <ipaFile>');
@@ -63,7 +65,7 @@ export const commands = {
     saveToLocal(fn, `${appId}/package/${id}.ipa`);
     console.log(`Ipa uploaded: ${id}`);
   },
-  uploadApk: async function({ args }) {
+  uploadApk: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
       throw new Error('Usage: pushy uploadApk <apkFile>');
@@ -81,24 +83,24 @@ export const commands = {
     saveToLocal(fn, `${appId}/package/${id}.apk`);
     console.log(`Apk uploaded: ${id}`);
   },
-  parseIpa:  async function({ args }) {
+  parseIpa: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
       throw new Error('Usage: pushy parseIpa <ipaFile>');
     }
-    const { versionName, buildTime } = await getIpaInfo(fn);
-    console.log(`版本号: ${versionName}, 编译时间戳: ${buildTime}`);
+    console.log(await getIpaInfo(fn));
   },
-  parseApk:  async function({ args }) {
+  parseApk: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
       throw new Error('Usage: pushy parseApk <apkFile>');
     }
-    const { versionName, buildTime } = await getApkInfo(fn);
-    console.log(`版本号: ${versionName}, 编译时间戳: ${buildTime}`);
+    console.log(await getApkInfo(fn));
   },
-  packages: async function({ options }) {
-    const platform = checkPlatform(options.platform || (await question('Platform(ios/android):')));
+  packages: async function ({ options }) {
+    const platform = checkPlatform(
+      options.platform || (await question('Platform(ios/android):')),
+    );
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);
   },

@@ -65,6 +65,13 @@ export async function getApkInfo(fn) {
       '找不到bundle文件。请确保此apk为release版本，且bundle文件名为默认的index.android.bundle',
     );
   }
+  const updateJsonFile = await appInfoParser.parser.getEntry(
+    /res\/raw\/update.json/,
+  );
+  let appCredential = {};
+  if (updateJsonFile) {
+    appCredential = JSON.parse(updateJsonFile.toString()).android;
+  }
   const { versionName, application } = await appInfoParser.parse();
   let buildTime = 0;
   if (Array.isArray(application.metaData)) {
@@ -79,7 +86,7 @@ export async function getApkInfo(fn) {
       '无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。',
     );
   }
-  return { versionName, buildTime };
+  return { versionName, buildTime, ...appCredential };
 }
 
 export async function getIpaInfo(fn) {
@@ -91,6 +98,13 @@ export async function getIpaInfo(fn) {
     throw new Error(
       '找不到bundle文件。请确保此ipa为release版本，且bundle文件名为默认的main.jsbundle',
     );
+  }
+  const updateJsonFile = await appInfoParser.parser.getEntry(
+    /payload\/.+?\.app\/assets\/update.json/,
+  );
+  let appCredential = {};
+  if (updateJsonFile) {
+    appCredential = JSON.parse(updateJsonFile.toString()).ios;
   }
   const {
     CFBundleShortVersionString: versionName,
@@ -110,7 +124,7 @@ export async function getIpaInfo(fn) {
     );
   }
   const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
-  return { versionName, buildTime };
+  return { versionName, buildTime, ...appCredential };
 }
 
 const localDir = path.resolve(os.homedir(), '.pushy');
