@@ -72,10 +72,10 @@ anymatch@^1.3.0:
     micromatch "^2.1.5"
     normalize-path "^2.0.0"
 
-app-info-parser@^0.3.13:
-  version "0.3.13"
-  resolved "https://registry.yarnpkg.com/app-info-parser/-/app-info-parser-0.3.13.tgz#9be26c2aa9e1ad870b54bffba991fa540fe18fb9"
-  integrity sha512-u8IB/jQS7vG3vA06722T43mFmLWnP5HhkGt3auUgpdH9ZVTX0UdLvW+ZsVKOK1Uq+1WNuB/up6vbkQfO/9x4TQ==
+app-info-parser@^1.0.0:
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/app-info-parser/-/app-info-parser-1.0.0.tgz#38da83c167b436b485246a2c81ab28833ac12b6e"
+  integrity sha512-l8fNzGZFTNCloUm5imfOQYjlBLQfu3DB9rkKgi7TWAjtCU2s0NMLetOw0TFmHye65NcdenAQawvLNLtyo1L//w==
   dependencies:
     bplist-parser "^0.2.0"
     bytebuffer "^5.0.1"
