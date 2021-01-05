@@ -3,7 +3,8 @@
  */
 
 const fetch = require('node-fetch');
-let host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn/api';
+const defaultEndpoint = 'http://u.reactnative.cn/api'
+let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 const fs = require('fs');
 import request from 'request';
 import ProgressBar from 'progress';
@@ -59,7 +60,7 @@ exports.closeSession = function() {
     savedSession = undefined;
   }
   session = undefined;
-  host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn/api';
+  host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 };
 
 async function query(url, options) {
