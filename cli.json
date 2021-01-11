@@ -106,11 +106,11 @@
           "hasValue": true
         },
         "intermediaDir": {
-          "default": "build/intermedia/${platform}",
+          "default": ".pushy/intermedia/${platform}",
           "hasValue": true
         },
         "output": {
-          "default": "build/output/${platform}.${time}.ppk",
+          "default": ".pushy/output/${platform}.${time}.ppk",
           "hasValue": true
         },
         "verbose": {}
