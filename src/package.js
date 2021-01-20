@@ -52,8 +52,25 @@ export const commands = {
     if (!fn || !fn.endsWith('.ipa')) {
       throw new Error('Usage: pushy uploadIpa <ipaFile>');
     }
-    const { versionName, buildTime } = await getIpaInfo(fn);
-    const { appId } = await getSelectedApp('ios');
+    const {
+      versionName,
+      buildTime,
+      appId: appIdInPkg,
+      appKey: appKeyInPkg,
+    } = await getIpaInfo(fn);
+    const { appId, appKey } = await getSelectedApp('ios');
+
+    if (appIdInPkg && appIdInPkg !== appId) {
+      throw new Error(
+        `appId不匹配！当前ipa：${appIdInPkg}, 当前update.json：${appId}`,
+      );
+    }
+
+    if (appKeyInPkg && appKeyInPkg !== appKey) {
+      throw new Error(
+        `appKey不匹配！当前ipa：${appKeyInPkg}, 当前update.json：${appKey}`,
+      );
+    }
 
     const { hash } = await uploadFile(fn);
 
@@ -70,8 +87,25 @@ export const commands = {
     if (!fn || !fn.endsWith('.apk')) {
       throw new Error('Usage: pushy uploadApk <apkFile>');
     }
-    const { versionName, buildTime } = await getApkInfo(fn);
-    const { appId } = await getSelectedApp('android');
+    const {
+      versionName,
+      buildTime,
+      appId: appIdInPkg,
+      appKey: appKeyInPkg,
+    } = await getApkInfo(fn);
+    const { appId, appKey } = await getSelectedApp('android');
+
+    if (appIdInPkg && appIdInPkg !== appId) {
+      throw new Error(
+        `appId不匹配！当前apk：${appIdInPkg}, 当前update.json：${appId}`,
+      );
+    }
+
+    if (appKeyInPkg && appKeyInPkg !== appKey) {
+      throw new Error(
+        `appKey不匹配！当前apk：${appKeyInPkg}, 当前update.json：${appKey}`,
+      );
+    }
 
     const { hash } = await uploadFile(fn);
 
