@@ -3,7 +3,7 @@
  */
 
 const fetch = require('node-fetch');
-const defaultEndpoint = 'http://u.reactnative.cn/api'
+const defaultEndpoint = 'http://u.reactnative.cn/api';
 let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 const fs = require('fs');
 import request from 'request';
@@ -22,7 +22,7 @@ let savedSession = undefined;
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 
-exports.loadSession = async function() {
+exports.loadSession = async function () {
   if (fs.existsSync('.update')) {
     try {
       exports.replaceSession(JSON.parse(fs.readFileSync('.update', 'utf8')));
@@ -36,15 +36,15 @@ exports.loadSession = async function() {
   }
 };
 
-exports.getSession = function() {
+exports.getSession = function () {
   return session;
 };
 
-exports.replaceSession = function(newSession) {
+exports.replaceSession = function (newSession) {
   session = newSession;
 };
 
-exports.saveSession = function() {
+exports.saveSession = function () {
   // Only save on change.
   if (session !== savedSession) {
     const current = session;
@@ -54,7 +54,7 @@ exports.saveSession = function() {
   }
 };
 
-exports.closeSession = function() {
+exports.closeSession = function () {
   if (fs.existsSync('.update')) {
     fs.unlinkSync('.update');
     savedSession = undefined;
@@ -75,7 +75,7 @@ async function query(url, options) {
 }
 
 function queryWithoutBody(method) {
-  return function(api) {
+  return function (api) {
     return query(host + api, {
       method,
       headers: {
@@ -87,7 +87,7 @@ function queryWithoutBody(method) {
 }
 
 function queryWithBody(method) {
-  return function(api, body) {
+  return function (api, body) {
     return query(host + api, {
       method,
       headers: {
@@ -107,7 +107,7 @@ exports.doDelete = queryWithBody('DELETE');
 
 async function uploadFile(fn, key) {
   const { url, backupUrl, formData, maxSize } = await exports.post('/upload', {
-    ext: path.extname(fn)
+    ext: path.extname(fn),
   });
   let realUrl = url;
 
@@ -126,7 +126,11 @@ async function uploadFile(fn, key) {
 
   const fileSize = fs.statSync(fn).size;
   if (maxSize && fileSize > filesizeParser(maxSize)) {
-    throw new Error(`此文件大小超出上限${maxSize}。您可以考虑升级付费业务以提升此限制。详情请访问：${pricingPageUrl}`)
+    throw new Error(
+      `此文件大小${(fileSize / 1048576).toFixed(
+        1,
+      )}m, 超出当前额度${maxSize}。您可以考虑升级付费业务以提升此额度。详情请访问：${pricingPageUrl}`,
+    );
   }
 
   const bar = new ProgressBar('  Uploading [:bar] :percent :etas', {
@@ -141,7 +145,7 @@ async function uploadFile(fn, key) {
     }
     formData.file = fs.createReadStream(fn);
 
-    formData.file.on('data', function(data) {
+    formData.file.on('data', function (data) {
       bar.tick(data.length);
     });
     request.post(
