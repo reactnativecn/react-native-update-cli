@@ -13,20 +13,11 @@ const { spawn, spawnSync } = require('child_process');
 const g2js = require('gradle-to-js/lib/parser');
 const os = require('os');
 
-var diff;
+var bsdiff, hdiff, diff;
 try {
-  var bsdiff = require('node-bsdiff');
-  diff = typeof bsdiff != 'function' ? bsdiff.diff : bsdiff;
-} catch (e) {
-  diff = function () {
-    console.warn(
-      'This function needs "node-bsdiff". Please run "npm i node-bsdiff" from your project directory first!',
-    );
-    throw new Error(
-      'This function needs module "node-bsdiff". Please install it first.',
-    );
-  };
-}
+  bsdiff = require('node-bsdiff').diff;
+  hdiff = require('node-hdiffpatch').diff;
+} catch (e) {}
 
 async function runReactNativeBundleCommand(
   bundleName,
@@ -139,7 +130,7 @@ async function checkGradleConfig() {
   return {
     enableHermes,
     crunchPngs,
-  }
+  };
 }
 
 async function compileHermesByteCode(bundleName, outputFolder) {
@@ -482,6 +473,42 @@ function enumZipEntries(zipFn, callback) {
   });
 }
 
+function diffArgsCheck({ args, options, diffFn }) {
+  const [origin, next] = args;
+
+  if (!origin || !next) {
+    console.error(`Usage: pushy ${diffFn} <origin> <next>`);
+    process.exit(1);
+  }
+
+  if (diffFn.startsWith('hdiff')) {
+    if (!hdiff) {
+      console.error(
+        `This function needs "node-hdiffpatch". 
+        Please run "npm i node-hdiffpatch" to install`,
+      );
+      process.exit(1);
+    }
+    diff = hdiff;
+  } else {
+    if (!bsdiff) {
+      console.error(
+        `This function needs "node-bsdiff". 
+        Please run "npm i node-bsdiff" to install`,
+      );
+      process.exit(1);
+    }
+    diff = bsdiff;
+  }
+  const { output } = options;
+
+  return {
+    origin,
+    next,
+    realOutput: output.replace(/\$\{time\}/g, '' + Date.now()),
+  };
+}
+
 export const commands = {
   bundle: async function ({ options }) {
     const platform = checkPlatform(
@@ -535,30 +562,45 @@ export const commands = {
   },
 
   async diff({ args, options }) {
-    const [origin, next] = args;
-    const { output } = options;
+    const { origin, next, realOutput } = diffArgsCheck({ args, options, diff });
 
-    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+    await diffFromPPK(origin, next, realOutput, 'index.bundlejs');
+    console.log(`${realOutput} generated.`);
+  },
 
-    if (!origin || !next) {
-      console.error('pushy diff <origin> <next>');
-      process.exit(1);
-    }
+  async hdiff({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck({
+      args,
+      options,
+      hdiff,
+    });
 
     await diffFromPPK(origin, next, realOutput, 'index.bundlejs');
     console.log(`${realOutput} generated.`);
   },
 
   async diffFromApk({ args, options }) {
-    const [origin, next] = args;
-    const { output } = options;
+    const { origin, next, realOutput } = diffArgsCheck({
+      args,
+      options,
+      diffFromApk,
+    });
 
-    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+    await diffFromPackage(
+      origin,
+      next,
+      realOutput,
+      'assets/index.android.bundle',
+    );
+    console.log(`${realOutput} generated.`);
+  },
 
-    if (!origin || !next) {
-      console.error('pushy diffFromApk <origin> <next>');
-      process.exit(1);
-    }
+  async hdiffFromApk({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck({
+      args,
+      options,
+      hdiffFromApk,
+    });
 
     await diffFromPackage(
       origin,
@@ -570,15 +612,26 @@ export const commands = {
   },
 
   async diffFromIpa({ args, options }) {
-    const [origin, next] = args;
-    const { output } = options;
+    const { origin, next, realOutput } = diffArgsCheck({
+      args,
+      options,
+      diffFromIpa,
+    });
 
-    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+    await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
+      const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
+      return m && m[1];
+    });
 
-    if (!origin || !next) {
-      console.error('pushy diffFromIpa <origin> <next>');
-      process.exit(1);
-    }
+    console.log(`${realOutput} generated.`);
+  },
+
+  async hdiffFromIpa({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck({
+      args,
+      options,
+      hdiffFromIpa,
+    });
 
     await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
