@@ -473,7 +473,7 @@ function enumZipEntries(zipFn, callback) {
   });
 }
 
-function diffArgsCheck({ args, options, diffFn }) {
+function diffArgsCheck(args, options, diffFn) {
   const [origin, next] = args;
 
   if (!origin || !next) {
@@ -562,29 +562,25 @@ export const commands = {
   },
 
   async diff({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck({ args, options, diff });
+    const { origin, next, realOutput } = diffArgsCheck(args, options, 'diff');
 
     await diffFromPPK(origin, next, realOutput, 'index.bundlejs');
     console.log(`${realOutput} generated.`);
   },
 
   async hdiff({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck({
-      args,
-      options,
-      hdiff,
-    });
+    const { origin, next, realOutput } = diffArgsCheck(args, options, 'hdiff');
 
     await diffFromPPK(origin, next, realOutput, 'index.bundlejs');
     console.log(`${realOutput} generated.`);
   },
 
   async diffFromApk({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck({
+    const { origin, next, realOutput } = diffArgsCheck(
       args,
       options,
-      diffFromApk,
-    });
+      'diffFromApk',
+    );
 
     await diffFromPackage(
       origin,
@@ -596,11 +592,11 @@ export const commands = {
   },
 
   async hdiffFromApk({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck({
+    const { origin, next, realOutput } = diffArgsCheck(
       args,
       options,
-      hdiffFromApk,
-    });
+      'hdiffFromApk',
+    );
 
     await diffFromPackage(
       origin,
@@ -612,11 +608,11 @@ export const commands = {
   },
 
   async diffFromIpa({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck({
+    const { origin, next, realOutput } = diffArgsCheck(
       args,
       options,
-      diffFromIpa,
-    });
+      'diffFromIpa',
+    );
 
     await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
@@ -627,11 +623,11 @@ export const commands = {
   },
 
   async hdiffFromIpa({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck({
+    const { origin, next, realOutput } = diffArgsCheck(
       args,
       options,
-      hdiffFromIpa,
-    });
+      'hdiffFromIpa',
+    );
 
     await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);

@@ -123,7 +123,7 @@
       "description": "Create diff patch",
       "options": {
         "output": {
-          "default": "build/output/diff",
+          "default": ".pushy/output/diff",
           "hasValue": true
         }
       }
@@ -132,7 +132,7 @@
       "description": "Create diff patch from a Android package(.apk)",
       "options": {
         "output": {
-          "default": "build/output/diff-${time}.apk-patch",
+          "default": ".pushy/output/diff-${time}.apk-patch",
           "hasValue": true
         }
       }
@@ -141,7 +141,34 @@
       "description": "Create diff patch from a iOS package(.ipa)",
       "options": {
         "output": {
-          "default": "build/output/diff-${time}.ipa-patch",
+          "default": ".pushy/output/diff-${time}.ipa-patch",
+          "hasValue": true
+        }
+      }
+    },
+    "hdiff": {
+      "description": "Create hdiff patch",
+      "options": {
+        "output": {
+          "default": ".pushy/output/hdiff",
+          "hasValue": true
+        }
+      }
+    },
+    "hdiffFromApk": {
+      "description": "Create hdiff patch from a Android package(.apk)",
+      "options": {
+        "output": {
+          "default": ".pushy/output/hdiff-${time}.apk-patch",
+          "hasValue": true
+        }
+      }
+    },
+    "hdiffFromIpa": {
+      "description": "Create hdiff patch from a iOS package(.ipa)",
+      "options": {
+        "output": {
+          "default": ".pushy/output/hdiff-${time}.ipa-patch",
           "hasValue": true
         }
       }
