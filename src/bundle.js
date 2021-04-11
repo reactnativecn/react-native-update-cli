@@ -119,7 +119,6 @@ async function checkGradleConfig() {
   try {
     const gradleConfig = await g2js.parseFile('android/app/build.gradle');
     const projectConfig = gradleConfig['project.ext.react'];
-    crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;
     for (const packagerConfig of projectConfig) {
       if (
         packagerConfig.includes('enableHermes') &&
@@ -129,6 +128,7 @@ async function checkGradleConfig() {
         break;
       }
     }
+    crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;
   } catch (e) {}
   return {
     enableHermes,
