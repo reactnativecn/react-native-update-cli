@@ -32,12 +32,12 @@ async function runReactNativeBundleCommand(
   config,
 ) {
   let gradleConfig = {};
-  // if (platform === 'android') {
-  //   gradleConfig = await checkGradleConfig();
-  //   if (gradleConfig.crunchPngs !== false) {
-  //     throw new Error('请先禁用android的crunchPngs优化，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8android%E7%9A%84crunch%E4%BC%98%E5%8C%96')
-  //   }
-  // }
+  if (platform === 'android') {
+    gradleConfig = await checkGradleConfig();
+    // if (gradleConfig.crunchPngs !== false) {
+    //   throw new Error('请先禁用android的crunchPngs优化，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8android%E7%9A%84crunch%E4%BC%98%E5%8C%96')
+    // }
+  }
 
   let reactNativeBundleArgs = [];
 
