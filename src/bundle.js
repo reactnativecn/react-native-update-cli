@@ -16,6 +16,9 @@ const os = require('os');
 var bsdiff, hdiff, diff;
 try {
   bsdiff = require('node-bsdiff').diff;
+} catch (e) {}
+
+try {
   hdiff = require('node-hdiffpatch').diff;
 } catch (e) {}
 
