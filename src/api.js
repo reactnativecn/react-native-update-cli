@@ -65,7 +65,14 @@ exports.closeSession = function () {
 
 async function query(url, options) {
   const resp = await fetch(url, options);
-  const json = await resp.json();
+  const text = await resp.text();
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`Server error: ${text}`);
+  }
+
   if (resp.status !== 200) {
     throw Object.assign(new Error(json.message || json.error), {
       status: resp.status,
