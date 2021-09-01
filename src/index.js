@@ -36,6 +36,7 @@ function run() {
   
   const argv = require('cli-arguments').parse(require('../cli.json'));
   global.NO_INTERACTIVE = argv.options['no-interactive'];
+  global.USE_ACC_OSS = argv.options['acc'];
 
   loadSession()
     .then(()=>commands[argv.command](argv))

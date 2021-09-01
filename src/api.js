@@ -119,14 +119,18 @@ async function uploadFile(fn, key) {
   let realUrl = url;
 
   if (backupUrl) {
-    const pingResult = await tcpPing({
-      address: url.replace('https://', ''),
-      attempts: 4,
-      timeout: 1000,
-    });
-    // console.log({pingResult});
-    if (isNaN(pingResult.avg) || pingResult.avg > 150) {
+    if (global.USE_ACC_OSS) {
       realUrl = backupUrl;
+    } else {
+      const pingResult = await tcpPing({
+        address: url.replace('https://', ''),
+        attempts: 4,
+        timeout: 1000,
+      });
+      // console.log({pingResult});
+      if (isNaN(pingResult.avg) || pingResult.avg > 150) {
+        realUrl = backupUrl;
+      }
     }
     // console.log({realUrl});
   }
