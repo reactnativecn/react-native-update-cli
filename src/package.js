@@ -30,7 +30,7 @@ export async function listPackage(appId) {
   }
 
   console.log(Table(header, rows).render());
-  console.log(`\nTotal ${data.length} package(s).`);
+  console.log(`\n共 ${data.length} 个包`);
   return data;
 }
 
@@ -38,7 +38,7 @@ export async function choosePackage(appId) {
   const list = await listPackage(appId);
 
   while (true) {
-    const id = await question('Enter Package Id:');
+    const id = await question('输入原生包 id:');
     const app = list.find((v) => v.id === (id | 0));
     if (app) {
       return app;
@@ -50,7 +50,7 @@ export const commands = {
   uploadIpa: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
-      throw new Error('Usage: pushy uploadIpa <ipaFile>');
+      throw new Error('使用方法: pushy uploadIpa ipa后缀文件');
     }
     const {
       versionName,
@@ -62,13 +62,13 @@ export const commands = {
 
     if (appIdInPkg && appIdInPkg !== appId) {
       throw new Error(
-        `appId不匹配！当前ipa：${appIdInPkg}, 当前update.json：${appId}`,
+        `appId不匹配！当前ipa: ${appIdInPkg}, 当前update.json: ${appId}`,
       );
     }
 
     if (appKeyInPkg && appKeyInPkg !== appKey) {
       throw new Error(
-        `appKey不匹配！当前ipa：${appKeyInPkg}, 当前update.json：${appKey}`,
+        `appKey不匹配！当前ipa: ${appKeyInPkg}, 当前update.json: ${appKey}`,
       );
     }
 
@@ -80,12 +80,12 @@ export const commands = {
       buildTime,
     });
     saveToLocal(fn, `${appId}/package/${id}.ipa`);
-    console.log(`Ipa uploaded: ${id}`);
+    console.log(`已成功上传ipa原生包（id: ${id}）`);
   },
   uploadApk: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
-      throw new Error('Usage: pushy uploadApk <apkFile>');
+      throw new Error('使用方法: pushy uploadApk apk后缀文件');
     }
     const {
       versionName,
@@ -97,13 +97,13 @@ export const commands = {
 
     if (appIdInPkg && appIdInPkg !== appId) {
       throw new Error(
-        `appId不匹配！当前apk：${appIdInPkg}, 当前update.json：${appId}`,
+        `appId不匹配！当前apk: ${appIdInPkg}, 当前update.json: ${appId}`,
       );
     }
 
     if (appKeyInPkg && appKeyInPkg !== appKey) {
       throw new Error(
-        `appKey不匹配！当前apk：${appKeyInPkg}, 当前update.json：${appKey}`,
+        `appKey不匹配！当前apk: ${appKeyInPkg}, 当前update.json: ${appKey}`,
       );
     }
 
@@ -115,25 +115,25 @@ export const commands = {
       buildTime,
     });
     saveToLocal(fn, `${appId}/package/${id}.apk`);
-    console.log(`Apk uploaded: ${id}`);
+    console.log(`已成功上传apk原生包（id: ${id}）`);
   },
   parseIpa: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
-      throw new Error('Usage: pushy parseIpa <ipaFile>');
+      throw new Error('使用方法: pushy parseIpa ipa后缀文件');
     }
     console.log(await getIpaInfo(fn));
   },
   parseApk: async function ({ args }) {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
-      throw new Error('Usage: pushy parseApk <apkFile>');
+      throw new Error('使用方法: pushy parseApk apk后缀文件');
     }
     console.log(await getApkInfo(fn));
   },
   packages: async function ({ options }) {
     const platform = checkPlatform(
-      options.platform || (await question('Platform(ios/android):')),
+      options.platform || (await question('平台(ios/android):')),
     );
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);

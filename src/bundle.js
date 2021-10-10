@@ -1,7 +1,3 @@
-/**
- * Created by tdzl2003 on 2/22/16.
- */
-
 const path = require('path');
 import { getRNVersion, translateOptions } from './utils';
 import * as fs from 'fs-extra';
@@ -197,7 +193,7 @@ async function pack(dir, output) {
       });
     zipfile.end();
   });
-  console.log('Bundled saved to: ' + output);
+  console.log('ppk热更包已生成并保存到: ' + output);
 }
 
 function readEntire(entry, zipFile) {
@@ -515,7 +511,7 @@ function diffArgsCheck(args, options, diffFn) {
 export const commands = {
   bundle: async function ({ options }) {
     const platform = checkPlatform(
-      options.platform || (await question('Platform(ios/android):')),
+      options.platform || (await question('平台(ios/android):')),
     );
 
     let {
@@ -553,7 +549,7 @@ export const commands = {
 
     await pack(path.resolve(intermediaDir), realOutput);
 
-    const v = await question('Would you like to publish it?(Y/N)');
+    const v = await question('是否现在上传此热更包?(Y/N)');
     if (v.toLowerCase() === 'y') {
       await this.publish({
         args: [realOutput],

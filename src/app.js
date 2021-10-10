@@ -1,7 +1,3 @@
-/**
- * Created by tdzl2003 on 2/13/16.
- */
-
 import { question } from './utils';
 import fs from 'fs';
 const Table = require('tty-table');
@@ -15,7 +11,7 @@ const validPlatforms = {
 
 export function checkPlatform(platform) {
   if (!validPlatforms[platform]) {
-    throw new Error(`Invalid platform '${platform}'`);
+    throw new Error(`无法识别的平台 '${platform}'`);
   }
   return platform;
 }
@@ -42,9 +38,9 @@ export async function listApp(platform) {
   const list = platform ? data.filter((v) => v.platform === platform) : data;
 
   const header = [
-    { value: 'App Id' },
-    { value: 'App Name' },
-    { value: 'Platform' },
+    { value: '应用 id' },
+    { value: '应用名称' },
+    { value: '平台' },
   ];
   const rows = [];
   for (const app of list) {
@@ -54,9 +50,9 @@ export async function listApp(platform) {
   console.log(Table(header, rows).render());
 
   if (platform) {
-    console.log(`\nTotal ${list.length} ${platform} apps`);
+    console.log(`\共 ${list.length} ${platform} 个应用`);
   } else {
-    console.log(`\nTotal ${list.length} apps`);
+    console.log(`\共 ${list.length} 个应用`);
   }
   return list;
 }
@@ -65,7 +61,7 @@ export async function chooseApp(platform) {
   const list = await listApp(platform);
 
   while (true) {
-    const id = await question('Enter appId:');
+    const id = await question('输入应用 id:');
     const app = list.find((v) => v.id === (id | 0));
     if (app) {
       return app;
@@ -75,13 +71,13 @@ export async function chooseApp(platform) {
 
 export const commands = {
   createApp: async function ({ options }) {
-    const name = options.name || (await question('App Name:'));
+    const name = options.name || (await question('应用名称:'));
     const { downloadUrl } = options;
     const platform = checkPlatform(
-      options.platform || (await question('Platform(ios/android):')),
+      options.platform || (await question('平台(ios/android):')),
     );
     const { id } = await post('/app/create', { name, platform });
-    console.log(`Created app ${id}`);
+    console.log(`已成功创建应用（id: ${id}）`);
     await this.selectApp({
       args: [id],
       options: { platform, downloadUrl },
@@ -91,10 +87,10 @@ export const commands = {
     const { platform } = options;
     const id = args[0] || chooseApp(platform);
     if (!id) {
-      console.log('Canceled');
+      console.log('已取消');
     }
     await doDelete(`/app/${id}`);
-    console.log('Ok.');
+    console.log('操作成功');
   },
   apps: async function ({ options }) {
     const { platform } = options;
@@ -102,7 +98,7 @@ export const commands = {
   },
   selectApp: async function ({ args, options }) {
     const platform = checkPlatform(
-      options.platform || (await question('Platform(ios/android):')),
+      options.platform || (await question('平台(ios/android):')),
     );
     const id = args[0] || (await chooseApp(platform)).id;
 

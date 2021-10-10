@@ -26,11 +26,11 @@ exports.commands = {
     });
     replaceSession({token});
     await saveSession();
-    console.log(`Welcome, ${info.name}.`);
+    console.log(`欢迎使用 pushy 热更新服务， ${info.name}.`);
   },
   logout: async function (){
     await closeSession();
-    console.log('Logged out.');
+    console.log('已退出登录');
   },
   me: async function (){
     const me = await get('/user/me');

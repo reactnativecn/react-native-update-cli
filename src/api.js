@@ -1,7 +1,3 @@
-/**
- * Created by tdzl2003 on 2/13/16.
- */
-
 const fetch = require('node-fetch');
 const defaultEndpoint = 'http://u.reactnative.cn/api';
 let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
@@ -140,11 +136,11 @@ async function uploadFile(fn, key) {
     throw new Error(
       `此文件大小${(fileSize / 1048576).toFixed(
         1,
-      )}m, 超出当前额度${maxSize}。您可以考虑升级付费业务以提升此额度。详情请访问：${pricingPageUrl}`,
+      )}m, 超出当前额度${maxSize}。您可以考虑升级付费业务以提升此额度。详情请访问: ${pricingPageUrl}`,
     );
   }
 
-  const bar = new ProgressBar('  Uploading [:bar] :percent :etas', {
+  const bar = new ProgressBar('  上传中 [:bar] :percent :etas', {
     complete: '=',
     incomplete: ' ',
     total: fileSize,
@@ -177,13 +173,7 @@ async function uploadFile(fn, key) {
             Object.assign(new Error(body), { status: resp.statusCode }),
           );
         }
-        resolve(
-          body
-            ? // qiniu
-              JSON.parse(body)
-            : // aliyun oss
-              { hash: formData.key },
-        );
+        resolve({ hash: formData.key });
       },
     );
   });
