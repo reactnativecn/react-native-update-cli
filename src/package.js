@@ -13,20 +13,25 @@ const Table = require('tty-table');
 export async function listPackage(appId) {
   const { data } = await get(`/app/${appId}/package/list?limit=1000`);
 
-  const header = [{ value: 'Package Id' }, { value: 'Version' }];
+  const header = [{ value: '原生包 Id' }, { value: '原生版本' }];
   const rows = [];
   for (const pkg of data) {
     const { version } = pkg;
     let versionInfo = '';
     if (version) {
-      versionInfo = ` - ${version.id} ${version.hash.slice(0, 8)} ${
-        version.name
-      }`;
+      versionInfo = `, 已绑定：${version.name} (${version.id})`;
     } else {
-      versionInfo = ' (newest)';
+      // versionInfo = ' (newest)';
     }
-
-    rows.push([pkg.id, `${pkg.name}(${pkg.status})${versionInfo}`]);
+    let output = pkg.name;
+    if (pkg.status === 'paused') {
+      output += '(已暂停)';
+    }
+    if (pkg.status === 'expired') {
+      output += '(已过期)';
+    }
+    output += versionInfo;
+    rows.push([pkg.id, output]);
   }
 
   console.log(Table(header, rows).render());
