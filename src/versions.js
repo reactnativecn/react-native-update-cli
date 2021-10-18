@@ -124,7 +124,24 @@ export const commands = {
     );
     const { appId } = await getSelectedApp(platform);
     const versionId = options.versionId || (await chooseVersion(appId)).id;
-    const pkgId = options.packageId || (await choosePackage(appId)).id;
+    let pkgId = options.packageId;
+    if (!pkgId) {
+      let pkgVersion = options.packageVersion;
+      if (pkgVersion) {
+        pkgVersion = pkgVersion.trim();
+        const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+        const pkg = data.find((d) => d.name === pkgVersion);
+        if (pkg) {
+          pkgId = pkg.id;
+        } else {
+          throw new Error(`未查询到匹配原生版本：${pkgVersion}`);
+        }
+      }
+    }
+
+    if (!pkgId) {
+      throw new Error('请提供 packageId 或 packageVersion 参数');
+    }
     await put(`/app/${appId}/package/${pkgId}`, {
       versionId,
     });

@@ -80,6 +80,10 @@
         },
         "packageId": {
           "hasValue": true
+        },
+
+        "packageVersion": {
+          "hasValue": true
         }
       }
     },
