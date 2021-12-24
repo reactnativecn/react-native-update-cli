@@ -100,7 +100,7 @@ export const commands = {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android):')),
     );
-    const id = args[0] || (await chooseApp(platform)).id;
+    const id = args[0] ? parseInt(args[0]) : (await chooseApp(platform)).id;
 
     let updateInfo = {};
     if (fs.existsSync('update.json')) {
