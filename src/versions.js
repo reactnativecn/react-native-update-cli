@@ -149,4 +149,18 @@ export const commands = {
     });
     console.log('操作成功');
   },
+  updateVersionInfo: async function ({ args, options }) {
+    const platform = checkPlatform(
+      options.platform || (await question('平台(ios/android):')),
+    );
+    const { appId } = await getSelectedApp(platform);
+    const versionId = options.versionId || (await chooseVersion(appId)).id;
+
+    const updateParams = {};
+    options.name && (updateParams.name = options.name);
+    options.description && (updateParams.description = options.description);
+    options.metaInfo && (updateParams.metaInfo = options.metaInfo);
+    await put(`/app/${appId}/version/${versionId}`, updateParams);
+    console.log('操作成功');
+  },
 };

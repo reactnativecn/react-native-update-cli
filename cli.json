@@ -88,6 +88,29 @@
       }
     },
 
+    "updateVersionInfo": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        },
+        "versionId": {
+          "hasValue": true
+        },
+        "name": {
+          "default": false,
+          "hasValue": true
+        },
+        "description": {
+          "default": false,
+          "hasValue": true
+        },
+        "metaInfo": {
+          "default": false,
+          "hasValue": true
+        }
+      }
+    },
+
     "build": {
       "description": "Bundle javascript and copy assets."
     },
