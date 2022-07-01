@@ -36,7 +36,7 @@
     "cli-arguments": "^0.2.1",
     "filesize-parser": "^1.5.0",
     "fs-extra": "8",
-    "gradle-to-js": "^2.0.0",
+    "gradle-to-js": "^2.0.1",
     "node-fetch": "^2.6.1",
     "progress": "^2.0.3",
     "read": "^1.0.7",

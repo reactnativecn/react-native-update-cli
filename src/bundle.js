@@ -48,6 +48,7 @@ async function runReactNativeBundleCommand(
 
   fs.emptyDirSync(outputFolder);
 
+  // TODO sourcemap
   Array.prototype.push.apply(reactNativeBundleArgs, [
     path.join('node_modules', 'react-native', 'local-cli', 'cli.js'),
     'bundle',
@@ -94,7 +95,10 @@ async function runReactNativeBundleCommand(
           ),
         );
       } else {
-        if (gradleConfig.enableHermes) {
+        if (
+          (platform === 'android' && gradleConfig.enableHermes) ||
+          (platform === 'ios' && fs.existsSync('ios/Pods/hermes-engine'))
+        ) {
           await compileHermesByteCode(bundleName, outputFolder);
         }
         resolve(null);
@@ -134,15 +138,21 @@ async function checkGradleConfig() {
 
 async function compileHermesByteCode(bundleName, outputFolder) {
   console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
-  const hermesPackage = fs.existsSync('node_modules/hermes-engine')
-    ? 'node_modules/hermes-engine' // 0.2+
-    : 'node_modules/hermesvm'; // < 0.2
-  const hermesPath = `${hermesPackage}/${getHermesOSBin()}`;
+  // >= rn 0.69
+  let hermesCommand = `node_modules/react-native/sdks/hermesc/${getHermesOSBin()}/hermesc`;
+  // < rn 0.69
+  if (!fs.existsSync(hermesCommand)) {
+    const hermesPackage = fs.existsSync('node_modules/hermes-engine')
+      ? 'node_modules/hermes-engine' // 0.2+
+      : 'node_modules/hermesvm'; // < 0.2
+    const hermesPath = `${hermesPackage}/${getHermesOSBin()}`;
 
-  const hermesCommand = fs.existsSync(`${hermesPath}/hermesc`)
-    ? `${hermesPath}/hermesc` // 0.5+
-    : `${hermesPath}/hermes`; // < 0.5
+    hermesCommand = fs.existsSync(`${hermesPath}/hermesc`)
+      ? `${hermesPath}/hermesc` // 0.5+
+      : `${hermesPath}/hermes`; // < 0.5
+  }
 
+  // TODO sourcemap
   spawnSync(
     path.join.apply(null, hermesCommand.split('/')),
     [
@@ -514,17 +524,11 @@ export const commands = {
       options.platform || (await question('平台(ios/android):')),
     );
 
-    let {
-      bundleName,
-      entryFile,
-      intermediaDir,
-      output,
-      dev,
-      verbose,
-    } = translateOptions({
-      ...options,
-      platform,
-    });
+    let { bundleName, entryFile, intermediaDir, output, dev, verbose } =
+      translateOptions({
+        ...options,
+        platform,
+      });
 
     // const sourcemapOutput = path.join(intermediaDir, bundleName + ".map");
 
