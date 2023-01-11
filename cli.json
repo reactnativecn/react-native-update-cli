@@ -140,7 +140,9 @@
           "default": ".pushy/output/${platform}.${time}.ppk",
           "hasValue": true
         },
-        "verbose": {}
+        "sourcemap": {
+          "default": false
+        }
       }
     },
     "release": {

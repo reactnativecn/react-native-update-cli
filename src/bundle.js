@@ -48,7 +48,6 @@ async function runReactNativeBundleCommand(
 
   fs.emptyDirSync(outputFolder);
 
-  // TODO sourcemap
   Array.prototype.push.apply(reactNativeBundleArgs, [
     path.join('node_modules', 'react-native', 'local-cli', 'cli.js'),
     'bundle',
@@ -99,7 +98,11 @@ async function runReactNativeBundleCommand(
           (platform === 'android' && gradleConfig.enableHermes) ||
           (platform === 'ios' && fs.existsSync('ios/Pods/hermes-engine'))
         ) {
-          await compileHermesByteCode(bundleName, outputFolder);
+          await compileHermesByteCode(
+            bundleName,
+            outputFolder,
+            sourcemapOutput,
+          );
         }
         resolve(null);
       }
@@ -136,7 +139,11 @@ async function checkGradleConfig() {
   };
 }
 
-async function compileHermesByteCode(bundleName, outputFolder) {
+async function compileHermesByteCode(
+  bundleName,
+  outputFolder,
+  sourcemapOutput,
+) {
   console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
   // >= rn 0.69
   let hermesCommand = `node_modules/react-native/sdks/hermesc/${getHermesOSBin()}/hermesc`;
@@ -151,19 +158,19 @@ async function compileHermesByteCode(bundleName, outputFolder) {
       ? `${hermesPath}/hermesc` // 0.5+
       : `${hermesPath}/hermes`; // < 0.5
   }
-
-  // TODO sourcemap
-  spawnSync(
-    path.join.apply(null, hermesCommand.split('/')),
-    [
-      '-emit-binary',
-      '-out',
-      path.join(outputFolder, bundleName),
-      path.join(outputFolder, bundleName),
-      '-O',
-    ],
-    { stdio: 'ignore' },
-  );
+  const args = [
+    '-emit-binary',
+    '-out',
+    path.join(outputFolder, bundleName),
+    path.join(outputFolder, bundleName),
+    '-O',
+  ];
+  if (sourcemapOutput) {
+    args.push('-output-source-map');
+  }
+  spawnSync(path.join.apply(null, hermesCommand.split('/')), args, {
+    stdio: 'ignore',
+  });
 }
 
 async function pack(dir, output) {
@@ -524,13 +531,13 @@ export const commands = {
       options.platform || (await question('平台(ios/android):')),
     );
 
-    let { bundleName, entryFile, intermediaDir, output, dev, verbose } =
+    let { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
       translateOptions({
         ...options,
         platform,
       });
 
-    // const sourcemapOutput = path.join(intermediaDir, bundleName + ".map");
+    const sourcemapOutput = path.join(intermediaDir, bundleName + '.map');
 
     const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
@@ -549,6 +556,7 @@ export const commands = {
       entryFile,
       intermediaDir,
       platform,
+      sourcemap ? sourcemapOutput : '',
     );
 
     await pack(path.resolve(intermediaDir), realOutput);
