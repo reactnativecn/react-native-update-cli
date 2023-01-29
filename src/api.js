@@ -1,5 +1,5 @@
 const fetch = require('node-fetch');
-const defaultEndpoint = 'http://u.reactnative.cn/api';
+const defaultEndpoint = 'https://update.reactnative.cn/api';
 let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 const fs = require('fs');
 import request from 'request';
