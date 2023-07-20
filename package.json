@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Command tools for javaScript updater with `pushy` service for react native apps.",
   "main": "index.js",
   "bin": {
@@ -39,6 +39,7 @@
     "gradle-to-js": "^2.0.1",
     "node-fetch": "^2.6.1",
     "progress": "^2.0.3",
+    "properties": "^1.2.1",
     "read": "^1.0.7",
     "request": "^2.88.2",
     "tcp-ping": "^0.1.1",
