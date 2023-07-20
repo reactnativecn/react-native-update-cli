@@ -8,6 +8,7 @@ import { checkPlatform } from './app';
 const { spawn, spawnSync } = require('child_process');
 const g2js = require('gradle-to-js/lib/parser');
 const os = require('os');
+const properties = require('properties');
 
 var bsdiff, hdiff, diff;
 try {
@@ -94,10 +95,34 @@ async function runReactNativeBundleCommand(
           ),
         );
       } else {
-        if (
-          (platform === 'android' && gradleConfig.enableHermes) ||
-          (platform === 'ios' && fs.existsSync('ios/Pods/hermes-engine'))
+        let hermesEnabled = false;
+
+        if (platform === 'android') {
+          const gradlePropeties = await new Promise((resolve) => {
+            properties.parse(
+              './android/gradle.properties',
+              { path: true },
+              function (error, props) {
+                if (error) {
+                  console.error(error);
+                  resolve(null);
+                }
+
+                resolve(props);
+              },
+            );
+          });
+          hermesEnabled = gradlePropeties.hermesEnabled;
+
+          if (typeof hermesEnabled !== 'boolean')
+            hermesEnabled = gradleConfig.enableHermes;
+        } else if (
+          platform === 'ios' &&
+          fs.existsSync('ios/Pods/hermes-engine')
         ) {
+          hermesEnabled = true;
+        }
+        if (hermesEnabled) {
           await compileHermesByteCode(
             bundleName,
             outputFolder,
