@@ -65,7 +65,7 @@ export const commands = {
     } = await getIpaInfo(fn);
     const { appId, appKey } = await getSelectedApp('ios');
 
-    if (appIdInPkg && appIdInPkg !== appId) {
+    if (appIdInPkg && appIdInPkg != appId) {
       throw new Error(
         `appId不匹配！当前ipa: ${appIdInPkg}, 当前update.json: ${appId}`,
       );
@@ -100,7 +100,7 @@ export const commands = {
     } = await getApkInfo(fn);
     const { appId, appKey } = await getSelectedApp('android');
 
-    if (appIdInPkg && appIdInPkg !== appId) {
+    if (appIdInPkg && appIdInPkg != appId) {
       throw new Error(
         `appId不匹配！当前apk: ${appIdInPkg}, 当前update.json: ${appId}`,
       );
