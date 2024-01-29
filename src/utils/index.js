@@ -43,7 +43,7 @@ export function translateOptions(options) {
 
 export function getRNVersion() {
   const version = JSON.parse(
-    fs.readFileSync(path.resolve('node_modules/react-native/package.json')),
+    fs.readFileSync(require.resolve('react-native/package.json')),
   ).version;
 
   // We only care about major and minor version.
@@ -139,12 +139,7 @@ export function saveToLocal(originPath, destName) {
 export function printVersionCommand() {
   console.log('react-native-update-cli: ' + pkg.version);
   try {
-    const PACKAGE_JSON_PATH = path.resolve(
-      process.cwd(),
-      'node_modules',
-      'react-native-update',
-      'package.json',
-    );
+    const PACKAGE_JSON_PATH = require.resolve('react-native-update/package.json');
     console.log('react-native-update: ' + require(PACKAGE_JSON_PATH).version);
   } catch (e) {
     console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');

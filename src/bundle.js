@@ -50,7 +50,7 @@ async function runReactNativeBundleCommand(
   fs.emptyDirSync(outputFolder);
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
-    path.join('node_modules', 'react-native', 'local-cli', 'cli.js'),
+    require.resolve('react-native/local-cli/cli.js'), // 'react-native' package may be symlinked
     'bundle',
     '--assets-dest',
     outputFolder,
@@ -171,7 +171,7 @@ async function compileHermesByteCode(
 ) {
   console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
   // >= rn 0.69
-  let hermesCommand = `node_modules/react-native/sdks/hermesc/${getHermesOSBin()}/hermesc`;
+  let hermesCommand = require.resolve(`react-native/sdks/hermesc/${getHermesOSBin()}/hermesc`);
   // < rn 0.69
   if (!fs.existsSync(hermesCommand)) {
     const hermesPackage = fs.existsSync('node_modules/hermes-engine')
