@@ -43,7 +43,11 @@ export function translateOptions(options) {
 
 export function getRNVersion() {
   const version = JSON.parse(
-    fs.readFileSync(require.resolve('react-native/package.json')),
+    fs.readFileSync(
+      require.resolve('react-native/package.json', {
+        paths: [process.cwd()],
+      }),
+    ),
   ).version;
 
   // We only care about major and minor version.
@@ -106,9 +110,8 @@ export async function getIpaInfo(fn) {
   if (updateJsonFile) {
     appCredential = JSON.parse(updateJsonFile.toString()).ios;
   }
-  const {
-    CFBundleShortVersionString: versionName,
-  } = await appInfoParser.parse();
+  const { CFBundleShortVersionString: versionName } =
+    await appInfoParser.parse();
   let buildTimeTxtBuffer = await appInfoParser.parser.getEntry(
     /payload\/.+?\.app\/pushy_build_time.txt/,
   );
@@ -139,7 +142,12 @@ export function saveToLocal(originPath, destName) {
 export function printVersionCommand() {
   console.log('react-native-update-cli: ' + pkg.version);
   try {
-    const PACKAGE_JSON_PATH = require.resolve('react-native-update/package.json');
+    const PACKAGE_JSON_PATH = require.resolve(
+      'react-native-update/package.json',
+      {
+        paths: [process.cwd()],
+      },
+    );
     console.log('react-native-update: ' + require(PACKAGE_JSON_PATH).version);
   } catch (e) {
     console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
