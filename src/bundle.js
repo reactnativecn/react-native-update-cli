@@ -173,12 +173,12 @@ async function compileHermesByteCode(
 ) {
   console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
   // >= rn 0.69
-  let hermesCommand = require.resolve(
-    `react-native/sdks/hermesc/${getHermesOSBin()}/hermesc`,
-    {
-      paths: [process.cwd()],
-    },
+  const rnDir = path.dirname(require.resolve('react-native'));
+  const hermesCommand = path.join(
+    rnDir,
+    `/sdks/hermesc/${getHermesOSBin()}/hermesc`,
   );
+
   // < rn 0.69
   if (!fs.existsSync(hermesCommand)) {
     const hermesPackage = fs.existsSync('node_modules/hermes-engine')
