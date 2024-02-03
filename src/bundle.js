@@ -49,11 +49,21 @@ async function runReactNativeBundleCommand(
 
   fs.emptyDirSync(outputFolder);
 
-  Array.prototype.push.apply(reactNativeBundleArgs, [
-    require.resolve('react-native/local-cli/cli.js', {
+  let cliPath = require.resolve('react-native/local-cli/cli.js', {
+    paths: [process.cwd()],
+  });
+  try {
+    cliPath = require.resolve('@expo/cli', {
       paths: [process.cwd()],
-    }), // 'react-native' package may be symlinked
-    'bundle',
+    });
+  } catch (e) {}
+  const bundleCommand = cliPath.includes('@expo/cli')
+    ? 'export:embed'
+    : 'bundle';
+
+  Array.prototype.push.apply(reactNativeBundleArgs, [
+    cliPath,
+    bundleCommand,
     '--assets-dest',
     outputFolder,
     '--bundle-output',
@@ -204,7 +214,10 @@ async function compileHermesByteCode(
   if (sourcemapOutput) {
     args.push('-output-source-map');
   }
-  spawnSync(path.join.apply(null, hermesCommand.split('/')), args, {
+  console.log(
+    'Running hermesc: ' + hermesCommand + ' ' + args.join(' ') + '\n',
+  );
+  spawnSync(hermesCommand, args, {
     stdio: 'ignore',
   });
 }
