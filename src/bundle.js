@@ -31,9 +31,11 @@ async function runReactNativeBundleCommand(
   let gradleConfig = {};
   if (platform === 'android') {
     gradleConfig = await checkGradleConfig();
-    // if (gradleConfig.crunchPngs !== false) {
-    //   throw new Error('请先禁用android的crunchPngs优化，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8android%E7%9A%84crunch%E4%BC%98%E5%8C%96')
-    // }
+    if (gradleConfig.crunchPngs !== false) {
+      console.warn(
+        'android的crunchPngs选项似乎尚未禁用（如已禁用则请忽略此提示），这可能导致热更包体积异常增大，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8-android-%E7%9A%84-crunch-%E4%BC%98%E5%8C%96 \n',
+      );
+    }
   }
 
   let reactNativeBundleArgs = [];
@@ -53,6 +55,12 @@ async function runReactNativeBundleCommand(
     paths: [process.cwd()],
   });
   try {
+    require.resolve('expo-router', {
+      paths: [process.cwd()],
+    });
+
+    console.log(`expo-router detected, will use @expo/cli to bundle.\n`);
+    // if using expo-router, use expo-cli
     cliPath = require.resolve('@expo/cli', {
       paths: [process.cwd()],
     });
