@@ -1,0 +1,17 @@
+diff --git a/src/xml-parser/binary.js b/src/xml-parser/binary.js
+index e20cc96e8131078ea81afeb31af46142a52da58e..f0f788cc555046f0dab47f8854f26344e0d5d714 100644
+--- a/src/xml-parser/binary.js
++++ b/src/xml-parser/binary.js
+@@ -547,8 +547,10 @@ var BinaryXmlParser = /*#__PURE__*/function () {
+       attr.nodeName = attr.name = this.strings[nameRef];
+       if (valueRef > 0) {
+         // some apk have versionName with special characters
+-        if (attr.name === 'versionName') {
+-          this.strings[valueRef] = this.strings[valueRef].replace(/[^\d\w-.]/g, '');
++        if (attr.name === 'versionName') {        
++          // only keep printable characters
++          // https://www.ascii-code.com/characters/printable-characters
++          this.strings[valueRef] = this.strings[valueRef].replace(/[^\x21-\x7E]/g, '')
+         }
+         attr.value = this.strings[valueRef];
+       }

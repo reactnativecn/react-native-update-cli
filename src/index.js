@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-const { loadSession } = require('./api');
-const updateNotifier = require('update-notifier');
+import { loadSession } from './api';
+import updateNotifier from 'update-notifier';
 import { printVersionCommand } from './utils/index.js';
-const pkg = require('../package.json');
+import pkg from '../package.json';
 
 updateNotifier({ pkg }).notify({ isGlobal: true });
 

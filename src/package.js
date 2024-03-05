@@ -1,14 +1,10 @@
-/**
- * Created by tdzl2003 on 4/2/16.
- */
-
-const { get, post, uploadFile } = require('./api');
+import { get, post, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 
 import { getApkInfo, getIpaInfo } from './utils';
-const Table = require('tty-table');
+import Table from 'tty-table';
 
 export async function listPackage(appId) {
   const { data } = await get(`/app/${appId}/package/list?limit=1000`);
@@ -85,7 +81,9 @@ export const commands = {
       buildTime,
     });
     saveToLocal(fn, `${appId}/package/${id}.ipa`);
-    console.log(`已成功上传ipa原生包（id: ${id}）`);
+    console.log(
+      `已成功上传ipa原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
+    );
   },
   uploadApk: async function ({ args }) {
     const fn = args[0];
@@ -120,7 +118,9 @@ export const commands = {
       buildTime,
     });
     saveToLocal(fn, `${appId}/package/${id}.apk`);
-    console.log(`已成功上传apk原生包（id: ${id}）`);
+    console.log(
+      `已成功上传apk原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
+    );
   },
   parseIpa: async function ({ args }) {
     const fn = args[0];

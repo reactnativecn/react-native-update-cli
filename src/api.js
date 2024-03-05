@@ -1,13 +1,13 @@
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 const defaultEndpoint = 'https://update.reactnative.cn/api';
 let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
-const fs = require('fs');
+import fs from 'fs';
 import request from 'request';
 import ProgressBar from 'progress';
-const packageJson = require('../package.json');
-const tcpp = require('tcp-ping');
-const util = require('util');
-const path = require('path');
+import packageJson from '../package.json';
+import tcpp from 'tcp-ping';
+import util from 'util';
+import path from 'path';
 import filesizeParser from 'filesize-parser';
 import { pricingPageUrl } from './utils';
 
@@ -18,10 +18,18 @@ let savedSession = undefined;
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 
-exports.loadSession = async function () {
+export const getSession = function () {
+  return session;
+};
+
+export const replaceSession = function (newSession) {
+  session = newSession;
+};
+
+export const loadSession = async function () {
   if (fs.existsSync('.update')) {
     try {
-      exports.replaceSession(JSON.parse(fs.readFileSync('.update', 'utf8')));
+      replaceSession(JSON.parse(fs.readFileSync('.update', 'utf8')));
       savedSession = session;
     } catch (e) {
       console.error(
@@ -32,15 +40,7 @@ exports.loadSession = async function () {
   }
 };
 
-exports.getSession = function () {
-  return session;
-};
-
-exports.replaceSession = function (newSession) {
-  session = newSession;
-};
-
-exports.saveSession = function () {
+export const saveSession = function () {
   // Only save on change.
   if (session !== savedSession) {
     const current = session;
@@ -50,7 +50,7 @@ exports.saveSession = function () {
   }
 };
 
-exports.closeSession = function () {
+export const closeSession = function () {
   if (fs.existsSync('.update')) {
     fs.unlinkSync('.update');
     savedSession = undefined;
@@ -103,13 +103,13 @@ function queryWithBody(method) {
   };
 }
 
-exports.get = queryWithoutBody('GET');
-exports.post = queryWithBody('POST');
-exports.put = queryWithBody('PUT');
-exports.doDelete = queryWithBody('DELETE');
+export const get = queryWithoutBody('GET');
+export const post = queryWithBody('POST');
+export const put = queryWithBody('PUT');
+export const doDelete = queryWithBody('DELETE');
 
-async function uploadFile(fn, key) {
-  const { url, backupUrl, formData, maxSize } = await exports.post('/upload', {
+export async function uploadFile(fn, key) {
+  const { url, backupUrl, formData, maxSize } = await post('/upload', {
     ext: path.extname(fn),
   });
   let realUrl = url;
@@ -175,5 +175,3 @@ async function uploadFile(fn, key) {
   });
   return info;
 }
-
-exports.uploadFile = uploadFile;

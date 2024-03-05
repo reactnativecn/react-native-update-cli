@@ -1,14 +1,10 @@
-/**
- * Created by tdzl2003 on 2/13/16.
- */
-
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-const pkg = require('../../package.json');
-const AppInfoParser = require('app-info-parser');
+import pkg from '../../package.json';
+import AppInfoParser from 'app-info-parser';
 
-var read = require('read');
+import read from 'read';
 
 export function question(query, password) {
   if (NO_INTERACTIVE) {

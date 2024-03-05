@@ -1,4 +1,4 @@
-const { get, post, put, uploadFile } = require('./api');
+import { get, post, put, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';

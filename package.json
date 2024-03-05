@@ -12,7 +12,6 @@
     "cli.json"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "prepublish": "babel src --out-dir lib"
   },
   "repository": {
@@ -32,7 +31,7 @@
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
   "dependencies": {
-    "app-info-parser": "^1.0.0",
+    "app-info-parser": "^1.1.6",
     "cli-arguments": "^0.2.1",
     "filesize-parser": "^1.5.0",
     "fs-extra": "8",
@@ -43,8 +42,8 @@
     "read": "^1.0.7",
     "request": "^2.88.2",
     "tcp-ping": "^0.1.1",
-    "tty-table": "4.1",
-    "update-notifier": "^4.1.1",
+    "tty-table": "4.2",
+    "update-notifier": "^5.1.0",
     "yauzl": "^2.10.0",
     "yazl": "2.5.1"
   },
@@ -56,6 +55,11 @@
     "babel-plugin-transform-object-rest-spread": "^6.26.0"
   },
   "engines": {
-    "node": ">= 8"
+    "node": ">= 10"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "app-info-parser@1.1.6": "patches/app-info-parser@1.1.6.patch"
+    }
   }
 }

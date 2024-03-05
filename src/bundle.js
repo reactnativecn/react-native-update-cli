@@ -1,16 +1,16 @@
-const path = require('path');
+import path from 'path';
 import { getRNVersion, translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
 import { question, printVersionCommand } from './utils';
 import { checkPlatform } from './app';
-const { spawn, spawnSync } = require('child_process');
+import { spawn, spawnSync } from 'child_process';
 const g2js = require('gradle-to-js/lib/parser');
-const os = require('os');
+import os from 'os';
 const properties = require('properties');
 
-var bsdiff, hdiff, diff;
+let bsdiff, hdiff, diff;
 try {
   bsdiff = require('node-bsdiff').diff;
 } catch (e) {}
@@ -196,7 +196,7 @@ async function compileHermesByteCode(
       paths: [process.cwd()],
     }),
   );
-  const hermesCommand = path.join(
+  let hermesCommand = path.join(
     rnDir,
     `/sdks/hermesc/${getHermesOSBin()}/hermesc`,
   );
@@ -234,7 +234,7 @@ async function pack(dir, output) {
   console.log('Packing');
   fs.ensureDirSync(path.dirname(output));
   await new Promise((resolve, reject) => {
-    var zipfile = new ZipFile();
+    const zipfile = new ZipFile();
 
     function addDirectory(root, rel) {
       if (rel) {
@@ -324,7 +324,7 @@ async function diffFromPPK(origin, next, output) {
 
   const copies = {};
 
-  var zipfile = new ZipFile();
+  const zipfile = new ZipFile();
 
   const writePromise = new Promise((resolve, reject) => {
     zipfile.outputStream.on('error', (err) => {
@@ -409,7 +409,7 @@ async function diffFromPPK(origin, next, output) {
 
   const deletes = {};
 
-  for (var k in originEntries) {
+  for (let k in originEntries) {
     if (!newEntries[k]) {
       console.log('Delete ' + k);
       deletes[k] = 1;
@@ -466,7 +466,7 @@ async function diffFromPackage(
 
   const copies = {};
 
-  var zipfile = new ZipFile();
+  const zipfile = new ZipFile();
 
   const writePromise = new Promise((resolve, reject) => {
     zipfile.outputStream.on('error', (err) => {

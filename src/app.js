@@ -1,8 +1,8 @@
 import { question } from './utils';
 import fs from 'fs';
-const Table = require('tty-table');
+import Table from 'tty-table';
 
-const { post, get, doDelete } = require('./api');
+import { post, get, doDelete } from './api';
 
 const validPlatforms = {
   ios: 1,
