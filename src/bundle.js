@@ -196,22 +196,15 @@ async function compileHermesByteCode(
       paths: [process.cwd()],
     }),
   );
-  let hermesCommand = path.join(
-    rnDir,
-    `/sdks/hermesc/${getHermesOSBin()}/hermesc`,
-  );
+  let hermesPath = path.join(rnDir, `/sdks/hermesc/${getHermesOSBin()}`);
 
   // < rn 0.69
-  if (!fs.existsSync(hermesCommand)) {
-    const hermesPackage = fs.existsSync('node_modules/hermes-engine')
-      ? 'node_modules/hermes-engine' // 0.2+
-      : 'node_modules/hermesvm'; // < 0.2
-    const hermesPath = `${hermesPackage}/${getHermesOSBin()}`;
-
-    hermesCommand = fs.existsSync(`${hermesPath}/hermesc`)
-      ? `${hermesPath}/hermesc` // 0.5+
-      : `${hermesPath}/hermes`; // < 0.5
+  if (!fs.existsSync(hermesPath)) {
+    hermesPath = `node_modules/hermes-engine/${getHermesOSBin()}`;
   }
+
+  const hermesCommand = `${hermesPath}/hermesc`;
+  
   const args = [
     '-emit-binary',
     '-out',
