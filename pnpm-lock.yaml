@@ -7,7 +7,7 @@ settings:
 dependencies:
   app-info-parser:
     specifier: github:sunnylqm/app-info-parser#fix/support-ascii-versionname
-    version: github.com/sunnylqm/app-info-parser/734d251d962f332e9084d4175844bc8085dcd88c
+    version: github.com/sunnylqm/app-info-parser/f7748ce60278fb16f6f280d908d35025a241eb57
   cli-arguments:
     specifier: ^0.2.1
     version: 0.2.1
@@ -3238,8 +3238,8 @@ packages:
       buffer-crc32: 0.2.13
     dev: false
 
-  github.com/sunnylqm/app-info-parser/734d251d962f332e9084d4175844bc8085dcd88c:
-    resolution: {tarball: https://codeload.github.com/sunnylqm/app-info-parser/tar.gz/734d251d962f332e9084d4175844bc8085dcd88c}
+  github.com/sunnylqm/app-info-parser/f7748ce60278fb16f6f280d908d35025a241eb57:
+    resolution: {tarball: https://codeload.github.com/sunnylqm/app-info-parser/tar.gz/f7748ce60278fb16f6f280d908d35025a241eb57}
     name: app-info-parser
     version: 1.1.6
     hasBin: true
