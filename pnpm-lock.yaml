@@ -4,15 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  app-info-parser@1.1.6:
-    hash: 5azvag6rayshexwrrjmxczz7em
-    path: patches/app-info-parser@1.1.6.patch
-
 dependencies:
   app-info-parser:
-    specifier: ^1.1.6
-    version: 1.1.6(patch_hash=5azvag6rayshexwrrjmxczz7em)
+    specifier: github:sunnylqm/app-info-parser#fix/support-ascii-versionname
+    version: github.com/sunnylqm/app-info-parser/a269025b6c74fe1b8ced83b43a0ec7d23e5f028c
   cli-arguments:
     specifier: ^0.2.1
     version: 0.2.1
@@ -148,19 +143,6 @@ packages:
       normalize-path: 2.1.1
     dev: true
     optional: true
-
-  /app-info-parser@1.1.6(patch_hash=5azvag6rayshexwrrjmxczz7em):
-    resolution: {integrity: sha512-ZAFCM0bN88cbpsMoRhL/JfdX3b+nb5iBEXcu30xABvbaqtw6tXfHujDnuKSpNmA3P0uwpkIxTV/Wun5HfEch8A==}
-    hasBin: true
-    dependencies:
-      bplist-parser: 0.2.0
-      bytebuffer: 5.0.1
-      cgbi-to-png: 1.0.7
-      commander: 7.2.0
-      isomorphic-unzip: 1.1.5
-      plist: 3.0.4
-    dev: false
-    patched: true
 
   /arr-diff@2.0.0:
     resolution: {integrity: sha1-jzuCf5Vai9ZpaX5KQlasPOrjVs8=}
@@ -3254,4 +3236,18 @@ packages:
     resolution: {integrity: sha512-phENi2PLiHnHb6QBVot+dJnaAZ0xosj7p3fWl+znIjBDlnMI2PsZCJZ306BPTFOaHf5qdDEI8x5qFrSOBN5vrw==}
     dependencies:
       buffer-crc32: 0.2.13
+    dev: false
+
+  github.com/sunnylqm/app-info-parser/a269025b6c74fe1b8ced83b43a0ec7d23e5f028c:
+    resolution: {tarball: https://codeload.github.com/sunnylqm/app-info-parser/tar.gz/a269025b6c74fe1b8ced83b43a0ec7d23e5f028c}
+    name: app-info-parser
+    version: 1.1.6
+    hasBin: true
+    dependencies:
+      bplist-parser: 0.2.0
+      bytebuffer: 5.0.1
+      cgbi-to-png: 1.0.7
+      commander: 7.2.0
+      isomorphic-unzip: 1.1.5
+      plist: 3.0.4
     dev: false
