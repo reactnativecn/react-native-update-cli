@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import pkg from '../../package.json';
-import AppInfoParser from 'app-info-parser';
+import AppInfoParser from './app-info-parser';
 
 import read from 'read';
 
