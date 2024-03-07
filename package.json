@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.20.6",
+  "version": "1.21.0",
   "description": "Command tools for javaScript updater with `pushy` service for react native apps.",
   "main": "index.js",
   "bin": {
@@ -31,11 +31,17 @@
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
   "dependencies": {
+    "bplist-parser": "^0.2.0",
+    "bytebuffer": "^5.0.1",
+    "cgbi-to-png": "^1.0.7",
     "cli-arguments": "^0.2.1",
+    "commander": "^7.2.0",
     "filesize-parser": "^1.5.0",
     "fs-extra": "8",
     "gradle-to-js": "^2.0.1",
+    "isomorphic-unzip": "^1.1.5",
     "node-fetch": "^2.6.1",
+    "plist": "^3.0.1",
     "progress": "^2.0.3",
     "properties": "^1.2.1",
     "read": "^1.0.7",
