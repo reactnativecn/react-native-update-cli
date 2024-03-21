@@ -235,7 +235,7 @@ async function pack(dir, output) {
       }
       const childs = fs.readdirSync(root);
       for (const name of childs) {
-        if (name === '.' || name === '..') {
+        if (name === '.' || name === '..' || name === 'index.bundlejs.map') {
           continue;
         }
         const fullPath = path.join(root, name);
