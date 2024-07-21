@@ -84,6 +84,12 @@
 
         "packageVersion": {
           "hasValue": true
+        },
+        "minPackageVersion": {
+          "hasValue": true
+        },
+        "maxPackageVersion": {
+          "hasValue": true
         }
       }
     },

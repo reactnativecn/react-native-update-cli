@@ -3,6 +3,7 @@ import { question, saveToLocal } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
+import { compare } from 'compare-versions';
 
 async function showVersion(appId, offset) {
   const { data, count } = await get(`/app/${appId}/version/list`);
@@ -127,6 +128,8 @@ export const commands = {
 
     let pkgId;
     let pkgVersion = options.packageVersion;
+    let minPkgVersion = options.minPackageVersion;
+    let maxPkgVersion = options.maxPackageVersion;
     if (pkgVersion) {
       pkgVersion = pkgVersion.trim();
       const { data } = await get(`/app/${appId}/package/list?limit=1000`);
@@ -136,6 +139,42 @@ export const commands = {
       } else {
         throw new Error(`未查询到匹配原生版本：${pkgVersion}`);
       }
+    }
+    if (minPkgVersion) {
+      minPkgVersion = String(minPkgVersion).trim();
+      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+      const pkgs = data.filter((d) => compare(d.name, minPkgVersion, '>='));
+      if (pkgs.length === 0) {
+        throw new Error(
+          `未查询到 >= ${minPkgVersion} 的原生版本`,
+        );
+      }
+      for (const pkg of pkgs) {
+        await put(`/app/${appId}/package/${pkg.id}`, {
+          versionId,
+        });
+        console.log(`已将版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
+      }
+      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
+      return;
+    }
+    if (maxPkgVersion) {
+      maxPkgVersion = String(maxPkgVersion).trim();
+      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+      const pkgs = data.filter((d) => compare(d.name, maxPkgVersion, '<='));
+      if (pkgs.length === 0) {
+        throw new Error(
+          `未查询到 <= ${maxPkgVersion} 的原生版本`,
+        );
+      }
+      for (const pkg of pkgs) {
+        await put(`/app/${appId}/package/${pkg.id}`, {
+          versionId,
+        });
+        console.log(`已将版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
+      }
+      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
+      return;
     }
     if (!pkgId) {
       pkgId = options.packageId || (await choosePackage(appId)).id;

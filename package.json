@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.26.0",
+  "version": "1.27.0",
   "description": "Command tools for javaScript updater with `pushy` service for react native apps.",
   "main": "index.js",
   "bin": {
@@ -12,7 +12,7 @@
     "cli.json"
   ],
   "scripts": {
-    "prepublish": "babel src --out-dir lib"
+    "prepublish": "babel src --out-dir lib && chmod +x lib/index.js"
   },
   "repository": {
     "type": "git",
@@ -36,6 +36,7 @@
     "cgbi-to-png": "^1.0.7",
     "cli-arguments": "^0.2.1",
     "commander": "^7.2.0",
+    "compare-versions": "^6.1.1",
     "filesize-parser": "^1.5.0",
     "fs-extra": "8",
     "gradle-to-js": "^2.0.1",
