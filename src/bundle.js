@@ -54,6 +54,7 @@ async function runReactNativeBundleCommand(
   let cliPath = require.resolve('react-native/local-cli/cli.js', {
     paths: [process.cwd()],
   });
+  let usingExpo = false;
   try {
     require.resolve('expo-router', {
       paths: [process.cwd()],
@@ -64,10 +65,9 @@ async function runReactNativeBundleCommand(
     cliPath = require.resolve('@expo/cli', {
       paths: [process.cwd()],
     });
+    usingExpo = true;
   } catch (e) {}
-  const bundleCommand = cliPath.includes('@expo/cli')
-    ? 'export:embed'
-    : 'bundle';
+  const bundleCommand = usingExpo ? 'export:embed' : 'bundle';
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
     cliPath,
@@ -204,7 +204,7 @@ async function compileHermesByteCode(
   }
 
   const hermesCommand = `${hermesPath}/hermesc`;
-  
+
   const args = [
     '-emit-binary',
     '-out',
