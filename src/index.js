@@ -28,8 +28,8 @@ const commands = {
 };
 
 function run() {
+  printVersionCommand();
   if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
-    printVersionCommand();
     process.exit();
   }
 

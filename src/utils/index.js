@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 import pkg from '../../package.json';
 import AppInfoParser from './app-info-parser';
+import semverLt from 'semver/functions/lt';
 
 import read from 'read';
 
@@ -83,7 +84,7 @@ export async function getApkInfo(fn) {
   }
   if (buildTime == 0) {
     throw new Error(
-      '无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。',
+      '无法获取此包的编译时间戳。请更新 react-native-update 到最新版本后重新打包上传。',
     );
   }
   return { versionName, buildTime, ...appCredential };
@@ -119,7 +120,7 @@ export async function getIpaInfo(fn) {
   }
   if (!buildTimeTxtBuffer) {
     throw new Error(
-      '无法获取此包的编译时间戳。请更新react-native-update到最新版本后重新打包上传。',
+      '无法获取此包的编译时间戳。请更新 react-native-update 到最新版本后重新打包上传。',
     );
   }
   const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
@@ -137,6 +138,7 @@ export function saveToLocal(originPath, destName) {
 
 export function printVersionCommand() {
   console.log('react-native-update-cli: ' + pkg.version);
+  let pushyVersion = '';
   try {
     const PACKAGE_JSON_PATH = require.resolve(
       'react-native-update/package.json',
@@ -144,9 +146,22 @@ export function printVersionCommand() {
         paths: [process.cwd()],
       },
     );
-    console.log('react-native-update: ' + require(PACKAGE_JSON_PATH).version);
+    pushyVersion = require(PACKAGE_JSON_PATH).version;
+    console.log('react-native-update: ' + pushyVersion);
   } catch (e) {
     console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
+  }
+  if (pushyVersion) {
+    if (semverLt(pushyVersion, '8.5.1')) {
+      console.warn(
+        '当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8',
+      );
+    }
+    if (semverLt(pushyVersion, '9.2.1')) {
+      console.warn(
+        '当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@9',
+      );
+    }
   }
 }
 
