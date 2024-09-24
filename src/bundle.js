@@ -51,9 +51,20 @@ async function runReactNativeBundleCommand(
 
   fs.emptyDirSync(outputFolder);
 
-  let cliPath = require.resolve('react-native/local-cli/cli.js', {
-    paths: [process.cwd()],
-  });
+  let cliPath;
+
+  try {
+    // rn >= 0.75
+    cliPath = require.resolve('@react-native-community/cli/build/bin.js', {
+      paths: [process.cwd()],
+    });
+  } catch (e) {
+    // rn < 0.75
+    cliPath = require.resolve('react-native/local-cli/cli.js', {
+      paths: [process.cwd()],
+    });
+  }
+
   let usingExpo = false;
   try {
     require.resolve('expo-router', {
