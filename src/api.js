@@ -166,7 +166,9 @@ export async function uploadFile(fn, key) {
         }
         if (resp.statusCode > 299) {
           return reject(
-            Object.assign(new Error(body), { status: resp.statusCode }),
+            Object.assign(new Error(JSON.stringify(body)), {
+              status: resp.statusCode,
+            }),
           );
         }
         resolve({ hash: formData.key });
