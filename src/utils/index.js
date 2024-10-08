@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import pkg from '../../package.json';
 import AppInfoParser from './app-info-parser';
-import semverLt from 'semver/functions/lt';
+import semverSatisfies from 'semver/functions/satisfies';
 
 import read from 'read';
 
@@ -152,12 +152,11 @@ export function printVersionCommand() {
     console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
   }
   if (pushyVersion) {
-    if (semverLt(pushyVersion, '8.5.1')) {
+    if (semverSatisfies(pushyVersion, '<8.5.1')) {
       console.warn(
         '当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8',
       );
-    }
-    if (semverLt(pushyVersion, '9.2.1')) {
+    } else if (semverSatisfies(pushyVersion, '9.0.0 - 9.2.0')) {
       console.warn(
         '当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@9',
       );
