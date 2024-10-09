@@ -66,7 +66,11 @@ async function query(url, options) {
   try {
     json = JSON.parse(text);
   } catch (e) {
-    throw new Error(`Server error: ${text}`);
+    if (resp.statusText.includes('Unauthorized')) {
+      throw new Error('登录信息已过期，请使用 pushy login 命令重新登录');
+    } else {
+      throw new Error(`Server error: ${resp.statusText}`);
+    }
   }
 
   if (resp.status !== 200) {
@@ -166,7 +170,7 @@ export async function uploadFile(fn, key) {
         }
         if (resp.statusCode > 299) {
           return reject(
-            Object.assign(new Error(JSON.stringify(body)), {
+            Object.assign(new Error(body), {
               status: resp.statusCode,
             }),
           );
