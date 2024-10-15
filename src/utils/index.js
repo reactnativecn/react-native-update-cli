@@ -154,11 +154,13 @@ export function printVersionCommand() {
   if (pushyVersion) {
     if (semverSatisfies(pushyVersion, '<8.5.1')) {
       console.warn(
-        '当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8',
+        `当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8 .
+        如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
       );
     } else if (semverSatisfies(pushyVersion, '9.0.0 - 9.2.0')) {
       console.warn(
-        '当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@9',
+        `当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@9 .
+        如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
       );
     }
   }
