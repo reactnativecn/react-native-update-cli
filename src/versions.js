@@ -124,7 +124,10 @@ export const commands = {
       options.platform || (await question('平台(ios/android):')),
     );
     const { appId } = await getSelectedApp(platform);
-    const versionId = options.versionId || (await chooseVersion(appId)).id;
+    let versionId = options.versionId || (await chooseVersion(appId)).id;
+    if (versionId === 'null') {
+      versionId = null;
+    }
 
     let pkgId;
     let pkgVersion = options.packageVersion;

@@ -74,9 +74,12 @@ async function query(url, options) {
   }
 
   if (resp.status !== 200) {
-    throw Object.assign(new Error(json.message || json.error), {
-      status: resp.status,
-    });
+    throw Object.assign(
+      new Error(json.message || json.error || resp.statusText),
+      {
+        status: resp.status,
+      },
+    );
   }
   return json;
 }

@@ -12,7 +12,8 @@
     "cli.json"
   ],
   "scripts": {
-    "prepublish": "babel src --out-dir lib && chmod +x lib/index.js"
+    "build": "swc src -d lib --strip-leading-paths",
+    "prepublish": "npm run build && chmod +x lib/index.js"
   },
   "repository": {
     "type": "git",
@@ -53,14 +54,14 @@
     "yauzl": "^2.10.0",
     "yazl": "2.5.1"
   },
-  "devDependencies": {
-    "babel-cli": "^6.26.0",
-    "babel-plugin-syntax-object-rest-spread": "^6.13.0",
-    "babel-plugin-transform-es2015-modules-commonjs": "^6.26.2",
-    "babel-plugin-transform-es2015-spread": "^6.22.0",
-    "babel-plugin-transform-object-rest-spread": "^6.26.0"
-  },
   "engines": {
     "node": ">= 10"
+  },
+  "devDependencies": {
+    "@swc/cli": "^0.4.1-nightly.20240914",
+    "@swc/core": "^1.7.36",
+    "@types/node": "^22.7.5",
+    "oxlint": "^0.9.10",
+    "typescript": "^5.6.3"
   }
 }

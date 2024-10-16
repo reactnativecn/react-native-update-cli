@@ -1,0 +1,15 @@
+{
+  "jsc": {
+    "loose": true,
+    "target": "es2018",
+    "parser": {
+      "syntax": "typescript",
+      "tsx": false,
+      "decorators": false,
+      "dynamicImport": false
+    }
+  },
+  "module": {
+    "type": "commonjs"
+  }
+}
