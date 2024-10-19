@@ -81,7 +81,6 @@
         "packageId": {
           "hasValue": true
         },
-
         "packageVersion": {
           "hasValue": true
         },
@@ -89,6 +88,9 @@
           "hasValue": true
         },
         "maxPackageVersion": {
+          "hasValue": true
+        },
+        "rollout": {
           "hasValue": true
         }
       }

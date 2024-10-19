@@ -133,6 +133,82 @@ export const commands = {
     let pkgVersion = options.packageVersion;
     let minPkgVersion = options.minPackageVersion;
     let maxPkgVersion = options.maxPackageVersion;
+    let rollout = options.rollout;
+    if (rollout !== undefined) {
+      try {
+        rollout = parseInt(rollout);
+      } catch (e) {
+        throw new Error('rollout 必须是 1-100 的整数');
+      }
+      if (rollout < 1 || rollout > 100) {
+        throw new Error('rollout 必须是 1-100 的整数');
+      }
+    }
+    if (minPkgVersion) {
+      minPkgVersion = String(minPkgVersion).trim();
+      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+      const pkgs = data.filter((d) => compare(d.name, minPkgVersion, '>='));
+      if (pkgs.length === 0) {
+        throw new Error(`未查询到 >= ${minPkgVersion} 的原生版本`);
+      }
+      if (rollout) {
+        const rolloutConfig = {};
+        for (const pkg of pkgs) {
+          rolloutConfig[pkg.name] = rollout;
+        }
+        await put(`/app/${appId}/version/${versionId}`, {
+          config: {
+            rollout: rolloutConfig,
+          },
+        });
+        console.log(
+          `已在原生版本 ${pkgs
+            .map((p) => p.name)
+            .join(', ')} 上设置灰度发布 ${rollout}% 热更版本 ${versionId}`,
+        );
+      }
+      for (const pkg of pkgs) {
+        await put(`/app/${appId}/package/${pkg.id}`, {
+          versionId,
+        });
+        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
+      }
+      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
+      return;
+    }
+    if (maxPkgVersion) {
+      maxPkgVersion = String(maxPkgVersion).trim();
+      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+      const pkgs = data.filter((d) => compare(d.name, maxPkgVersion, '<='));
+      if (pkgs.length === 0) {
+        throw new Error(`未查询到 <= ${maxPkgVersion} 的原生版本`);
+      }
+      if (rollout) {
+        const rolloutConfig = {};
+        for (const pkg of pkgs) {
+          rolloutConfig[pkg.name] = rollout;
+        }
+        await put(`/app/${appId}/version/${versionId}`, {
+          config: {
+            rollout: rolloutConfig,
+          },
+        });
+        console.log(
+          `已在原生版本 ${pkgs
+            .map((p) => p.name)
+            .join(', ')} 上设置灰度发布 ${rollout}% 热更版本 ${versionId}`,
+        );
+      }
+      for (const pkg of pkgs) {
+        await put(`/app/${appId}/package/${pkg.id}`, {
+          versionId,
+        });
+        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
+      }
+      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
+      return;
+    }
+
     if (pkgVersion) {
       pkgVersion = pkgVersion.trim();
       const { data } = await get(`/app/${appId}/package/list?limit=1000`);
@@ -143,42 +219,6 @@ export const commands = {
         throw new Error(`未查询到匹配原生版本：${pkgVersion}`);
       }
     }
-    if (minPkgVersion) {
-      minPkgVersion = String(minPkgVersion).trim();
-      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-      const pkgs = data.filter((d) => compare(d.name, minPkgVersion, '>='));
-      if (pkgs.length === 0) {
-        throw new Error(
-          `未查询到 >= ${minPkgVersion} 的原生版本`,
-        );
-      }
-      for (const pkg of pkgs) {
-        await put(`/app/${appId}/package/${pkg.id}`, {
-          versionId,
-        });
-        console.log(`已将版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
-      }
-      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
-      return;
-    }
-    if (maxPkgVersion) {
-      maxPkgVersion = String(maxPkgVersion).trim();
-      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-      const pkgs = data.filter((d) => compare(d.name, maxPkgVersion, '<='));
-      if (pkgs.length === 0) {
-        throw new Error(
-          `未查询到 <= ${maxPkgVersion} 的原生版本`,
-        );
-      }
-      for (const pkg of pkgs) {
-        await put(`/app/${appId}/package/${pkg.id}`, {
-          versionId,
-        });
-        console.log(`已将版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
-      }
-      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
-      return;
-    }
     if (!pkgId) {
       pkgId = options.packageId || (await choosePackage(appId)).id;
     }
@@ -186,10 +226,29 @@ export const commands = {
     if (!pkgId) {
       throw new Error('请提供 packageId 或 packageVersion 参数');
     }
+    if (rollout) {
+      if (!pkgVersion) {
+        const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+        const pkg = data.find((d) => d.id === pkgId);
+        if (pkg) {
+          pkgVersion = pkg.name;
+        }
+      }
+      await put(`/app/${appId}/version/${versionId}`, {
+        config: {
+          rollout: {
+            [pkgVersion]: rollout,
+          },
+        },
+      });
+      console.log(
+        `已将在原生版本 ${pkgVersion} 上设置灰度发布 ${rollout}% 热更版本 ${versionId} `,
+      );
+    }
     await put(`/app/${appId}/package/${pkgId}`, {
       versionId,
     });
-    console.log('操作成功');
+    console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion}`);
   },
   updateVersionInfo: async function ({ args, options }) {
     const platform = checkPlatform(
