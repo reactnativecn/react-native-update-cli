@@ -33,7 +33,7 @@ async function runReactNativeBundleCommand(
     gradleConfig = await checkGradleConfig();
     if (gradleConfig.crunchPngs !== false) {
       console.warn(
-        'android的crunchPngs选项似乎尚未禁用（如已禁用则请忽略此提示），这可能导致热更包体积异常增大，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8-android-%E7%9A%84-crunch-%E4%BC%98%E5%8C%96 \n',
+        'android 的 crunchPngs 选项似乎尚未禁用（如已禁用则请忽略此提示），这可能导致热更包体积异常增大，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8-android-%E7%9A%84-crunch-%E4%BC%98%E5%8C%96 \n',
       );
     }
   }
@@ -177,17 +177,19 @@ async function checkGradleConfig() {
   let crunchPngs;
   try {
     const gradleConfig = await g2js.parseFile('android/app/build.gradle');
+    crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;
     const projectConfig = gradleConfig['project.ext.react'];
-    for (const packagerConfig of projectConfig) {
-      if (
-        packagerConfig.includes('enableHermes') &&
-        packagerConfig.includes('true')
-      ) {
-        enableHermes = true;
-        break;
+    if (projectConfig) {
+      for (const packagerConfig of projectConfig) {
+        if (
+          packagerConfig.includes('enableHermes') &&
+          packagerConfig.includes('true')
+        ) {
+          enableHermes = true;
+          break;
+        }
       }
     }
-    crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;
   } catch (e) {}
   return {
     enableHermes,
@@ -609,7 +611,6 @@ export const commands = {
     const { version, major, minor } = getRNVersion();
 
     console.log('Bundling with react-native: ', version);
-    printVersionCommand();
 
     await runReactNativeBundleCommand(
       bundleName,

@@ -134,7 +134,9 @@ export const commands = {
     let minPkgVersion = options.minPackageVersion;
     let maxPkgVersion = options.maxPackageVersion;
     let rollout = options.rollout;
-    if (rollout !== undefined) {
+    if (rollout === undefined) {
+      rollout = null;
+    } else {
       try {
         rollout = parseInt(rollout);
       } catch (e) {
