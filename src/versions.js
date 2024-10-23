@@ -173,7 +173,7 @@ export const commands = {
         await put(`/app/${appId}/package/${pkg.id}`, {
           versionId,
         });
-        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
+        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`);
       }
       console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
       return;
@@ -205,15 +205,15 @@ export const commands = {
         await put(`/app/${appId}/package/${pkg.id}`, {
           versionId,
         });
-        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name}`);
+        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`);
       }
       console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
       return;
     }
 
+    const { data } = await get(`/app/${appId}/package/list?limit=1000`);
     if (pkgVersion) {
       pkgVersion = pkgVersion.trim();
-      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
       const pkg = data.find((d) => d.name === pkgVersion);
       if (pkg) {
         pkgId = pkg.id;
@@ -228,14 +228,15 @@ export const commands = {
     if (!pkgId) {
       throw new Error('请提供 packageId 或 packageVersion 参数');
     }
-    if (rollout) {
-      if (!pkgVersion) {
-        const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-        const pkg = data.find((d) => d.id === pkgId);
-        if (pkg) {
-          pkgVersion = pkg.name;
-        }
+    
+    if (!pkgVersion) {
+      const pkg = data.find((d) => d.id === pkgId);
+      if (pkg) {
+        pkgVersion = pkg.name;
       }
+    }
+    
+    if (rollout) {
       await put(`/app/${appId}/version/${versionId}`, {
         config: {
           rollout: {
@@ -244,13 +245,13 @@ export const commands = {
         },
       });
       console.log(
-        `已将在原生版本 ${pkgVersion} 上设置灰度发布 ${rollout}% 热更版本 ${versionId} `,
+        `已将在原生版本 ${pkgVersion} (id: ${pkgId}) 上设置灰度发布 ${rollout}% 热更版本 ${versionId} `,
       );
     }
     await put(`/app/${appId}/package/${pkgId}`, {
       versionId,
     });
-    console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion}`);
+    console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion} (id: ${pkgId})`);
   },
   updateVersionInfo: async function ({ args, options }) {
     const platform = checkPlatform(
