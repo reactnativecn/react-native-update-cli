@@ -1,11 +1,11 @@
-import path from 'path';
+import path from 'node:path';
 import { getRNVersion, translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
 import { question, printVersionCommand } from './utils';
 import { checkPlatform } from './app';
-import { spawn, spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'node:child_process';
 const g2js = require('gradle-to-js/lib/parser');
 import os from 'os';
 const properties = require('properties');

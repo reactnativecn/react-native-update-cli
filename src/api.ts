@@ -1,20 +1,21 @@
 import fetch from 'node-fetch';
-const defaultEndpoint = 'https://update.reactnative.cn/api';
-let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
-import fs from 'fs';
-import request from 'request';
+import fs from 'node:fs';
+import util from 'node:util';
+import path from 'node:path';
 import ProgressBar from 'progress';
 import packageJson from '../package.json';
 import tcpp from 'tcp-ping';
-import util from 'util';
-import path from 'path';
 import filesizeParser from 'filesize-parser';
 import { pricingPageUrl } from './utils';
+import { Session } from 'types';
 
 const tcpPing = util.promisify(tcpp.ping);
 
-let session = undefined;
-let savedSession = undefined;
+let session: Session | undefined;
+let savedSession: Session | undefined;
+
+const defaultEndpoint = 'https://update.reactnative.cn/api';
+let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 
@@ -22,7 +23,7 @@ export const getSession = function () {
   return session;
 };
 
-export const replaceSession = function (newSession) {
+export const replaceSession = function (newSession: { token: string }) {
   session = newSession;
 };
 
@@ -59,7 +60,7 @@ export const closeSession = function () {
   host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 };
 
-async function query(url, options) {
+async function query(url: string, options: fetch.RequestInit) {
   const resp = await fetch(url, options);
   const text = await resp.text();
   let json;
@@ -84,8 +85,8 @@ async function query(url, options) {
   return json;
 }
 
-function queryWithoutBody(method) {
-  return function (api) {
+function queryWithoutBody(method: string) {
+  return function (api: string) {
     return query(host + api, {
       method,
       headers: {
@@ -96,8 +97,8 @@ function queryWithoutBody(method) {
   };
 }
 
-function queryWithBody(method) {
-  return function (api, body) {
+function queryWithBody(method: string) {
+  return function (api: string, body: Record<string, any>) {
     return query(host + api, {
       method,
       headers: {
@@ -115,12 +116,11 @@ export const post = queryWithBody('POST');
 export const put = queryWithBody('PUT');
 export const doDelete = queryWithBody('DELETE');
 
-export async function uploadFile(fn, key) {
+export async function uploadFile(fn: string, key: string) {
   const { url, backupUrl, formData, maxSize } = await post('/upload', {
     ext: path.extname(fn),
   });
   let realUrl = url;
-
   if (backupUrl) {
     if (global.USE_ACC_OSS) {
       realUrl = backupUrl;
@@ -141,9 +141,9 @@ export async function uploadFile(fn, key) {
   const fileSize = fs.statSync(fn).size;
   if (maxSize && fileSize > filesizeParser(maxSize)) {
     throw new Error(
-      `此文件大小${(fileSize / 1048576).toFixed(
+      `此文件大小 ${(fileSize / 1048576).toFixed(
         1,
-      )}m, 超出当前额度${maxSize}。您可以考虑升级付费业务以提升此额度。详情请访问: ${pricingPageUrl}`,
+      )}m , 超出当前额度 ${maxSize} 。您可以考虑升级付费业务以提升此额度。详情请访问: ${pricingPageUrl}`,
     );
   }
 
@@ -153,34 +153,30 @@ export async function uploadFile(fn, key) {
     total: fileSize,
   });
 
-  const info = await new Promise((resolve, reject) => {
-    if (key) {
-      formData.key = key;
-    }
-    formData.file = fs.createReadStream(fn);
+  const form = new FormData();
 
-    formData.file.on('data', function (data) {
-      bar.tick(data.length);
-    });
-    request.post(
-      realUrl,
-      {
-        formData,
-      },
-      (err, resp, body) => {
-        if (err) {
-          return reject(err);
-        }
-        if (resp.statusCode > 299) {
-          return reject(
-            Object.assign(new Error(body), {
-              status: resp.statusCode,
-            }),
-          );
-        }
-        resolve({ hash: formData.key });
-      },
-    );
+  Object.entries(formData).forEach(([k, v]) => {
+    form.set(k, v);
   });
-  return info;
+  const fileStream = fs.createReadStream(fn);
+  fileStream.on('data', function (data) {
+    bar.tick(data.length);
+  });
+
+  if (key) {
+    form.set('key', key);
+  }
+  form.set('file', fileStream);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    body: form,
+  });
+
+  if (res.status > 299) {
+    throw new Error(`${res.status}: ${await res.text()}`);
+  }
+
+  // const body = await response.json();
+  return { hash: key };
 }
