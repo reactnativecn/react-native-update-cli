@@ -8,6 +8,7 @@ import tcpp from 'tcp-ping';
 import filesizeParser from 'filesize-parser';
 import { pricingPageUrl } from './utils';
 import { Session } from 'types';
+import FormData from 'form-data';
 
 const tcpPing = util.promisify(tcpp.ping);
 
@@ -75,12 +76,7 @@ async function query(url: string, options: fetch.RequestInit) {
   }
 
   if (resp.status !== 200) {
-    throw Object.assign(
-      new Error(json.message || json.error || resp.statusText),
-      {
-        status: resp.status,
-      },
-    );
+    throw new Error(`${resp.status}: ${resp.statusText}`);
   }
   return json;
 }
@@ -116,7 +112,7 @@ export const post = queryWithBody('POST');
 export const put = queryWithBody('PUT');
 export const doDelete = queryWithBody('DELETE');
 
-export async function uploadFile(fn: string, key: string) {
+export async function uploadFile(fn: string, key?: string) {
   const { url, backupUrl, formData, maxSize } = await post('/upload', {
     ext: path.extname(fn),
   });
@@ -156,7 +152,7 @@ export async function uploadFile(fn: string, key: string) {
   const form = new FormData();
 
   Object.entries(formData).forEach(([k, v]) => {
-    form.set(k, v);
+    form.append(k, v);
   });
   const fileStream = fs.createReadStream(fn);
   fileStream.on('data', function (data) {
@@ -164,19 +160,19 @@ export async function uploadFile(fn: string, key: string) {
   });
 
   if (key) {
-    form.set('key', key);
+    form.append('key', key);
   }
-  form.set('file', fileStream);
+  form.append('file', fileStream);
 
-  const res = await fetch(url, {
+  const res = await fetch(realUrl, {
     method: 'POST',
     body: form,
   });
 
   if (res.status > 299) {
-    throw new Error(`${res.status}: ${await res.text()}`);
+    throw new Error(`${res.status}: ${res.statusText}`);
   }
 
   // const body = await response.json();
-  return { hash: key };
+  return { hash: key || formData.key };
 }

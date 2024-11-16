@@ -1,26 +1,21 @@
 import fs from 'fs-extra';
-import os from 'os';
-import path from 'path';
+import os from 'node:os';
+import path from 'node:path';
 import pkg from '../../package.json';
 import AppInfoParser from './app-info-parser';
 import semverSatisfies from 'semver/functions/satisfies';
 
-import read from 'read';
+import { read } from 'read';
 
-export function question(query, password) {
+export async function question(query, password) {
   if (NO_INTERACTIVE) {
-    return Promise.resolve('');
+    return '';
   }
-  return new Promise((resolve, reject) =>
-    read(
-      {
-        prompt: query,
-        silent: password,
-        replace: password ? '*' : undefined,
-      },
-      (err, result) => (err ? reject(err) : resolve(result)),
-    ),
-  );
+  return read({
+    prompt: query,
+    silent: password,
+    replace: password ? '*' : undefined,
+  });
 }
 
 export function translateOptions(options) {
