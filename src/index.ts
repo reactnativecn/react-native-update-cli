@@ -5,9 +5,13 @@ import updateNotifier from 'update-notifier';
 import { printVersionCommand } from './utils/index.js';
 import pkg from '../package.json';
 
-updateNotifier({ pkg }).notify({ isGlobal: true });
+updateNotifier({ pkg }).notify({
+  isGlobal: true,
+  message:
+    '建议运行 `{updateCommand}` 来更新命令行工具以获得功能、性能和安全性的持续改进',
+});
 
-function printUsage({ args }) {
+function printUsage() {
   // const commandName = args[0];
   // TODO: print usage of commandName, or print global usage.
 
