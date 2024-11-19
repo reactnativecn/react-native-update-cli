@@ -226,6 +226,10 @@ async function compileHermesByteCode(
     '-O',
   ];
   if (sourcemapOutput) {
+    fs.copyFileSync(
+      sourcemapOutput,
+      path.join(outputFolder, bundleName + '.txt.map'),
+    );
     args.push('-output-source-map');
   }
   console.log(
@@ -234,6 +238,28 @@ async function compileHermesByteCode(
   spawnSync(hermesCommand, args, {
     stdio: 'ignore',
   });
+  if (sourcemapOutput) {
+    const composerPath =
+      'node_modules/react-native/scripts/compose-source-maps.js';
+    if (!fs.existsSync(composerPath)) {
+      return;
+    }
+    console.log(`Composing source map`);
+    spawnSync(
+      'node',
+      [
+        composerPath,
+        path.join(outputFolder, bundleName + '.txt.map'),
+        path.join(outputFolder, bundleName + '.map'),
+        '-o',
+        sourcemapOutput,
+      ],
+      {
+        stdio: 'ignore',
+      },
+    );
+  }
+  fs.removeSync(path.join(outputFolder, bundleName + '.txt.map'));
 }
 
 async function pack(dir, output) {
