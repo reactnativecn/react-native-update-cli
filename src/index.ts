@@ -31,8 +31,8 @@ const commands = {
   help: printUsage,
 };
 
-function run() {
-  printVersionCommand();
+async function run() {
+  await printVersionCommand();
   if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
     process.exit();
   }

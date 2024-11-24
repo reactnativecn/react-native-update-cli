@@ -4,6 +4,8 @@ import path from 'node:path';
 import pkg from '../../package.json';
 import AppInfoParser from './app-info-parser';
 import semverSatisfies from 'semver/functions/satisfies';
+import chalk from 'chalk';
+import latestVersion from '@badisi/latest-version';
 
 import { read } from 'read';
 
@@ -131,8 +133,23 @@ export function saveToLocal(originPath, destName) {
   // fs.copyFileSync(originPath, destPath);
 }
 
-export function printVersionCommand() {
-  console.log('react-native-update-cli: ' + pkg.version);
+async function getLatestVersion(pkgName) {
+  return Promise.race([
+    latestVersion(pkgName)
+      .then((p) => p.latest)
+      .catch(() => ''),
+    new Promise((resolve) => setTimeout(() => resolve(''), 2000)),
+  ]);
+}
+
+export async function printVersionCommand() {
+  let latestPushyCliVersion = await getLatestVersion('react-native-update-cli');
+  latestPushyCliVersion = latestPushyCliVersion
+    ? ` （最新：${chalk.green(latestPushyCliVersion)}）`
+    : '';
+  console.log(
+    `react-native-update-cli: ${pkg.version}${latestPushyCliVersion}`,
+  );
   let pushyVersion = '';
   try {
     const PACKAGE_JSON_PATH = require.resolve(
@@ -142,20 +159,28 @@ export function printVersionCommand() {
       },
     );
     pushyVersion = require(PACKAGE_JSON_PATH).version;
-    console.log('react-native-update: ' + pushyVersion);
+    let latestPushyVersion = await getLatestVersion('react-native-update');
+    latestPushyVersion = latestPushyVersion
+      ? ` （最新：${chalk.green(latestPushyVersion)}）`
+      : '';
+    console.log(`react-native-update: ${pushyVersion}${latestPushyVersion}`);
   } catch (e) {
     console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
   }
   if (pushyVersion) {
-    if (semverSatisfies(pushyVersion, '<8.5.1')) {
+    if (semverSatisfies(pushyVersion, '<8.5.2')) {
       console.warn(
         `当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8 .
         如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
       );
-    } else if (semverSatisfies(pushyVersion, '9.0.0 - 9.2.0')) {
+    } else if (semverSatisfies(pushyVersion, '9.0.0 - 9.2.1')) {
       console.warn(
-        `当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@9 .
+        `当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动，可直接热更）: npm i react-native-update@9 .
         如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
+      );
+    } else if (semverSatisfies(pushyVersion, '10.0.0 - 10.15.2')) {
+      console.warn(
+        `当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10`,
       );
     }
   }
