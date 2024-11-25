@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.34.0",
+  "version": "1.34.1",
   "description": "Command tools for javaScript updater with `pushy` service for react native apps.",
   "main": "index.js",
   "bin": {
@@ -36,6 +36,7 @@
     "bplist-parser": "^0.3.2",
     "bytebuffer": "^5.0.1",
     "cgbi-to-png": "^1.0.7",
+    "chalk": "4",
     "cli-arguments": "^0.2.1",
     "commander": "^12.1.0",
     "compare-versions": "^6.1.1",
