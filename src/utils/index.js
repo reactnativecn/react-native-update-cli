@@ -178,7 +178,7 @@ export async function printVersionCommand() {
         `当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动，可直接热更）: npm i react-native-update@9 .
         如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
       );
-    } else if (semverSatisfies(pushyVersion, '10.0.0 - 10.15.2')) {
+    } else if (semverSatisfies(pushyVersion, '10.0.0 - 10.17.0')) {
       console.warn(
         `当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10`,
       );
