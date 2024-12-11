@@ -53,31 +53,25 @@ async function runReactNativeBundleCommand(
 
   let cliPath;
 
-  try {
-    // rn >= 0.75
-    cliPath = require.resolve('@react-native-community/cli/build/bin.js', {
-      paths: [process.cwd()],
-    });
-  } catch (e) {
-    // rn < 0.75
-    cliPath = require.resolve('react-native/local-cli/cli.js', {
-      paths: [process.cwd()],
-    });
-  }
-
   let usingExpo = false;
   try {
-    require.resolve('expo-router', {
-      paths: [process.cwd()],
-    });
-
-    console.log(`expo-router detected, will use @expo/cli to bundle.\n`);
-    // if using expo-router, use expo-cli
     cliPath = require.resolve('@expo/cli', {
       paths: [process.cwd()],
     });
     usingExpo = true;
-  } catch (e) {}
+  } catch (e) {
+    try {
+      // rn >= 0.75
+      cliPath = require.resolve('@react-native-community/cli/build/bin.js', {
+        paths: [process.cwd()],
+      });
+    } catch (e) {
+      // rn < 0.75
+      cliPath = require.resolve('react-native/local-cli/cli.js', {
+        paths: [process.cwd()],
+      });
+    }
+  }
   const bundleCommand = usingExpo ? 'export:embed' : 'bundle';
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
