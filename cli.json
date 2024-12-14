@@ -3,7 +3,6 @@
   "defaultCommand": "help",
   "commands": {
     "help": {},
-
     "login": {},
     "logout": {},
     "me": {},

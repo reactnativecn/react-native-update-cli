@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 const g2js = require('gradle-to-js/lib/parser');
 import os from 'os';
 const properties = require('properties');
+const path = require('path');
 
 let bsdiff, hdiff, diff;
 try {
@@ -78,30 +79,53 @@ async function runReactNativeBundleCommand(
     });
     usingExpo = true;
   } catch (e) {}
-  const bundleCommand = usingExpo ? 'export:embed' : 'bundle';
+  const bundleCommand = usingExpo
+    ? 'export:embed'
+    : platform === 'harmony'
+    ? 'bundle-harmony'
+    : 'bundle';
 
-  Array.prototype.push.apply(reactNativeBundleArgs, [
-    cliPath,
-    bundleCommand,
-    '--assets-dest',
-    outputFolder,
-    '--bundle-output',
-    path.join(outputFolder, bundleName),
-    '--dev',
-    development,
-    '--entry-file',
-    entryFile,
-    '--platform',
-    platform,
-    '--reset-cache',
-  ]);
+  if (platform == 'harmony') {
+    Array.prototype.push.apply(reactNativeBundleArgs, [
+      cliPath,
+      bundleCommand,
+      '--dev',
+      development,
+      '--entry-file',
+      entryFile,
+    ]);
 
-  if (sourcemapOutput) {
-    reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
-  }
+    if (sourcemapOutput) {
+      reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
+    }
 
-  if (config) {
-    reactNativeBundleArgs.push('--config', config);
+    if (config) {
+      reactNativeBundleArgs.push('--config', config);
+    }
+  } else {
+    Array.prototype.push.apply(reactNativeBundleArgs, [
+      cliPath,
+      bundleCommand,
+      '--assets-dest',
+      outputFolder,
+      '--bundle-output',
+      path.join(outputFolder, bundleName),
+      '--dev',
+      development,
+      '--entry-file',
+      entryFile,
+      '--platform',
+      platform,
+      '--reset-cache',
+    ]);
+
+    if (sourcemapOutput) {
+      reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
+    }
+
+    if (config) {
+      reactNativeBundleArgs.push('--config', config);
+    }
   }
 
   const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
@@ -152,6 +176,8 @@ async function runReactNativeBundleCommand(
           fs.existsSync('ios/Pods/hermes-engine')
         ) {
           hermesEnabled = true;
+        }else if (platform === 'harmony'){
+         await copyHarmonyBundle(outputFolder);
         }
         if (hermesEnabled) {
           await compileHermesByteCode(
@@ -164,6 +190,19 @@ async function runReactNativeBundleCommand(
       }
     });
   });
+}
+
+async function copyHarmonyBundle(outputFolder) {
+  const harmonyRawPath = 'harmony/entry/src/main/resources/rawfile';
+
+  try {
+    await fs.ensureDir(outputFolder);
+    await fs.copy(harmonyRawPath, outputFolder);
+
+    console.log(`Successfully copied from ${harmonyRawPath} to ${outputFolder}`);
+  } catch (error) {
+    console.error('Error in copyHarmonyBundle:', error);
+  }
 }
 
 function getHermesOSBin() {
@@ -280,10 +319,10 @@ async function pack(dir, output) {
         const fullPath = path.join(root, name);
         const stat = fs.statSync(fullPath);
         if (stat.isFile()) {
-          //console.log('adding: ' + rel+name);
+          console.log('adding: ' + rel + name);
           zipfile.addFile(fullPath, rel + name);
         } else if (stat.isDirectory()) {
-          //console.log('adding: ' + rel+name+'/');
+          console.log('adding: ' + rel + name + '/');
           addDirectory(fullPath, rel + name + '/');
         }
       }
@@ -646,7 +685,6 @@ export const commands = {
       platform,
       sourcemap ? sourcemapOutput : '',
     );
-
     await pack(path.resolve(intermediaDir), realOutput);
 
     const v = await question('是否现在上传此热更包?(Y/N)');

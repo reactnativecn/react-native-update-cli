@@ -7,6 +7,7 @@ import { post, get, doDelete } from './api';
 const validPlatforms = {
   ios: 1,
   android: 1,
+  harmony: 1,
 };
 
 export function checkPlatform(platform) {
