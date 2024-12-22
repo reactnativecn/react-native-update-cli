@@ -2,6 +2,7 @@
   "useCommand": true,
   "defaultCommand": "help",
   "commands": {
+    "hash": {},
     "help": {},
     "login": {},
     "logout": {},

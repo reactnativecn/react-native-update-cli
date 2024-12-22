@@ -28,6 +28,7 @@ const commands = {
   ...require('./app').commands,
   ...require('./package').commands,
   ...require('./versions').commands,
+  ...require('./hash').commands,
   help: printUsage,
 };
 
