@@ -176,8 +176,8 @@ async function runReactNativeBundleCommand(
           fs.existsSync('ios/Pods/hermes-engine')
         ) {
           hermesEnabled = true;
-        }else if (platform === 'harmony'){
-         await copyHarmonyBundle(outputFolder);
+        } else if (platform === 'harmony') {
+          await copyHarmonyBundle(outputFolder);
         }
         if (hermesEnabled) {
           await compileHermesByteCode(
@@ -199,7 +199,9 @@ async function copyHarmonyBundle(outputFolder) {
     await fs.ensureDir(outputFolder);
     await fs.copy(harmonyRawPath, outputFolder);
 
-    console.log(`Successfully copied from ${harmonyRawPath} to ${outputFolder}`);
+    console.log(
+      `Successfully copied from ${harmonyRawPath} to ${outputFolder}`,
+    );
   } catch (error) {
     console.error('Error in copyHarmonyBundle:', error);
   }
@@ -380,7 +382,10 @@ async function diffFromPPK(origin, next, output) {
       // isFile
       originMap[entry.crc32] = entry.fileName;
 
-      if (entry.fileName === 'index.bundlejs') {
+      if (
+        entry.fileName === 'index.bundlejs' ||
+        entry.fileName === 'bundle.harmony.js'
+      ) {
         // This is source.
         return readEntire(entry, zipFile).then((v) => (originSource = v));
       }
@@ -442,6 +447,16 @@ async function diffFromPPK(origin, next, output) {
         );
         //console.log('End diff');
       });
+    } else if (entry.fileName === 'bundle.harmony.js') {
+      //console.log('Found bundle');
+      return readEntire(entry, nextZipfile).then((newSource) => {
+        //console.log('Begin diff');
+        zipfile.addBuffer(
+          diff(originSource, newSource),
+          'bundle.harmony.js.patch',
+        );
+        //console.log('End diff');
+      });
     } else {
       // If same file.
       const originEntry = originEntries[entry.fileName];
@@ -496,6 +511,7 @@ async function diffFromPPK(origin, next, output) {
   await writePromise;
 }
 
+////////////////diffFromPackage
 async function diffFromPackage(
   origin,
   next,
@@ -513,6 +529,7 @@ async function diffFromPackage(
   await enumZipEntries(origin, (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
       const fn = transformPackagePath(entry.fileName);
+
       if (!fn) {
         return;
       }
@@ -564,6 +581,16 @@ async function diffFromPackage(
         );
         //console.log('End diff');
       });
+    } else if (entry.fileName === 'bundle.harmony.js') {
+      //console.log('Found bundle');
+      return readEntire(entry, nextZipfile).then((newSource) => {
+        //console.log('Begin diff');
+        zipfile.addBuffer(
+          diff(originSource, newSource),
+          'bundle.harmony.js.patch',
+        );
+        //console.log('End diff');
+      });
     } else {
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
@@ -595,23 +622,61 @@ async function diffFromPackage(
   zipfile.end();
   await writePromise;
 }
+////////////////enumZipEntries
 
-function enumZipEntries(zipFn, callback) {
+async function enumZipEntries(zipFn, callback, nestedPath = '') {
   return new Promise((resolve, reject) => {
-    openZipFile(zipFn, { lazyEntries: true }, (err, zipfile) => {
+    openZipFile(zipFn, { lazyEntries: true }, async (err, zipfile) => {
       if (err) {
         return reject(err);
       }
+
       zipfile.on('end', resolve);
       zipfile.on('error', reject);
-      zipfile.on('entry', (entry) => {
-        const result = callback(entry, zipfile);
-        if (result && typeof result.then === 'function') {
-          result.then(() => zipfile.readEntry());
-        } else {
-          zipfile.readEntry();
+      zipfile.on('entry', async (entry) => {
+        const fullPath = nestedPath + entry.fileName;
+
+        try {
+          // 检查文件是否为hap
+          if (
+            !entry.fileName.endsWith('/') &&
+            entry.fileName.toLowerCase().endsWith('.hap')
+          ) {
+            // 读取嵌套的hap文件内容
+            const tempDir = path.join(os.tmpdir(), 'nested_zip_' + Date.now());
+            await fs.ensureDir(tempDir);
+            const tempZipPath = path.join(tempDir, 'temp.zip');
+
+            // 将嵌套的hap保存到临时文件
+            await new Promise((res, rej) => {
+              zipfile.openReadStream(entry, async (err, readStream) => {
+                if (err) return rej(err);
+                const writeStream = fs.createWriteStream(tempZipPath);
+                readStream.pipe(writeStream);
+                writeStream.on('finish', res);
+                writeStream.on('error', rej);
+              });
+            });
+
+            // 递归遍历嵌套的hap
+            await enumZipEntries(tempZipPath, callback, fullPath + '/');
+
+            // 清理临时文件
+            await fs.remove(tempDir);
+          }
+
+          // 处理当前文件
+          const result = callback(entry, zipfile, fullPath);
+          if (result && typeof result.then === 'function') {
+            await result;
+          }
+        } catch (error) {
+          console.error('处理文件时出错:', error);
         }
+
+        zipfile.readEntry();
       });
+
       zipfile.readEntry();
     });
   });
@@ -743,6 +808,33 @@ export const commands = {
     );
     console.log(`${realOutput} generated.`);
   },
+
+  ////////Adapter Harmony code
+  async hdiffFromPPK({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck(
+      args,
+      options,
+      'hdiffFromPPK',
+    );
+    await diffFromPPK(origin, next, realOutput);
+    console.log(`${realOutput} generated.`);
+  },
+
+  async hdiffFromApp({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck(
+      args,
+      options,
+      'hdiffFromApp',
+    );
+    await diffFromPackage(
+      origin,
+      next,
+      realOutput,
+      'resources/rawfile/bundle.harmony.js',
+    );
+    console.log(`${realOutput} generated.`);
+  },
+  ///////////
 
   async diffFromIpa({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(

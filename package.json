@@ -55,7 +55,9 @@
     "tty-table": "4.2",
     "update-notifier": "^5.1.0",
     "yauzl": "^3.2.0",
-    "yazl": "3.3.1"
+    "yazl": "3.3.1",
+    "node-bsdiff": "^0.1.9",
+    "node-hdiffpatch": "^1.0.5"
   },
   "engines": {
     "node": ">= 10"
