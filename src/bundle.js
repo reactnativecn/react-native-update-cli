@@ -510,7 +510,6 @@ async function diffFromPPK(origin, next, output) {
   await writePromise;
 }
 
-////////////////diffFromPackage
 async function diffFromPackage(
   origin,
   next,
@@ -621,7 +620,6 @@ async function diffFromPackage(
   zipfile.end();
   await writePromise;
 }
-////////////////enumZipEntries
 
 async function enumZipEntries(zipFn, callback, nestedPath = '') {
   return new Promise((resolve, reject) => {
@@ -636,17 +634,14 @@ async function enumZipEntries(zipFn, callback, nestedPath = '') {
         const fullPath = nestedPath + entry.fileName;
 
         try {
-          // 检查文件是否为hap
           if (
             !entry.fileName.endsWith('/') &&
             entry.fileName.toLowerCase().endsWith('.hap')
           ) {
-            // 读取嵌套的hap文件内容
             const tempDir = path.join(os.tmpdir(), 'nested_zip_' + Date.now());
             await fs.ensureDir(tempDir);
             const tempZipPath = path.join(tempDir, 'temp.zip');
 
-            // 将嵌套的hap保存到临时文件
             await new Promise((res, rej) => {
               zipfile.openReadStream(entry, async (err, readStream) => {
                 if (err) return rej(err);
@@ -657,14 +652,11 @@ async function enumZipEntries(zipFn, callback, nestedPath = '') {
               });
             });
 
-            // 递归遍历嵌套的hap
             await enumZipEntries(tempZipPath, callback, fullPath + '/');
 
-            // 清理临时文件
             await fs.remove(tempDir);
           }
 
-          // 处理当前文件
           const result = callback(entry, zipfile, fullPath);
           if (result && typeof result.then === 'function') {
             await result;
@@ -808,7 +800,6 @@ export const commands = {
     console.log(`${realOutput} generated.`);
   },
 
-  ////////Adapter Harmony code
   async hdiffFromPPK({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(
       args,
@@ -833,7 +824,6 @@ export const commands = {
     );
     console.log(`${realOutput} generated.`);
   },
-  ///////////
 
   async diffFromIpa({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(
