@@ -416,7 +416,6 @@ async function diffFromPPK(origin, next, output) {
   const addedEntry = {};
 
   function addEntry(fn) {
-    //console.log(fn);
     if (!fn || addedEntry[fn]) {
       return;
     }

@@ -199,7 +199,7 @@
       "description": "Create hdiff patch from a Prepare package(.ppk)",
       "options": {
         "output": {
-          "default": ".pushy/output/hdiff.ppk-patch",
+          "default": ".pushy/output/hdiff-${time}.ppk-patch",
           "hasValue": true
         }
       }
@@ -208,7 +208,7 @@
       "description": "Create hdiff patch from a Harmony package(.app)",
       "options": {
         "output": {
-          "default": ".pushy/output/hdiff.app-patch",
+          "default": ".pushy/output/hdiff-${time}.app-patch",
           "hasValue": true
         }
       }
