@@ -3,11 +3,9 @@
   "defaultCommand": "help",
   "commands": {
     "help": {},
-
     "login": {},
     "logout": {},
     "me": {},
-
     "createApp": {
       "options": {
         "name": {
@@ -33,7 +31,6 @@
         }
       }
     },
-
     "uploadIpa": {},
     "uploadApk": {},
     "parseIpa": {},
@@ -45,7 +42,6 @@
         }
       }
     },
-
     "publish": {
       "options": {
         "platform": {
@@ -69,7 +65,6 @@
         }
       }
     },
-
     "update": {
       "options": {
         "platform": {
@@ -95,7 +90,6 @@
         }
       }
     },
-
     "updateVersionInfo": {
       "options": {
         "platform": {
@@ -118,7 +112,6 @@
         }
       }
     },
-
     "build": {
       "description": "Bundle javascript and copy assets."
     },
@@ -197,6 +190,24 @@
       "options": {
         "output": {
           "default": ".pushy/output/hdiff-${time}.apk-patch",
+          "hasValue": true
+        }
+      }
+    },
+    "hdiffFromPPK": {
+      "description": "Create hdiff patch from a Prepare package(.ppk)",
+      "options": {
+        "output": {
+          "default": ".pushy/output/hdiff-${time}.ppk-patch",
+          "hasValue": true
+        }
+      }
+    },
+    "hdiffFromApp": {
+      "description": "Create hdiff patch from a Harmony package(.app)",
+      "options": {
+        "output": {
+          "default": ".pushy/output/hdiff-${time}.app-patch",
           "hasValue": true
         }
       }

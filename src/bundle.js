@@ -9,6 +9,7 @@ import { spawn, spawnSync } from 'node:child_process';
 const g2js = require('gradle-to-js/lib/parser');
 import os from 'os';
 const properties = require('properties');
+const path = require('path');
 
 let bsdiff, hdiff, diff;
 try {
@@ -72,32 +73,51 @@ async function runReactNativeBundleCommand(
       });
     }
   }
-  const bundleCommand = usingExpo ? 'export:embed' : 'bundle';
+  const bundleCommand = usingExpo ? 'export:embed' : platform === 'harmony' ? 'bundle-harmony' : 'bundle';
+  if (platform == 'harmony') {
+    Array.prototype.push.apply(reactNativeBundleArgs, [
+      cliPath,
+      bundleCommand,
+      '--dev',
+      development,
+      '--entry-file',
+      entryFile,
+    ]);
 
-  Array.prototype.push.apply(reactNativeBundleArgs, [
-    cliPath,
-    bundleCommand,
-    '--assets-dest',
-    outputFolder,
-    '--bundle-output',
-    path.join(outputFolder, bundleName),
-    '--dev',
-    development,
-    '--entry-file',
-    entryFile,
-    '--platform',
-    platform,
-    '--reset-cache',
-  ]);
+    if (sourcemapOutput) {
+      reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
+    }
 
-  if (sourcemapOutput) {
-    reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
+    if (config) {
+      reactNativeBundleArgs.push('--config', config);
+    }
   }
-
-  if (config) {
-    reactNativeBundleArgs.push('--config', config);
+  else{
+    Array.prototype.push.apply(reactNativeBundleArgs, [
+      cliPath,
+      bundleCommand,
+      '--assets-dest',
+      outputFolder,
+      '--bundle-output',
+      path.join(outputFolder, bundleName),
+      '--dev',
+      development,
+      '--entry-file',
+      entryFile,
+      '--platform',
+      platform,
+      '--reset-cache',
+    ]);
+  
+    if (sourcemapOutput) {
+      reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
+    }
+  
+    if (config) {
+      reactNativeBundleArgs.push('--config', config);
+    }
   }
-
+ 
   const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
   console.log(
     `Running bundle command: node ${reactNativeBundleArgs.join(' ')}`,
@@ -146,6 +166,8 @@ async function runReactNativeBundleCommand(
           fs.existsSync('ios/Pods/hermes-engine')
         ) {
           hermesEnabled = true;
+        }else if (platform === 'harmony') {
+          await copyHarmonyBundle(outputFolder);
         }
         if (hermesEnabled) {
           await compileHermesByteCode(
@@ -158,6 +180,21 @@ async function runReactNativeBundleCommand(
       }
     });
   });
+}
+
+async function copyHarmonyBundle(outputFolder) {
+  const harmonyRawPath = 'harmony/entry/src/main/resources/rawfile';
+
+  try {
+    await fs.ensureDir(outputFolder);
+    await fs.copy(harmonyRawPath, outputFolder);
+
+    console.log(
+      `Successfully copied from ${harmonyRawPath} to ${outputFolder}`,
+    );
+  } catch (error) {
+    console.error('Error in copyHarmonyBundle:', error);
+  }
 }
 
 function getHermesOSBin() {
@@ -335,7 +372,7 @@ async function diffFromPPK(origin, next, output) {
       // isFile
       originMap[entry.crc32] = entry.fileName;
 
-      if (entry.fileName === 'index.bundlejs') {
+      if (entry.fileName === 'index.bundlejs' || entry.fileName === 'bundle.harmony.js') {
         // This is source.
         return readEntire(entry, zipFile).then((v) => (originSource = v));
       }
@@ -394,6 +431,16 @@ async function diffFromPPK(origin, next, output) {
         zipfile.addBuffer(
           diff(originSource, newSource),
           'index.bundlejs.patch',
+        );
+        //console.log('End diff');
+      });
+    }else if (entry.fileName === 'bundle.harmony.js') {
+      //console.log('Found bundle');
+      return readEntire(entry, nextZipfile).then((newSource) => {
+        //console.log('Begin diff');
+        zipfile.addBuffer(
+          diff(originSource, newSource),
+          'bundle.harmony.js.patch',
         );
         //console.log('End diff');
       });
@@ -519,7 +566,17 @@ async function diffFromPackage(
         );
         //console.log('End diff');
       });
-    } else {
+    } else if (entry.fileName === 'bundle.harmony.js') {
+      //console.log('Found bundle');
+      return readEntire(entry, nextZipfile).then((newSource) => {
+        //console.log('Begin diff');
+        zipfile.addBuffer(
+          diff(originSource, newSource),
+          'bundle.harmony.js.patch',
+        );
+        //console.log('End diff');
+      });
+    }else {
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
         copies[entry.fileName] = '';
@@ -551,22 +608,53 @@ async function diffFromPackage(
   await writePromise;
 }
 
-function enumZipEntries(zipFn, callback) {
+async function enumZipEntries(zipFn, callback, nestedPath = '') {
   return new Promise((resolve, reject) => {
-    openZipFile(zipFn, { lazyEntries: true }, (err, zipfile) => {
+    openZipFile(zipFn, { lazyEntries: true }, async (err, zipfile) => {
       if (err) {
         return reject(err);
       }
+
       zipfile.on('end', resolve);
       zipfile.on('error', reject);
-      zipfile.on('entry', (entry) => {
-        const result = callback(entry, zipfile);
-        if (result && typeof result.then === 'function') {
-          result.then(() => zipfile.readEntry());
-        } else {
-          zipfile.readEntry();
+      zipfile.on('entry', async (entry) => {
+        const fullPath = nestedPath + entry.fileName;
+
+        try {
+          if (
+            !entry.fileName.endsWith('/') &&
+            entry.fileName.toLowerCase().endsWith('.hap')
+          ) {
+            const tempDir = path.join(os.tmpdir(), 'nested_zip_' + Date.now());
+            await fs.ensureDir(tempDir);
+            const tempZipPath = path.join(tempDir, 'temp.zip');
+
+            await new Promise((res, rej) => {
+              zipfile.openReadStream(entry, async (err, readStream) => {
+                if (err) return rej(err);
+                const writeStream = fs.createWriteStream(tempZipPath);
+                readStream.pipe(writeStream);
+                writeStream.on('finish', res);
+                writeStream.on('error', rej);
+              });
+            });
+
+            await enumZipEntries(tempZipPath, callback, fullPath + '/');
+
+            await fs.remove(tempDir);
+          }
+
+          const result = callback(entry, zipfile, fullPath);
+          if (result && typeof result.then === 'function') {
+            await result;
+          }
+        } catch (error) {
+          console.error('处理文件时出错:', error);
         }
+
+        zipfile.readEntry();
       });
+
       zipfile.readEntry();
     });
   });
@@ -696,6 +784,21 @@ export const commands = {
       next,
       realOutput,
       'assets/index.android.bundle',
+    );
+    console.log(`${realOutput} generated.`);
+  },
+
+  async hdiffFromApp({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck(
+      args,
+      options,
+      'hdiffFromApp',
+    );
+    await diffFromPackage(
+      origin,
+      next,
+      realOutput,
+      'resources/rawfile/bundle.harmony.js',
     );
     console.log(`${realOutput} generated.`);
   },
