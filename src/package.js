@@ -138,7 +138,7 @@ export const commands = {
   },
   packages: async function ({ options }) {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);

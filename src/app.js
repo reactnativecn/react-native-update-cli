@@ -7,6 +7,7 @@ import { post, get, doDelete } from './api';
 const validPlatforms = {
   ios: 1,
   android: 1,
+  harmony: 1,
 };
 
 export function checkPlatform(platform) {
@@ -74,7 +75,7 @@ export const commands = {
     const name = options.name || (await question('应用名称:'));
     const { downloadUrl } = options;
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
     const { id } = await post('/app/create', { name, platform });
     console.log(`已成功创建应用（id: ${id}）`);
@@ -98,7 +99,7 @@ export const commands = {
   },
   selectApp: async function ({ args, options }) {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
     const id = args[0] ? parseInt(args[0]) : (await chooseApp(platform)).id;
 

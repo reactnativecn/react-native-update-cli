@@ -699,7 +699,7 @@ function diffArgsCheck(args, options, diffFn) {
 export const commands = {
   bundle: async function ({ options }) {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
 
     let { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =

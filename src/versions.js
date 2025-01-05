@@ -86,12 +86,12 @@ export const commands = {
 
     if (!fn || !fn.endsWith('.ppk')) {
       throw new Error(
-        '使用方法: pushy publish ppk后缀文件 --platform ios|android',
+        '使用方法: pushy publish ppk后缀文件 --platform ios|android|harmony',
       );
     }
 
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
     const { appId } = await getSelectedApp(platform);
 
@@ -114,14 +114,14 @@ export const commands = {
   },
   versions: async function ({ options }) {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
     const { appId } = await getSelectedApp(platform);
     await listVersions(appId);
   },
   update: async function ({ args, options }) {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
     const { appId } = await getSelectedApp(platform);
     let versionId = options.versionId || (await chooseVersion(appId)).id;
@@ -255,7 +255,7 @@ export const commands = {
   },
   updateVersionInfo: async function ({ args, options }) {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android):')),
+      options.platform || (await question('平台(ios/android/harmony):')),
     );
     const { appId } = await getSelectedApp(platform);
     const versionId = options.versionId || (await chooseVersion(appId)).id;
