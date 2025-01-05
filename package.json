@@ -13,7 +13,8 @@
   ],
   "scripts": {
     "build": "swc src -d lib --strip-leading-paths",
-    "prepare": "npm run build && chmod +x lib/index.js"
+    "prepare": "npm run build && chmod +x lib/index.js",
+    "lint": "tsc --noEmit & biome check --write ."
   },
   "repository": {
     "type": "git",
@@ -62,11 +63,10 @@
     "node": ">= 10"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
     "@swc/cli": "^0.5.1",
     "@swc/core": "^1.9.3",
     "@types/node": "^22.9.3",
-    "oxlint": "^0.13.1",
     "typescript": "^5.7.2"
-  },
-  "packageManager": "yarn@1.22.22"
+  }
 }
