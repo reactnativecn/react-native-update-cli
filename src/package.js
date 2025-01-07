@@ -3,7 +3,7 @@ import { question, saveToLocal } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 
-import { getApkInfo, getIpaInfo } from './utils';
+import { getApkInfo, getIpaInfo, getAppInfo } from './utils';
 import Table from 'tty-table';
 
 export async function listPackage(appId) {
@@ -121,6 +121,51 @@ export const commands = {
     console.log(
       `已成功上传apk原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
     );
+  },
+  uploadApp: async function ({ args }) {
+    const fn = args[0];
+    if (!fn || !fn.endsWith('.app')) {
+      throw new Error('使用方法: pushy uploadApp app后缀文件');
+    }
+    const {
+      versionName,
+      buildTime,
+      appId: appIdInPkg,
+      appKey: appKeyInPkg,
+    } = await getAppInfo(fn);
+    const { appId, appKey } = await getSelectedApp('harmony');
+    
+
+    if (appIdInPkg && appIdInPkg != appId) {
+      throw new Error(
+        `appId不匹配！当前app: ${appIdInPkg}, 当前update.json: ${appId}`,
+      );
+    }
+
+    if (appKeyInPkg && appKeyInPkg !== appKey) {
+      throw new Error(
+        `appKey不匹配！当前app: ${appKeyInPkg}, 当前update.json: ${appKey}`,
+      );
+    }
+
+    const { hash } = await uploadFile(fn);
+
+    const { id } = await post(`/app/${appId}/package/create`, {
+      name: versionName,
+      hash,
+      buildTime,
+    });
+    saveToLocal(fn, `${appId}/package/${id}.app`);
+    console.log(
+      `已成功上传app原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
+    );
+  },
+  parseApp: async function ({ args }) {
+    const fn = args[0];
+    if (!fn || !fn.endsWith('.app')) {
+      throw new Error('使用方法: pushy parseApp app后缀文件');
+    }
+    console.log(await getAppInfo(fn));
   },
   parseIpa: async function ({ args }) {
     const fn = args[0];
