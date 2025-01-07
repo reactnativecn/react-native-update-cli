@@ -87,6 +87,43 @@ export async function getApkInfo(fn) {
   return { versionName, buildTime, ...appCredential };
 }
 
+export async function getAppInfo(fn) {
+  const appInfoParser = new AppInfoParser(fn);
+  const bundleFile = await appInfoParser.parser.getEntryFromHarmonyApp(
+    /rawfile\/bundle.harmony.js/,
+  );
+  if (!bundleFile) {
+    throw new Error(
+      '找不到bundle文件。请确保此app为release版本，且bundle文件名为默认的bundle.harmony.js',
+    );
+  }
+  const updateJsonFile = await appInfoParser.parser.getEntryFromHarmonyApp(
+    /rawfile\/update.json/,
+  );
+  let appCredential = {};
+  if (updateJsonFile) {
+    appCredential = JSON.parse(updateJsonFile.toString()).harmony;
+  }
+  const metaJsonFile = await appInfoParser.parser.getEntryFromHarmonyApp(
+    /rawfile\/meta.json/,
+  );
+  let metaData = {};
+  if (metaJsonFile) {
+    metaData = JSON.parse(metaJsonFile.toString());
+  }
+  const { versionName, pushy_build_time } = metaData;
+  let buildTime = 0;
+  if (pushy_build_time) {
+    buildTime = pushy_build_time;
+  }
+  if (buildTime == 0) {
+    throw new Error(
+      '无法获取此包的编译时间戳。请更新 react-native-update 到最新版本后重新打包上传。',
+    );
+  }
+  return { versionName, buildTime, ...appCredential };
+}
+
 export async function getIpaInfo(fn) {
   const appInfoParser = new AppInfoParser(fn);
   const bundleFile = await appInfoParser.parser.getEntry(

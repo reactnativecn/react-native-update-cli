@@ -33,6 +33,8 @@
     },
     "uploadIpa": {},
     "uploadApk": {},
+    "uploadApp": {},
+    "parseApp": {},
     "parseIpa": {},
     "parseApk": {},
     "packages": {

@@ -184,16 +184,21 @@ async function runReactNativeBundleCommand(
 
 async function copyHarmonyBundle(outputFolder) {
   const harmonyRawPath = 'harmony/entry/src/main/resources/rawfile';
-
   try {
+    await fs.ensureDir(harmonyRawPath);
+    try {
+      await fs.access(harmonyRawPath, fs.constants.W_OK);
+    } catch (error) {
+      await fs.chmod(harmonyRawPath, 0o755);
+    }
+    await fs.remove(path.join(harmonyRawPath, 'update.json'));
+    await fs.copy('update.json', path.join(harmonyRawPath, 'update.json'));
+  
     await fs.ensureDir(outputFolder);
     await fs.copy(harmonyRawPath, outputFolder);
-
-    console.log(
-      `Successfully copied from ${harmonyRawPath} to ${outputFolder}`,
-    );
   } catch (error) {
-    console.error('Error in copyHarmonyBundle:', error);
+    console.error('copyHarmonyBundle 错误:', error);
+    throw new Error(`复制文件失败: ${error.message}`);
   }
 }
 
@@ -333,7 +338,7 @@ async function pack(dir, output) {
   console.log('ppk热更包已生成并保存到: ' + output);
 }
 
-function readEntire(entry, zipFile) {
+export function readEntire(entry, zipFile) {
   const buffers = [];
   return new Promise((resolve, reject) => {
     zipFile.openReadStream(entry, (err, stream) => {
@@ -608,7 +613,7 @@ async function diffFromPackage(
   await writePromise;
 }
 
-async function enumZipEntries(zipFn, callback, nestedPath = '') {
+export async function enumZipEntries(zipFn, callback, nestedPath = '') {
   return new Promise((resolve, reject) => {
     openZipFile(zipFn, { lazyEntries: true }, async (err, zipfile) => {
       if (err) {
