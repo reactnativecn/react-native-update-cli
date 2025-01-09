@@ -7,7 +7,7 @@ import packageJson from '../package.json';
 import tcpp from 'tcp-ping';
 import filesizeParser from 'filesize-parser';
 import { pricingPageUrl } from './utils';
-import { Session } from 'types';
+import type { Session } from 'types';
 import FormData from 'form-data';
 
 const tcpPing = util.promisify(tcpp.ping);
@@ -20,15 +20,13 @@ let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 
-export const getSession = function () {
-  return session;
-};
+export const getSession = () => session;
 
-export const replaceSession = function (newSession: { token: string }) {
+export const replaceSession = (newSession: { token: string }) => {
   session = newSession;
 };
 
-export const loadSession = async function () {
+export const loadSession = async () => {
   if (fs.existsSync('.update')) {
     try {
       replaceSession(JSON.parse(fs.readFileSync('.update', 'utf8')));
@@ -42,7 +40,7 @@ export const loadSession = async function () {
   }
 };
 
-export const saveSession = function () {
+export const saveSession = () => {
   // Only save on change.
   if (session !== savedSession) {
     const current = session;
@@ -52,7 +50,7 @@ export const saveSession = function () {
   }
 };
 
-export const closeSession = function () {
+export const closeSession = () => {
   if (fs.existsSync('.update')) {
     fs.unlinkSync('.update');
     savedSession = undefined;
@@ -64,38 +62,35 @@ export const closeSession = function () {
 async function query(url: string, options: fetch.RequestInit) {
   const resp = await fetch(url, options);
   const text = await resp.text();
-  let json;
+  let json: any;
   try {
     json = JSON.parse(text);
-  } catch (e) {
-    if (resp.statusText.includes('Unauthorized')) {
-      throw new Error('登录信息已过期，请使用 pushy login 命令重新登录');
-    } else {
-      throw new Error(`Server error: ${resp.statusText}`);
-    }
-  }
+  } catch (e) {}
 
   if (resp.status !== 200) {
-    throw new Error(`${resp.status}: ${resp.statusText}`);
+    const message = json?.message || resp.statusText;
+    if (resp.status === 401) {
+      throw new Error('登录信息已过期，请使用 pushy login 命令重新登录');
+    }
+    throw new Error(message);
   }
   return json;
 }
 
 function queryWithoutBody(method: string) {
-  return function (api: string) {
-    return query(host + api, {
+  return (api: string) =>
+    query(host + api, {
       method,
       headers: {
         'User-Agent': userAgent,
         'X-AccessToken': session ? session.token : '',
       },
     });
-  };
 }
 
 function queryWithBody(method: string) {
-  return function (api: string, body: Record<string, any>) {
-    return query(host + api, {
+  return (api: string, body: Record<string, any>) =>
+    query(host + api, {
       method,
       headers: {
         'User-Agent': userAgent,
@@ -104,10 +99,8 @@ function queryWithBody(method: string) {
       },
       body: JSON.stringify(body),
     });
-  };
 }
 
-export const get = queryWithoutBody('GET');
 export const post = queryWithBody('POST');
 export const put = queryWithBody('PUT');
 export const doDelete = queryWithBody('DELETE');
@@ -155,7 +148,7 @@ export async function uploadFile(fn: string, key?: string) {
     form.append(k, v);
   });
   const fileStream = fs.createReadStream(fn);
-  fileStream.on('data', function (data) {
+  fileStream.on('data', (data) => {
     bar.tick(data.length);
   });
 

@@ -1,5 +1,5 @@
 import { question } from './utils';
-import fs from 'fs';
+import fs from 'node:fs';
 import Table from 'tty-table';
 
 import { post, get, doDelete } from './api';
@@ -84,7 +84,7 @@ export const commands = {
       options: { platform, downloadUrl },
     });
   },
-  deleteApp: async function ({ args, options }) {
+  deleteApp: async ({ args, options }) => {
     const { platform } = options;
     const id = args[0] || chooseApp(platform);
     if (!id) {
@@ -93,15 +93,17 @@ export const commands = {
     await doDelete(`/app/${id}`);
     console.log('操作成功');
   },
-  apps: async function ({ options }) {
+  apps: async ({ options }) => {
     const { platform } = options;
     listApp(platform);
   },
-  selectApp: async function ({ args, options }) {
+  selectApp: async ({ args, options }) => {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );
-    const id = args[0] ? parseInt(args[0]) : (await chooseApp(platform)).id;
+    const id = args[0]
+      ? Number.parseInt(args[0])
+      : (await chooseApp(platform)).id;
 
     let updateInfo = {};
     if (fs.existsSync('update.json')) {
