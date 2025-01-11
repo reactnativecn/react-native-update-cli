@@ -101,6 +101,7 @@ function queryWithBody(method: string) {
     });
 }
 
+export const get = queryWithoutBody('GET');
 export const post = queryWithBody('POST');
 export const put = queryWithBody('PUT');
 export const doDelete = queryWithBody('DELETE');

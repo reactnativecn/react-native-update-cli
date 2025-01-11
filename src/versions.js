@@ -112,14 +112,14 @@ export const commands = {
       await this.update({ args: [], options: { versionId: id, platform } });
     }
   },
-  versions: async function ({ options }) {
+  versions: async ({ options }) => {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );
     const { appId } = await getSelectedApp(platform);
     await listVersions(appId);
   },
-  update: async function ({ args, options }) {
+  update: async ({ args, options }) => {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );
@@ -138,7 +138,7 @@ export const commands = {
       rollout = null;
     } else {
       try {
-        rollout = parseInt(rollout);
+        rollout = Number.parseInt(rollout);
       } catch (e) {
         throw new Error('rollout 必须是 1-100 的整数');
       }
@@ -173,7 +173,9 @@ export const commands = {
         await put(`/app/${appId}/package/${pkg.id}`, {
           versionId,
         });
-        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`);
+        console.log(
+          `已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`,
+        );
       }
       console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
       return;
@@ -205,7 +207,9 @@ export const commands = {
         await put(`/app/${appId}/package/${pkg.id}`, {
           versionId,
         });
-        console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`);
+        console.log(
+          `已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`,
+        );
       }
       console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
       return;
@@ -228,14 +232,14 @@ export const commands = {
     if (!pkgId) {
       throw new Error('请提供 packageId 或 packageVersion 参数');
     }
-    
+
     if (!pkgVersion) {
       const pkg = data.find((d) => d.id === pkgId);
       if (pkg) {
         pkgVersion = pkg.name;
       }
     }
-    
+
     if (rollout) {
       await put(`/app/${appId}/version/${versionId}`, {
         config: {
@@ -251,9 +255,11 @@ export const commands = {
     await put(`/app/${appId}/package/${pkgId}`, {
       versionId,
     });
-    console.log(`已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion} (id: ${pkgId})`);
+    console.log(
+      `已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion} (id: ${pkgId})`,
+    );
   },
-  updateVersionInfo: async function ({ args, options }) {
+  updateVersionInfo: async ({ args, options }) => {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );
