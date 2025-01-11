@@ -8,7 +8,8 @@
       "recommended": true,
       "suspicious": {
         "noExplicitAny": "off",
-        "noAssignInExpressions": "off"
+        "noAssignInExpressions": "off",
+        "noDoubleEquals": "off"
       },
       "style": {
         "noNonNullAssertion": "off"

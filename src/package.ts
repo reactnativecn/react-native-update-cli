@@ -6,7 +6,7 @@ import { checkPlatform, getSelectedApp } from './app';
 import { getApkInfo, getIpaInfo, getAppInfo } from './utils';
 import Table from 'tty-table';
 
-export async function listPackage(appId) {
+export async function listPackage(appId: string) {
   const { data } = await get(`/app/${appId}/package/list?limit=1000`);
 
   const header = [{ value: '原生包 Id' }, { value: '原生版本' }];
@@ -35,12 +35,12 @@ export async function listPackage(appId) {
   return data;
 }
 
-export async function choosePackage(appId) {
+export async function choosePackage(appId: string) {
   const list = await listPackage(appId);
 
   while (true) {
     const id = await question('输入原生包 id:');
-    const app = list.find((v) => v.id === (id | 0));
+    const app = list.find((v) => v.id === Number(id));
     if (app) {
       return app;
     }
@@ -48,7 +48,7 @@ export async function choosePackage(appId) {
 }
 
 export const commands = {
-  uploadIpa: async function ({ args }) {
+  uploadIpa: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
       throw new Error('使用方法: pushy uploadIpa ipa后缀文件');
@@ -85,7 +85,7 @@ export const commands = {
       `已成功上传ipa原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
     );
   },
-  uploadApk: async function ({ args }) {
+  uploadApk: async ({ args }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
       throw new Error('使用方法: pushy uploadApk apk后缀文件');
@@ -122,7 +122,7 @@ export const commands = {
       `已成功上传apk原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
     );
   },
-  uploadApp: async function ({ args }) {
+  uploadApp: async ({ args }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.app')) {
       throw new Error('使用方法: pushy uploadApp app后缀文件');
@@ -134,7 +134,6 @@ export const commands = {
       appKey: appKeyInPkg,
     } = await getAppInfo(fn);
     const { appId, appKey } = await getSelectedApp('harmony');
-    
 
     if (appIdInPkg && appIdInPkg != appId) {
       throw new Error(
@@ -160,28 +159,28 @@ export const commands = {
       `已成功上传app原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
     );
   },
-  parseApp: async function ({ args }) {
+  parseApp: async ({ args }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.app')) {
       throw new Error('使用方法: pushy parseApp app后缀文件');
     }
     console.log(await getAppInfo(fn));
   },
-  parseIpa: async function ({ args }) {
+  parseIpa: async ({ args }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
       throw new Error('使用方法: pushy parseIpa ipa后缀文件');
     }
     console.log(await getIpaInfo(fn));
   },
-  parseApk: async function ({ args }) {
+  parseApk: async ({ args }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
       throw new Error('使用方法: pushy parseApk apk后缀文件');
     }
     console.log(await getApkInfo(fn));
   },
-  packages: async function ({ options }) {
+  packages: async ({ options }) => {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );

@@ -2,12 +2,12 @@ import { question } from './utils';
 import { post, get, replaceSession, saveSession, closeSession } from './api';
 import crypto from 'node:crypto';
 
-function md5(str) {
+function md5(str: string) {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
 export const commands = {
-  login: async ({ args }) => {
+  login: async ({ args }: { args: string[] }) => {
     const email = args[0] || (await question('email:'));
     const pwd = args[1] || (await question('password:', true));
     const { token, info } = await post('/user/login', {

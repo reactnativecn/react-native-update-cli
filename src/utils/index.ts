@@ -25,8 +25,9 @@ export function translateOptions(options) {
   for (const key in options) {
     const v = options[key];
     if (typeof v === 'string') {
-      ret[key] = v.replace(/\$\{(\w+)\}/g, (v, n) =>
-        options[n] || process.env[n] || v,
+      ret[key] = v.replace(
+        /\$\{(\w+)\}/g,
+        (v, n) => options[n] || process.env[n] || v,
       );
     } else {
       ret[key] = v;
@@ -124,7 +125,7 @@ export async function getAppInfo(fn) {
   return { versionName, buildTime, ...appCredential };
 }
 
-export async function getIpaInfo(fn) {
+export async function getIpaInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);
   const bundleFile = await appInfoParser.parser.getEntry(
     /payload\/.+?\.app\/main.jsbundle/,
