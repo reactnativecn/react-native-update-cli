@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import Table from 'tty-table';
 
 import { post, get, doDelete } from './api';
+import type { Platform } from './types';
 
 const validPlatforms = {
   ios: 1,
@@ -10,14 +11,14 @@ const validPlatforms = {
   harmony: 1,
 };
 
-export function checkPlatform(platform) {
+export function checkPlatform(platform: Platform) {
   if (!validPlatforms[platform]) {
     throw new Error(`无法识别的平台 '${platform}'`);
   }
   return platform;
 }
 
-export function getSelectedApp(platform) {
+export function getSelectedApp(platform: Platform) {
   checkPlatform(platform);
 
   if (!fs.existsSync('update.json')) {
@@ -34,7 +35,7 @@ export function getSelectedApp(platform) {
   return updateInfo[platform];
 }
 
-export async function listApp(platform) {
+export async function listApp(platform: Platform) {
   const { data } = await get('/app/list');
   const list = platform ? data.filter((v) => v.platform === platform) : data;
 
@@ -58,12 +59,12 @@ export async function listApp(platform) {
   return list;
 }
 
-export async function chooseApp(platform) {
+export async function chooseApp(platform: Platform) {
   const list = await listApp(platform);
 
   while (true) {
     const id = await question('输入应用 id:');
-    const app = list.find((v) => v.id === (id | 0));
+    const app = list.find((v) => v.id === Number(id));
     if (app) {
       return app;
     }

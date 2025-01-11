@@ -6,3 +6,5 @@ declare global {
 export interface Session {
   token: string;
 }
+
+export type Platform = 'ios' | 'android' | 'harmony';

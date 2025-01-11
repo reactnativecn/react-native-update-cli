@@ -6,12 +6,14 @@ import { open as openZipFile } from 'yauzl';
 import { question, printVersionCommand } from './utils';
 import { checkPlatform } from './app';
 import { spawn, spawnSync } from 'node:child_process';
+import semverSatisfies from 'semver/functions/satisfies';
 const g2js = require('gradle-to-js/lib/parser');
-import os from 'os';
+import os from 'node:os';
 const properties = require('properties');
-const path = require('path');
 
-let bsdiff, hdiff, diff;
+let bsdiff;
+let hdiff;
+let diff;
 try {
   bsdiff = require('node-bsdiff').diff;
 } catch (e) {}
@@ -39,9 +41,9 @@ async function runReactNativeBundleCommand(
     }
   }
 
-  let reactNativeBundleArgs = [];
+  const reactNativeBundleArgs = [];
 
-  let envArgs = process.env.PUSHY_ENV_ARGS;
+  const envArgs = process.env.PUSHY_ENV_ARGS;
 
   if (envArgs) {
     Array.prototype.push.apply(
@@ -59,8 +61,19 @@ async function runReactNativeBundleCommand(
     cliPath = require.resolve('@expo/cli', {
       paths: [process.cwd()],
     });
-    usingExpo = true;
-  } catch (e) {
+    const expoCliVersion = JSON.parse(
+      fs.readFileSync(
+        require.resolve('@expo/cli/package.json', {
+          paths: [process.cwd()],
+        }),
+      ),
+    ).version;
+    // expo cli 0.10.17 (expo 49) 开始支持 bundle:embed
+    if (semverSatisfies(expoCliVersion, '>= 0.10.17')) {
+      usingExpo = true;
+    }
+  } catch (e) {}
+  if (!usingExpo) {
     try {
       // rn >= 0.75
       cliPath = require.resolve('@react-native-community/cli/build/bin.js', {
@@ -73,8 +86,12 @@ async function runReactNativeBundleCommand(
       });
     }
   }
-  const bundleCommand = usingExpo ? 'export:embed' : platform === 'harmony' ? 'bundle-harmony' : 'bundle';
-  if (platform == 'harmony') {
+  const bundleCommand = usingExpo
+    ? 'export:embed'
+    : platform === 'harmony'
+    ? 'bundle-harmony'
+    : 'bundle';
+  if (platform === 'harmony') {
     Array.prototype.push.apply(reactNativeBundleArgs, [
       cliPath,
       bundleCommand,
@@ -91,8 +108,7 @@ async function runReactNativeBundleCommand(
     if (config) {
       reactNativeBundleArgs.push('--config', config);
     }
-  }
-  else{
+  } else {
     Array.prototype.push.apply(reactNativeBundleArgs, [
       cliPath,
       bundleCommand,
@@ -108,16 +124,16 @@ async function runReactNativeBundleCommand(
       platform,
       '--reset-cache',
     ]);
-  
+
     if (sourcemapOutput) {
       reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
     }
-  
+
     if (config) {
       reactNativeBundleArgs.push('--config', config);
     }
   }
- 
+
   const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
   console.log(
     `Running bundle command: node ${reactNativeBundleArgs.join(' ')}`,
@@ -147,7 +163,7 @@ async function runReactNativeBundleCommand(
             properties.parse(
               './android/gradle.properties',
               { path: true },
-              function (error, props) {
+              (error, props) => {
                 if (error) {
                   console.error(error);
                   resolve(null);
@@ -166,7 +182,7 @@ async function runReactNativeBundleCommand(
           fs.existsSync('ios/Pods/hermes-engine')
         ) {
           hermesEnabled = true;
-        }else if (platform === 'harmony') {
+        } else if (platform === 'harmony') {
           await copyHarmonyBundle(outputFolder);
         }
         if (hermesEnabled) {
@@ -193,7 +209,7 @@ async function copyHarmonyBundle(outputFolder) {
     }
     await fs.remove(path.join(harmonyRawPath, 'update.json'));
     await fs.copy('update.json', path.join(harmonyRawPath, 'update.json'));
-  
+
     await fs.ensureDir(outputFolder);
     await fs.copy(harmonyRawPath, outputFolder);
   } catch (error) {
@@ -238,7 +254,7 @@ async function compileHermesByteCode(
   outputFolder,
   sourcemapOutput,
 ) {
-  console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
+  console.log('Hermes enabled, now compiling to hermes bytecode:\n');
   // >= rn 0.69
   const rnDir = path.dirname(
     require.resolve('react-native', {
@@ -264,13 +280,11 @@ async function compileHermesByteCode(
   if (sourcemapOutput) {
     fs.copyFileSync(
       sourcemapOutput,
-      path.join(outputFolder, bundleName + '.txt.map'),
+      path.join(outputFolder, `${bundleName}.txt.map`),
     );
     args.push('-output-source-map');
   }
-  console.log(
-    'Running hermesc: ' + hermesCommand + ' ' + args.join(' ') + '\n',
-  );
+  console.log(`Running hermesc: ${hermesCommand} ${args.join(' ')}`);
   spawnSync(hermesCommand, args, {
     stdio: 'ignore',
   });
@@ -280,13 +294,13 @@ async function compileHermesByteCode(
     if (!fs.existsSync(composerPath)) {
       return;
     }
-    console.log(`Composing source map`);
+    console.log('Composing source map');
     spawnSync(
       'node',
       [
         composerPath,
-        path.join(outputFolder, bundleName + '.txt.map'),
-        path.join(outputFolder, bundleName + '.map'),
+        path.join(outputFolder, `${bundleName}.txt.map`),
+        path.join(outputFolder, `${bundleName}.map`),
         '-o',
         sourcemapOutput,
       ],
@@ -295,7 +309,7 @@ async function compileHermesByteCode(
       },
     );
   }
-  fs.removeSync(path.join(outputFolder, bundleName + '.txt.map'));
+  fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
 }
 
 async function pack(dir, output) {
@@ -320,7 +334,7 @@ async function pack(dir, output) {
           zipfile.addFile(fullPath, rel + name);
         } else if (stat.isDirectory()) {
           //console.log('adding: ' + rel+name+'/');
-          addDirectory(fullPath, rel + name + '/');
+          addDirectory(fullPath, `${rel}${name}/`);
         }
       }
     }
@@ -328,14 +342,12 @@ async function pack(dir, output) {
     addDirectory(dir, '');
 
     zipfile.outputStream.on('error', (err) => reject(err));
-    zipfile.outputStream
-      .pipe(fs.createWriteStream(output))
-      .on('close', function () {
-        resolve();
-      });
+    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
+      resolve();
+    });
     zipfile.end();
   });
-  console.log('ppk热更包已生成并保存到: ' + output);
+  console.log(`ppk热更包已生成并保存到: ${output}`);
 }
 
 export function readEntire(entry, zipFile) {
@@ -360,7 +372,7 @@ export function readEntire(entry, zipFile) {
 
 function basename(fn) {
   const m = /^(.+\/)[^\/]+\/?$/.exec(fn);
-  return m && m[1];
+  return m?.[1];
 }
 
 async function diffFromPPK(origin, next, output) {
@@ -377,7 +389,10 @@ async function diffFromPPK(origin, next, output) {
       // isFile
       originMap[entry.crc32] = entry.fileName;
 
-      if (entry.fileName === 'index.bundlejs' || entry.fileName === 'bundle.harmony.js') {
+      if (
+        entry.fileName === 'index.bundlejs' ||
+        entry.fileName === 'bundle.harmony.js'
+      ) {
         // This is source.
         return readEntire(entry, zipFile).then((v) => (originSource = v));
       }
@@ -386,7 +401,7 @@ async function diffFromPPK(origin, next, output) {
 
   if (!originSource) {
     throw new Error(
-      `Bundle file not found! Please use default bundle file name and path.`,
+      'Bundle file not found! Please use default bundle file name and path.',
     );
   }
 
@@ -398,11 +413,9 @@ async function diffFromPPK(origin, next, output) {
     zipfile.outputStream.on('error', (err) => {
       throw err;
     });
-    zipfile.outputStream
-      .pipe(fs.createWriteStream(output))
-      .on('close', function () {
-        resolve();
-      });
+    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
+      resolve();
+    });
   });
 
   const addedEntry = {};
@@ -439,7 +452,7 @@ async function diffFromPPK(origin, next, output) {
         );
         //console.log('End diff');
       });
-    }else if (entry.fileName === 'bundle.harmony.js') {
+    } else if (entry.fileName === 'bundle.harmony.js') {
       //console.log('Found bundle');
       return readEntire(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
@@ -471,7 +484,7 @@ async function diffFromPPK(origin, next, output) {
       addEntry(basename(entry.fileName));
 
       return new Promise((resolve, reject) => {
-        nextZipfile.openReadStream(entry, function (err, readStream) {
+        nextZipfile.openReadStream(entry, (err, readStream) => {
           if (err) {
             return reject(err);
           }
@@ -487,9 +500,9 @@ async function diffFromPPK(origin, next, output) {
 
   const deletes = {};
 
-  for (let k in originEntries) {
+  for (const k in originEntries) {
     if (!newEntries[k]) {
-      console.log('Delete ' + k);
+      console.log(`Delete ${k}`);
       deletes[k] = 1;
     }
   }
@@ -538,7 +551,7 @@ async function diffFromPackage(
 
   if (!originSource) {
     throw new Error(
-      `Bundle file not found! Please use default bundle file name and path.`,
+      'Bundle file not found! Please use default bundle file name and path.',
     );
   }
 
@@ -550,11 +563,9 @@ async function diffFromPackage(
     zipfile.outputStream.on('error', (err) => {
       throw err;
     });
-    zipfile.outputStream
-      .pipe(fs.createWriteStream(output))
-      .on('close', function () {
-        resolve();
-      });
+    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
+      resolve();
+    });
   });
 
   await enumZipEntries(next, (entry, nextZipfile) => {
@@ -581,7 +592,7 @@ async function diffFromPackage(
         );
         //console.log('End diff');
       });
-    }else {
+    } else {
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
         copies[entry.fileName] = '';
@@ -594,7 +605,7 @@ async function diffFromPackage(
       }
 
       return new Promise((resolve, reject) => {
-        nextZipfile.openReadStream(entry, function (err, readStream) {
+        nextZipfile.openReadStream(entry, (err, readStream) => {
           if (err) {
             return reject(err);
           }
@@ -630,7 +641,7 @@ export async function enumZipEntries(zipFn, callback, nestedPath = '') {
             !entry.fileName.endsWith('/') &&
             entry.fileName.toLowerCase().endsWith('.hap')
           ) {
-            const tempDir = path.join(os.tmpdir(), 'nested_zip_' + Date.now());
+            const tempDir = path.join(os.tmpdir(), `nested_zip_${Date.now()}`);
             await fs.ensureDir(tempDir);
             const tempZipPath = path.join(tempDir, 'temp.zip');
 
@@ -644,7 +655,7 @@ export async function enumZipEntries(zipFn, callback, nestedPath = '') {
               });
             });
 
-            await enumZipEntries(tempZipPath, callback, fullPath + '/');
+            await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
 
             await fs.remove(tempDir);
           }
@@ -697,7 +708,7 @@ function diffArgsCheck(args, options, diffFn) {
   return {
     origin,
     next,
-    realOutput: output.replace(/\$\{time\}/g, '' + Date.now()),
+    realOutput: output.replace(/\$\{time\}/g, `${Date.now()}`),
   };
 }
 
@@ -707,15 +718,15 @@ export const commands = {
       options.platform || (await question('平台(ios/android/harmony):')),
     );
 
-    let { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
+    const { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
       translateOptions({
         ...options,
         platform,
       });
 
-    const sourcemapOutput = path.join(intermediaDir, bundleName + '.map');
+    const sourcemapOutput = path.join(intermediaDir, `${bundleName}.map`);
 
-    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+    const realOutput = output.replace(/\$\{time\}/g, `${Date.now()}`);
 
     if (!platform) {
       throw new Error('Platform must be specified.');
@@ -723,7 +734,7 @@ export const commands = {
 
     const { version, major, minor } = getRNVersion();
 
-    console.log('Bundling with react-native: ', version);
+    console.log(`Bundling with react-native: ${version}`);
 
     await runReactNativeBundleCommand(
       bundleName,
@@ -817,7 +828,7 @@ export const commands = {
 
     await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
-      return m && m[1];
+      return m?.[1];
     });
 
     console.log(`${realOutput} generated.`);
@@ -832,7 +843,7 @@ export const commands = {
 
     await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
-      return m && m[1];
+      return m?.[1];
     });
 
     console.log(`${realOutput} generated.`);

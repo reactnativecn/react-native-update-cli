@@ -22,12 +22,12 @@ export async function question(query, password) {
 
 export function translateOptions(options) {
   const ret = {};
-  for (let key in options) {
+  for (const key in options) {
     const v = options[key];
     if (typeof v === 'string') {
-      ret[key] = v.replace(/\$\{(\w+)\}/g, function (v, n) {
-        return options[n] || process.env[n] || v;
-      });
+      ret[key] = v.replace(/\$\{(\w+)\}/g, (v, n) =>
+        options[n] || process.env[n] || v,
+      );
     } else {
       ret[key] = v;
     }
@@ -217,7 +217,7 @@ export async function printVersionCommand() {
       );
     } else if (semverSatisfies(pushyVersion, '10.0.0 - 10.17.0')) {
       console.warn(
-        `当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10`,
+        '当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10',
       );
     }
   }
