@@ -148,6 +148,19 @@
         }
       }
     },
+    "bundleAfterXcodeBuild": {
+      "description": "bundle after xcode build.",
+      "options": {
+        "intermediaDir": {
+          "default": ".pushy/intermedia/${platform}",
+          "hasValue": true
+        },
+        "output": {
+          "default": ".pushy/output/${platform}.${time}.ppk",
+          "hasValue": true
+        }
+      }
+    },
     "release": {
       "description": "Push builded file to server."
     },

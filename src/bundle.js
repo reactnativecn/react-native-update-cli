@@ -758,6 +758,26 @@ export const commands = {
     }
   },
 
+  bundleAfterXcodeBuild: async function ({ options }) {
+    const { intermediaDir, output } = translateOptions({
+      ...options,
+      platform: 'ios',
+    });
+
+    const realOutput = output.replace(/\$\{time\}/g, `${Date.now()}`);
+    await pack(path.resolve(intermediaDir), realOutput);
+
+    const v = await question('是否现在上传此热更包?(Y/N)');
+    if (v.toLowerCase() === 'y') {
+      await this.publish({
+        args: [realOutput],
+        options: {
+          platform: 'ios',
+        },
+      });
+    }
+  },
+
   async diff({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(args, options, 'diff');
 
