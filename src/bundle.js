@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { getRNVersion, translateOptions } from './utils';
+import { getRNVersion, translateOptions, checkXcodeScript } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
@@ -717,6 +717,18 @@ export const commands = {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );
+
+    let hasSentryScript = false;
+
+    if (platform === 'ios') {
+      hasSentryScript = checkXcodeScript();
+    } else {
+      hasSentryScript = false;
+    }
+
+    if (hasSentryScript && platform === 'ios') {
+      throw new Error('请先执行xcodebuild命令，然后再执行pushy bundleAfterXcodeBuild');
+    }
 
     const { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
       translateOptions({
