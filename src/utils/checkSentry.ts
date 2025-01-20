@@ -20,3 +20,20 @@ export function checkXcodeScript() {
     return false;
   }
 }
+
+
+export function checkAndroidStudioScript() {
+  try {
+    const androidAppPath = path.join(process.cwd(), 'android', 'app');
+    const buildGradlePath = path.join(androidAppPath, 'build.gradle');
+    
+    const content = fs.readFileSync(buildGradlePath, 'utf8');
+    const hasSentryGradle = content.includes('@sentry/react-native/package.json');
+
+    console.log(`是否包含 sentry.gradle: ${hasSentryGradle}`);
+    return hasSentryGradle;
+  } catch (error) {
+    console.error('读取文件失败:', error);
+    return false;
+  }
+}

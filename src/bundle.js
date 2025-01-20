@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { getRNVersion, translateOptions, checkXcodeScript } from './utils';
+import { getRNVersion, translateOptions, checkXcodeScript, checkAndroidStudioScript } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
@@ -722,12 +722,20 @@ export const commands = {
 
     if (platform === 'ios') {
       hasSentryScript = checkXcodeScript();
-    } else {
-      hasSentryScript = false;
+    } else if (platform === 'android') {
+      hasSentryScript = checkAndroidStudioScript();
     }
 
     if (hasSentryScript && platform === 'ios') {
-      throw new Error('请先执行xcodebuild命令，然后再执行pushy bundleAfterXcodeBuild');
+      throw new Error(
+        '请先执行xcode build命令，然后再执行pushy bundleAfterXcodeBuild',
+      );
+    }
+
+    if (hasSentryScript && platform === 'android') {
+      throw new Error(
+        '请先执行android build命令，然后再执行pushy bundleAfterAndroidStudioBuild',
+      );
     }
 
     const { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
@@ -785,6 +793,26 @@ export const commands = {
         args: [realOutput],
         options: {
           platform: 'ios',
+        },
+      });
+    }
+  },
+
+  bundleAfterAndroidStudioBuild: async function ({ options }) {
+    const { intermediaDir, output } = translateOptions({
+      ...options,
+      platform: 'android',
+    });
+
+    const realOutput = output.replace(/\$\{time\}/g, `${Date.now()}`);
+    await pack(path.resolve(intermediaDir), realOutput);
+
+    const v = await question('是否现在上传此热更包?(Y/N)');
+    if (v.toLowerCase() === 'y') {
+      await this.publish({
+        args: [realOutput],
+        options: {
+          platform: 'android',
         },
       });
     }
