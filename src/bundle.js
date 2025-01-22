@@ -376,6 +376,7 @@ async function uploadSourcemapForSentry(
         'upload',
         '--debug-id-reference',
         '--strip-prefix',
+        path.join(process.cwd(), outputFolder),
         path.join(outputFolder, bundleName),
         path.join(outputFolder, `${bundleName}.map`),
       ],
