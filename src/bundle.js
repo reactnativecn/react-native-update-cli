@@ -335,8 +335,12 @@ async function compileHermesByteCode(
 
 async function copyDebugidForSentry(bundleName, outputFolder, sourcemapOutput) {
   if (sourcemapOutput) {
-    const copyDebugidPath =
-      'node_modules/@sentry/react-native/scripts/copy-debugid.js';
+    const copyDebugidPath = require.resolve(
+      '@sentry/react-native/scripts/copy-debugid.js',
+      {
+        paths: [process.cwd()],
+      },
+    );
     if (!fs.existsSync(copyDebugidPath)) {
       return;
     }
@@ -362,8 +366,12 @@ async function uploadSourcemapForSentry(
   sourcemapOutput,
 ) {
   if (sourcemapOutput) {
-    const uploadSourcemapPath =
-      'node_modules/@sentry/cli/bin/sentry-cli';
+    const uploadSourcemapPath = require.resolve(
+      '@sentry/cli/bin/sentry-cli',
+      {
+        paths: [process.cwd()],
+      },
+    );
     if (!fs.existsSync(uploadSourcemapPath)) {
       return;
     }
