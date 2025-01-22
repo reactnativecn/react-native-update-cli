@@ -3,7 +3,7 @@ import { getRNVersion, translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
-import { question, printVersionCommand } from './utils';
+import { question, checkPlugins } from './utils';
 import { checkPlatform } from './app';
 import { spawn, spawnSync } from 'node:child_process';
 import semverSatisfies from 'semver/functions/satisfies';
@@ -86,6 +86,9 @@ async function runReactNativeBundleCommand(
       });
     }
   }
+  const bundleParams = await checkPlugins();
+  const minifyOption = bundleParams.minify;
+  const isSentry = bundleParams.sentry;
   const bundleCommand = usingExpo
     ? 'export:embed'
     : platform === 'harmony'
@@ -123,6 +126,8 @@ async function runReactNativeBundleCommand(
       '--platform',
       platform,
       '--reset-cache',
+      '--minify',
+      minifyOption,
     ]);
 
     if (sourcemapOutput) {
@@ -190,7 +195,20 @@ async function runReactNativeBundleCommand(
             bundleName,
             outputFolder,
             sourcemapOutput,
+            !isSentry,
           );
+          if (isSentry) {
+            await copyDebugidForSentry(
+              bundleName,
+              outputFolder,
+              sourcemapOutput,
+            );
+            await uploadSourcemapForSentry(
+              bundleName,
+              outputFolder,
+              sourcemapOutput,
+            );
+          }
         }
         resolve(null);
       }
@@ -253,6 +271,7 @@ async function compileHermesByteCode(
   bundleName,
   outputFolder,
   sourcemapOutput,
+  shouldCleanSourcemap,
 ) {
   console.log('Hermes enabled, now compiling to hermes bytecode:\n');
   // >= rn 0.69
@@ -309,7 +328,63 @@ async function compileHermesByteCode(
       },
     );
   }
+  if (shouldCleanSourcemap) {
+    fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+  }
+}
+
+async function copyDebugidForSentry(bundleName, outputFolder, sourcemapOutput) {
+  if (sourcemapOutput) {
+    const copyDebugidPath =
+      'node_modules/@sentry/react-native/scripts/copy-debugid.js';
+    if (!fs.existsSync(copyDebugidPath)) {
+      return;
+    }
+    console.log('Copying debugid');
+    spawnSync(
+      'node',
+      [
+        copyDebugidPath,
+        path.join(outputFolder, `${bundleName}.txt.map`),
+        path.join(outputFolder, `${bundleName}.map`),
+      ],
+      {
+        stdio: 'ignore',
+      },
+    );
+  }
   fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+}
+
+async function uploadSourcemapForSentry(
+  bundleName,
+  outputFolder,
+  sourcemapOutput,
+) {
+  if (sourcemapOutput) {
+    const uploadSourcemapPath =
+      'node_modules/@sentry/cli/bin/sentry-cli';
+    if (!fs.existsSync(uploadSourcemapPath)) {
+      return;
+    }
+    console.log('Uploading sourcemap');
+    spawnSync(
+      'node',
+      [
+        uploadSourcemapPath,
+        'sourcemaps',
+        'upload',
+        '--debug-id-reference',
+        '--strip-prefix',
+        path.join(outputFolder, bundleName),
+        path.join(outputFolder, `${bundleName}.map`),
+      ],
+      {
+        stdio: 'ignore',
+      },
+    );
+  }
+  fs.removeSync(path.join(outputFolder, `${bundleName}.map`));
 }
 
 async function pack(dir, output) {
@@ -718,11 +793,14 @@ export const commands = {
       options.platform || (await question('平台(ios/android/harmony):')),
     );
 
-    const { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
+    const { bundleName, entryFile, intermediaDir, output, dev } =
       translateOptions({
         ...options,
         platform,
       });
+
+    const bundleParams = await checkPlugins();
+    const sourcemap = bundleParams.sourcemap;
 
     const sourcemapOutput = path.join(intermediaDir, `${bundleName}.map`);
 
