@@ -58,6 +58,8 @@ async function runReactNativeBundleCommand(
 
   let usingExpo = false;
   try {
+
+    
     cliPath = require.resolve('@expo/cli', {
       paths: [process.cwd()],
     });
@@ -335,12 +337,19 @@ async function compileHermesByteCode(
 
 async function copyDebugidForSentry(bundleName, outputFolder, sourcemapOutput) {
   if (sourcemapOutput) {
-    const copyDebugidPath = require.resolve(
-      '@sentry/react-native/scripts/copy-debugid.js',
-      {
-        paths: [process.cwd()],
-      },
-    );
+    let copyDebugidPath;
+    try {
+      copyDebugidPath = require.resolve(
+        '@sentry/react-native/scripts/copy-debugid.js',
+        {
+          paths: [process.cwd()],
+        },
+      );
+    } catch (error) {
+      console.error('无法找到 Sentry copy-debugid.js 脚本文件，请确保已正确安装 @sentry/react-native');
+      return;
+    }
+
     if (!fs.existsSync(copyDebugidPath)) {
       return;
     }
@@ -366,12 +375,20 @@ async function uploadSourcemapForSentry(
   sourcemapOutput,
 ) {
   if (sourcemapOutput) {
-    const sentryCliPath = require.resolve('@sentry/cli/bin/sentry-cli', {
-      paths: [process.cwd()],
-    });
+    let sentryCliPath;
+    try {
+      sentryCliPath = require.resolve('@sentry/cli/bin/sentry-cli', {
+        paths: [process.cwd()],
+      });
+    } catch (error) {
+      console.error('无法找到 Sentry CLI 工具，请确保已正确安装 @sentry/cli');
+      return;
+    }
+
     if (!fs.existsSync(sentryCliPath)) {
       return;
     }
+    
     const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
     const version = packageJson.version;
 
