@@ -58,8 +58,6 @@ async function runReactNativeBundleCommand(
 
   let usingExpo = false;
   try {
-
-    
     cliPath = require.resolve('@expo/cli', {
       paths: [process.cwd()],
     });
@@ -199,18 +197,6 @@ async function runReactNativeBundleCommand(
             sourcemapOutput,
             !isSentry,
           );
-          if (isSentry) {
-            await copyDebugidForSentry(
-              bundleName,
-              outputFolder,
-              sourcemapOutput,
-            );
-            await uploadSourcemapForSentry(
-              bundleName,
-              outputFolder,
-              sourcemapOutput,
-            );
-          }
         }
         resolve(null);
       }
@@ -346,7 +332,9 @@ async function copyDebugidForSentry(bundleName, outputFolder, sourcemapOutput) {
         },
       );
     } catch (error) {
-      console.error('无法找到 Sentry copy-debugid.js 脚本文件，请确保已正确安装 @sentry/react-native');
+      console.error(
+        '无法找到 Sentry copy-debugid.js 脚本文件，请确保已正确安装 @sentry/react-native',
+      );
       return;
     }
 
@@ -373,6 +361,7 @@ async function uploadSourcemapForSentry(
   bundleName,
   outputFolder,
   sourcemapOutput,
+  version,
 ) {
   if (sourcemapOutput) {
     let sentryCliPath;
@@ -388,19 +377,14 @@ async function uploadSourcemapForSentry(
     if (!fs.existsSync(sentryCliPath)) {
       return;
     }
-    
-    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    const version = packageJson.version;
 
-    spawnSync('node', [
-      sentryCliPath,
-      'releases',
-      'set-commits',
-      version,
-      '--auto'
-    ], {
-      stdio: 'inherit',
-    });
+    spawnSync(
+      'node',
+      [sentryCliPath, 'releases', 'set-commits', version, '--auto'],
+      {
+        stdio: 'inherit',
+      },
+    );
     console.log(`Sentry release created for version: ${version}`);
 
     console.log('Uploading sourcemap');
@@ -421,8 +405,6 @@ async function uploadSourcemapForSentry(
         stdio: 'inherit',
       },
     );
-
-    fs.removeSync(path.join(outputFolder, `${bundleName}.map`));
   }
 }
 
@@ -840,6 +822,7 @@ export const commands = {
 
     const bundleParams = await checkPlugins();
     const sourcemap = bundleParams.sourcemap;
+    const isSentry = bundleParams.sentry;
 
     const sourcemapOutput = path.join(intermediaDir, `${bundleName}.map`);
 
@@ -866,12 +849,21 @@ export const commands = {
 
     const v = await question('是否现在上传此热更包?(Y/N)');
     if (v.toLowerCase() === 'y') {
-      await this.publish({
+    const versionName = await this.publish({
         args: [realOutput],
         options: {
           platform,
         },
       });
+      if (isSentry) {
+        await copyDebugidForSentry(bundleName, intermediaDir, sourcemapOutput);
+        await uploadSourcemapForSentry(
+          bundleName,
+          intermediaDir,
+          sourcemapOutput,
+          versionName,
+        );
+      }
     }
   },
 
