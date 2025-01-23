@@ -9,7 +9,7 @@ interface BundleParams {
 
 export async function checkPlugins(): Promise<BundleParams> {
   const params: BundleParams = {
-    sentry: true,
+    sentry: false,
     minify: true,
     sourcemap: false,
   };
