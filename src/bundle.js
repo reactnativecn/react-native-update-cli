@@ -366,34 +366,47 @@ async function uploadSourcemapForSentry(
   sourcemapOutput,
 ) {
   if (sourcemapOutput) {
-    const uploadSourcemapPath = require.resolve(
-      '@sentry/cli/bin/sentry-cli',
-      {
-        paths: [process.cwd()],
-      },
-    );
-    if (!fs.existsSync(uploadSourcemapPath)) {
+    const sentryCliPath = require.resolve('@sentry/cli/bin/sentry-cli', {
+      paths: [process.cwd()],
+    });
+    if (!fs.existsSync(sentryCliPath)) {
       return;
     }
+    const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const version = packageJson.version;
+
+    spawnSync('node', [
+      sentryCliPath,
+      'releases',
+      'set-commits',
+      version,
+      '--auto'
+    ], {
+      stdio: 'inherit',
+    });
+    console.log(`Sentry release created for version: ${version}`);
+
     console.log('Uploading sourcemap');
     spawnSync(
       'node',
       [
-        uploadSourcemapPath,
-        'sourcemaps',
-        'upload',
-        '--debug-id-reference',
+        sentryCliPath,
+        'releases',
+        'files',
+        version,
+        'upload-sourcemaps',
         '--strip-prefix',
         path.join(process.cwd(), outputFolder),
         path.join(outputFolder, bundleName),
         path.join(outputFolder, `${bundleName}.map`),
       ],
       {
-        stdio: 'ignore',
+        stdio: 'inherit',
       },
     );
+
+    fs.removeSync(path.join(outputFolder, `${bundleName}.map`));
   }
-  fs.removeSync(path.join(outputFolder, `${bundleName}.map`));
 }
 
 async function pack(dir, output) {
