@@ -6,6 +6,7 @@ import AppInfoParser from './app-info-parser';
 import semverSatisfies from 'semver/functions/satisfies';
 import chalk from 'chalk';
 import latestVersion from '@badisi/latest-version';
+import { checkPlugins } from './check-plugin';
 
 import { read } from 'read';
 
@@ -225,3 +226,5 @@ export async function printVersionCommand() {
 }
 
 export const pricingPageUrl = 'https://pushy.reactnative.cn/pricing.html';
+
+export { checkPlugins };

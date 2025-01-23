@@ -97,8 +97,9 @@ export const commands = {
 
     const { hash } = await uploadFile(fn);
 
+    const versionName = name || (await question('输入版本名称: ')) || '(未命名)';
     const { id } = await post(`/app/${appId}/version/create`, {
-      name: name || (await question('输入版本名称: ')) || '(未命名)',
+      name: versionName,
       hash,
       description: description || (await question('输入版本描述:')),
       metaInfo: metaInfo || (await question('输入自定义的 meta info:')),
@@ -111,6 +112,7 @@ export const commands = {
     if (v.toLowerCase() === 'y') {
       await this.update({ args: [], options: { versionId: id, platform } });
     }
+    return versionName;
   },
   versions: async ({ options }) => {
     const platform = checkPlatform(

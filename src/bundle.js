@@ -3,7 +3,7 @@ import { getRNVersion, translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
-import { question, printVersionCommand } from './utils';
+import { question, checkPlugins } from './utils';
 import { checkPlatform } from './app';
 import { spawn, spawnSync } from 'node:child_process';
 import semverSatisfies from 'semver/functions/satisfies';
@@ -86,6 +86,9 @@ async function runReactNativeBundleCommand(
       });
     }
   }
+  const bundleParams = await checkPlugins();
+  const minifyOption = bundleParams.minify;
+  const isSentry = bundleParams.sentry;
   const bundleCommand = usingExpo
     ? 'export:embed'
     : platform === 'harmony'
@@ -123,6 +126,8 @@ async function runReactNativeBundleCommand(
       '--platform',
       platform,
       '--reset-cache',
+      '--minify',
+      minifyOption,
     ]);
 
     if (sourcemapOutput) {
@@ -190,6 +195,7 @@ async function runReactNativeBundleCommand(
             bundleName,
             outputFolder,
             sourcemapOutput,
+            !isSentry,
           );
         }
         resolve(null);
@@ -253,6 +259,7 @@ async function compileHermesByteCode(
   bundleName,
   outputFolder,
   sourcemapOutput,
+  shouldCleanSourcemap,
 ) {
   console.log('Hermes enabled, now compiling to hermes bytecode:\n');
   // >= rn 0.69
@@ -309,7 +316,96 @@ async function compileHermesByteCode(
       },
     );
   }
+  if (shouldCleanSourcemap) {
+    fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+  }
+}
+
+async function copyDebugidForSentry(bundleName, outputFolder, sourcemapOutput) {
+  if (sourcemapOutput) {
+    let copyDebugidPath;
+    try {
+      copyDebugidPath = require.resolve(
+        '@sentry/react-native/scripts/copy-debugid.js',
+        {
+          paths: [process.cwd()],
+        },
+      );
+    } catch (error) {
+      console.error(
+        '无法找到 Sentry copy-debugid.js 脚本文件，请确保已正确安装 @sentry/react-native',
+      );
+      return;
+    }
+
+    if (!fs.existsSync(copyDebugidPath)) {
+      return;
+    }
+    console.log('Copying debugid');
+    spawnSync(
+      'node',
+      [
+        copyDebugidPath,
+        path.join(outputFolder, `${bundleName}.txt.map`),
+        path.join(outputFolder, `${bundleName}.map`),
+      ],
+      {
+        stdio: 'ignore',
+      },
+    );
+  }
   fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+}
+
+async function uploadSourcemapForSentry(
+  bundleName,
+  outputFolder,
+  sourcemapOutput,
+  version,
+) {
+  if (sourcemapOutput) {
+    let sentryCliPath;
+    try {
+      sentryCliPath = require.resolve('@sentry/cli/bin/sentry-cli', {
+        paths: [process.cwd()],
+      });
+    } catch (error) {
+      console.error('无法找到 Sentry CLI 工具，请确保已正确安装 @sentry/cli');
+      return;
+    }
+
+    if (!fs.existsSync(sentryCliPath)) {
+      return;
+    }
+
+    spawnSync(
+      'node',
+      [sentryCliPath, 'releases', 'set-commits', version, '--auto'],
+      {
+        stdio: 'inherit',
+      },
+    );
+    console.log(`Sentry release created for version: ${version}`);
+
+    console.log('Uploading sourcemap');
+    spawnSync(
+      'node',
+      [
+        sentryCliPath,
+        'releases',
+        'files',
+        version,
+        'upload-sourcemaps',
+        '--strip-prefix',
+        path.join(process.cwd(), outputFolder),
+        path.join(outputFolder, bundleName),
+        path.join(outputFolder, `${bundleName}.map`),
+      ],
+      {
+        stdio: 'inherit',
+      },
+    );
+  }
 }
 
 async function pack(dir, output) {
@@ -718,11 +814,15 @@ export const commands = {
       options.platform || (await question('平台(ios/android/harmony):')),
     );
 
-    const { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
+    const { bundleName, entryFile, intermediaDir, output, dev } =
       translateOptions({
         ...options,
         platform,
       });
+
+    const bundleParams = await checkPlugins();
+    const sourcemap = bundleParams.sourcemap;
+    const isSentry = bundleParams.sentry;
 
     const sourcemapOutput = path.join(intermediaDir, `${bundleName}.map`);
 
@@ -749,12 +849,21 @@ export const commands = {
 
     const v = await question('是否现在上传此热更包?(Y/N)');
     if (v.toLowerCase() === 'y') {
-      await this.publish({
+    const versionName = await this.publish({
         args: [realOutput],
         options: {
           platform,
         },
       });
+      if (isSentry) {
+        await copyDebugidForSentry(bundleName, intermediaDir, sourcemapOutput);
+        await uploadSourcemapForSentry(
+          bundleName,
+          intermediaDir,
+          sourcemapOutput,
+          versionName,
+        );
+      }
     }
   },
 
