@@ -87,7 +87,6 @@ async function runReactNativeBundleCommand(
     }
   }
   const bundleParams = await checkPlugins();
-  const minifyOption = bundleParams.minify;
   const isSentry = bundleParams.sentry;
   const bundleCommand = usingExpo
     ? 'export:embed'
@@ -126,8 +125,6 @@ async function runReactNativeBundleCommand(
       '--platform',
       platform,
       '--reset-cache',
-      '--minify',
-      minifyOption,
     ]);
 
     if (sourcemapOutput) {
