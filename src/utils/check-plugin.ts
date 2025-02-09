@@ -2,7 +2,6 @@ import { plugins } from './plugin-config';
 
 interface BundleParams {
   sentry: boolean;
-  minify: boolean;
   sourcemap: boolean;
   [key: string]: any;
 }
@@ -10,7 +9,6 @@ interface BundleParams {
 export async function checkPlugins(): Promise<BundleParams> {
   const params: BundleParams = {
     sentry: false,
-    minify: true,
     sourcemap: false,
   };
 

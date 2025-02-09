@@ -3,7 +3,6 @@ import fs from 'fs-extra';
 interface PluginConfig {
   name: string;
   bundleParams?: {
-    minify?: boolean;
     [key: string]: any;
   };
   detect: () => Promise<boolean>;
@@ -14,7 +13,6 @@ export const plugins: PluginConfig[] = [
     name: 'sentry',
     bundleParams: {
       sentry: true,
-      minify: false,
       sourcemap: true,
     },
     detect: async () => {
