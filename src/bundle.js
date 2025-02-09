@@ -87,7 +87,6 @@ async function runReactNativeBundleCommand(
     }
   }
   const bundleParams = await checkPlugins();
-  const minifyOption = bundleParams.minify;
   const isSentry = bundleParams.sentry;
   const bundleCommand = usingExpo
     ? 'export:embed'
@@ -126,8 +125,6 @@ async function runReactNativeBundleCommand(
       '--platform',
       platform,
       '--reset-cache',
-      '--minify',
-      minifyOption,
     ]);
 
     if (sourcemapOutput) {
@@ -420,7 +417,7 @@ async function pack(dir, output) {
       }
       const childs = fs.readdirSync(root);
       for (const name of childs) {
-        if (name === '.' || name === '..' || name === 'index.bundlejs.map') {
+        if (name === '.' || name === '..' || name === 'index.bundlejs.map' || name === 'index.bundlejs.txt.map') {
           continue;
         }
         const fullPath = path.join(root, name);
@@ -814,14 +811,14 @@ export const commands = {
       options.platform || (await question('平台(ios/android/harmony):')),
     );
 
-    const { bundleName, entryFile, intermediaDir, output, dev } =
+    const { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
       translateOptions({
         ...options,
         platform,
       });
 
     const bundleParams = await checkPlugins();
-    const sourcemap = bundleParams.sourcemap;
+    const sourcemapPlugin = bundleParams.sourcemap;
     const isSentry = bundleParams.sentry;
 
     const sourcemapOutput = path.join(intermediaDir, `${bundleName}.map`);
@@ -842,7 +839,7 @@ export const commands = {
       entryFile,
       intermediaDir,
       platform,
-      sourcemap ? sourcemapOutput : '',
+      sourcemap || sourcemapPlugin ? sourcemapOutput : '',
     );
 
     await pack(path.resolve(intermediaDir), realOutput);
