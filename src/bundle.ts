@@ -22,16 +22,20 @@ try {
   hdiff = require('node-hdiffpatch').diff;
 } catch (e) {}
 
+
 async function runReactNativeBundleCommand(
-  bundleName,
-  development,
-  entryFile,
-  outputFolder,
-  platform,
-  sourcemapOutput,
-  config,
+  bundleName: string,
+  development: string,
+  entryFile: string,
+  outputFolder: string,
+  platform: string,
+  sourcemapOutput: string,
+  config: string,
 ) {
-  let gradleConfig = {};
+  let gradleConfig: {
+    crunchPngs?: boolean;
+    enableHermes?: boolean;
+  } = {};
   if (platform === 'android') {
     gradleConfig = await checkGradleConfig();
     if (gradleConfig.crunchPngs !== false) {
@@ -41,7 +45,7 @@ async function runReactNativeBundleCommand(
     }
   }
 
-  const reactNativeBundleArgs = [];
+  const reactNativeBundleArgs: string[] = [];
 
   const envArgs = process.env.PUSHY_ENV_ARGS;
 
@@ -158,17 +162,17 @@ async function runReactNativeBundleCommand(
           ),
         );
       } else {
-        let hermesEnabled = false;
+        let hermesEnabled: boolean | undefined = false;
 
         if (platform === 'android') {
-          const gradlePropeties = await new Promise((resolve) => {
+          const gradlePropeties = await new Promise<{ hermesEnabled?: boolean }>((resolve) => {
             properties.parse(
               './android/gradle.properties',
               { path: true },
-              (error, props) => {
+              (error: any, props: { hermesEnabled?: boolean }) => {
                 if (error) {
                   console.error(error);
-                  resolve(null);
+                  resolve({});
                 }
 
                 resolve(props);
@@ -201,7 +205,7 @@ async function runReactNativeBundleCommand(
   });
 }
 
-async function copyHarmonyBundle(outputFolder) {
+async function copyHarmonyBundle(outputFolder: string) {
   const harmonyRawPath = 'harmony/entry/src/main/resources/rawfile';
   try {
     await fs.ensureDir(harmonyRawPath);
@@ -215,7 +219,7 @@ async function copyHarmonyBundle(outputFolder) {
 
     await fs.ensureDir(outputFolder);
     await fs.copy(harmonyRawPath, outputFolder);
-  } catch (error) {
+  } catch (error: any) {
     console.error('copyHarmonyBundle 错误:', error);
     throw new Error(`复制文件失败: ${error.message}`);
   }
@@ -253,10 +257,10 @@ async function checkGradleConfig() {
 }
 
 async function compileHermesByteCode(
-  bundleName,
-  outputFolder,
-  sourcemapOutput,
-  shouldCleanSourcemap,
+  bundleName: string,
+  outputFolder: string,
+  sourcemapOutput: string,
+  shouldCleanSourcemap: boolean,
 ) {
   console.log('Hermes enabled, now compiling to hermes bytecode:\n');
   // >= rn 0.69
@@ -318,7 +322,7 @@ async function compileHermesByteCode(
   }
 }
 
-async function copyDebugidForSentry(bundleName, outputFolder, sourcemapOutput) {
+async function copyDebugidForSentry(bundleName: string, outputFolder: string, sourcemapOutput: string) {
   if (sourcemapOutput) {
     let copyDebugidPath;
     try {
@@ -355,10 +359,10 @@ async function copyDebugidForSentry(bundleName, outputFolder, sourcemapOutput) {
 }
 
 async function uploadSourcemapForSentry(
-  bundleName,
-  outputFolder,
-  sourcemapOutput,
-  version,
+  bundleName: string,
+  outputFolder: string,
+  sourcemapOutput: string,
+  version: string,
 ) {
   if (sourcemapOutput) {
     let sentryCliPath;
@@ -405,19 +409,21 @@ async function uploadSourcemapForSentry(
   }
 }
 
-async function pack(dir, output) {
+const ignorePackingFileNames = ['.', '..', 'index.bundlejs.map'];
+const ignorePackingExtensions = ['DS_Store'];
+async function pack(dir: string, output: string) {
   console.log('Packing');
   fs.ensureDirSync(path.dirname(output));
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const zipfile = new ZipFile();
 
-    function addDirectory(root, rel) {
+    function addDirectory(root: string, rel: string) {
       if (rel) {
         zipfile.addEmptyDirectory(rel);
       }
       const childs = fs.readdirSync(root);
       for (const name of childs) {
-        if (name === '.' || name === '..' || name === 'index.bundlejs.map' || name === 'index.bundlejs.txt.map') {
+        if (ignorePackingFileNames.includes(name) || ignorePackingExtensions.some(ext => name.endsWith(`.${ext}`))) {
           continue;
         }
         const fullPath = path.join(root, name);
@@ -434,7 +440,7 @@ async function pack(dir, output) {
 
     addDirectory(dir, '');
 
-    zipfile.outputStream.on('error', (err) => reject(err));
+    zipfile.outputStream.on('error', (err: any) => reject(err));
     zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
       resolve();
     });
@@ -443,12 +449,12 @@ async function pack(dir, output) {
   console.log(`ppk热更包已生成并保存到: ${output}`);
 }
 
-export function readEntire(entry, zipFile) {
-  const buffers = [];
+export function readEntire(entry: string, zipFile: ZipFile) {
+  const buffers: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    zipFile.openReadStream(entry, (err, stream) => {
+    zipFile.openReadStream(entry, (err: any, stream: any) => {
       stream.pipe({
-        write(chunk) {
+        write(chunk: Buffer) {
           buffers.push(chunk);
         },
         end() {
@@ -463,12 +469,12 @@ export function readEntire(entry, zipFile) {
   });
 }
 
-function basename(fn) {
+function basename(fn: string) {
   const m = /^(.+\/)[^\/]+\/?$/.exec(fn);
   return m?.[1];
 }
 
-async function diffFromPPK(origin, next, output) {
+async function diffFromPPK(origin: string, next: string, output: string) {
   fs.ensureDirSync(path.dirname(output));
 
   const originEntries = {};
@@ -513,7 +519,7 @@ async function diffFromPPK(origin, next, output) {
 
   const addedEntry = {};
 
-  function addEntry(fn) {
+  function addEntry(fn: string) {
     //console.log(fn);
     if (!fn || addedEntry[fn]) {
       return;
@@ -610,11 +616,11 @@ async function diffFromPPK(origin, next, output) {
 }
 
 async function diffFromPackage(
-  origin,
-  next,
-  output,
-  originBundleName,
-  transformPackagePath = (v) => v,
+  origin: string,
+  next: string,
+  output: string,
+  originBundleName: string,
+  transformPackagePath = (v: string) => v,
 ) {
   fs.ensureDirSync(path.dirname(output));
 
@@ -623,7 +629,7 @@ async function diffFromPackage(
 
   let originSource;
 
-  await enumZipEntries(origin, (entry, zipFile) => {
+  await enumZipEntries(origin, (entry: any, zipFile: any) => {
     if (!/\/$/.test(entry.fileName)) {
       const fn = transformPackagePath(entry.fileName);
       if (!fn) {
@@ -717,9 +723,9 @@ async function diffFromPackage(
   await writePromise;
 }
 
-export async function enumZipEntries(zipFn, callback, nestedPath = '') {
+export async function enumZipEntries(zipFn: string, callback: (entry: any, zipFile: any) => void, nestedPath = '') {
   return new Promise((resolve, reject) => {
-    openZipFile(zipFn, { lazyEntries: true }, async (err, zipfile) => {
+    openZipFile(zipFn, { lazyEntries: true }, async (err: any, zipfile: ZipFile) => {
       if (err) {
         return reject(err);
       }
