@@ -22,16 +22,29 @@ try {
   hdiff = require('node-hdiffpatch').diff;
 } catch (e) {}
 
-
-async function runReactNativeBundleCommand(
-  bundleName: string,
-  development: string,
-  entryFile: string,
-  outputFolder: string,
-  platform: string,
-  sourcemapOutput: string,
-  config: string,
-) {
+async function runReactNativeBundleCommand({
+  bundleName,
+  dev,
+  entryFile,
+  outputFolder,
+  platform,
+  sourcemapOutput,
+  config,
+  cli,
+}: {
+  bundleName: string;
+  dev: string;
+  entryFile: string;
+  outputFolder: string;
+  platform: string;
+  sourcemapOutput: string;
+  config?: string;
+  cli: {
+    taro?: boolean;
+    expo?: boolean;
+    rncli?: boolean;
+  };
+}) {
   let gradleConfig: {
     crunchPngs?: boolean;
     enableHermes?: boolean;
@@ -58,26 +71,31 @@ async function runReactNativeBundleCommand(
 
   fs.emptyDirSync(outputFolder);
 
-  let cliPath;
-
+  let cliPath: string | undefined;
   let usingExpo = false;
-  try {
-    cliPath = require.resolve('@expo/cli', {
-      paths: [process.cwd()],
-    });
-    const expoCliVersion = JSON.parse(
-      fs.readFileSync(
-        require.resolve('@expo/cli/package.json', {
-          paths: [process.cwd()],
-        }),
-      ),
-    ).version;
-    // expo cli 0.10.17 (expo 49) 开始支持 bundle:embed
-    if (semverSatisfies(expoCliVersion, '>= 0.10.17')) {
-      usingExpo = true;
-    }
-  } catch (e) {}
-  if (!usingExpo) {
+
+  const getExpoCli = () => {
+    try {
+      cliPath = require.resolve('@expo/cli', {
+        paths: [process.cwd()],
+      });
+      const expoCliVersion = JSON.parse(
+        fs.readFileSync(
+          require.resolve('@expo/cli/package.json', {
+            paths: [process.cwd()],
+          }),
+        ),
+      ).version;
+      // expo cli 0.10.17 (expo 49) 开始支持 bundle:embed
+      if (semverSatisfies(expoCliVersion, '>= 0.10.17')) {
+        usingExpo = true;
+      } else {
+        cliPath = undefined;
+      }
+    } catch (e) {}
+  };
+
+  const getRnCli = () => {
     try {
       // rn >= 0.75
       cliPath = require.resolve('@react-native-community/cli/build/bin.js', {
@@ -89,20 +107,49 @@ async function runReactNativeBundleCommand(
         paths: [process.cwd()],
       });
     }
+  };
+
+  const getTaroCli = () => {
+    try {
+      cliPath = require.resolve('@tarojs/cli/bin/taro.js', {
+        paths: [process.cwd()],
+      });
+    } catch (e) {}
+  };
+
+  if (cli.expo) {
+    getExpoCli();
+  } else if (cli.taro) {
+    getTaroCli();
+  } else if (cli.rncli) {
+    getRnCli();
   }
+
+  if (!cliPath) {
+    getExpoCli();
+    if (!usingExpo) {
+      getRnCli();
+    }
+  }
+
   const bundleParams = await checkPlugins();
   const isSentry = bundleParams.sentry;
-  const bundleCommand = usingExpo
-    ? 'export:embed'
-    : platform === 'harmony'
-    ? 'bundle-harmony'
-    : 'bundle';
+
+  let bundleCommand = 'bundle';
+  if (usingExpo) {
+    bundleCommand = 'export:embed';
+  } else if (platform === 'harmony') {
+    bundleCommand = 'bundle-harmony';
+  } else if (cli.taro) {
+    bundleCommand = 'build';
+  }
+
   if (platform === 'harmony') {
     Array.prototype.push.apply(reactNativeBundleArgs, [
       cliPath,
       bundleCommand,
       '--dev',
-      development,
+      dev,
       '--entry-file',
       entryFile,
     ]);
@@ -122,14 +169,24 @@ async function runReactNativeBundleCommand(
       outputFolder,
       '--bundle-output',
       path.join(outputFolder, bundleName),
-      '--dev',
-      development,
-      '--entry-file',
-      entryFile,
       '--platform',
       platform,
       '--reset-cache',
     ]);
+    
+    if (cli.taro) {
+      reactNativeBundleArgs.push(...[
+        '--type',
+        'rn',
+      ])
+    } else {
+      reactNativeBundleArgs.push(...[
+        '--dev',
+        dev,
+        '--entry-file',
+        entryFile,
+      ]) 
+    }
 
     if (sourcemapOutput) {
       reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
@@ -165,7 +222,9 @@ async function runReactNativeBundleCommand(
         let hermesEnabled: boolean | undefined = false;
 
         if (platform === 'android') {
-          const gradlePropeties = await new Promise<{ hermesEnabled?: boolean }>((resolve) => {
+          const gradlePropeties = await new Promise<{
+            hermesEnabled?: boolean;
+          }>((resolve) => {
             properties.parse(
               './android/gradle.properties',
               { path: true },
@@ -322,7 +381,11 @@ async function compileHermesByteCode(
   }
 }
 
-async function copyDebugidForSentry(bundleName: string, outputFolder: string, sourcemapOutput: string) {
+async function copyDebugidForSentry(
+  bundleName: string,
+  outputFolder: string,
+  sourcemapOutput: string,
+) {
   if (sourcemapOutput) {
     let copyDebugidPath;
     try {
@@ -423,7 +486,10 @@ async function pack(dir: string, output: string) {
       }
       const childs = fs.readdirSync(root);
       for (const name of childs) {
-        if (ignorePackingFileNames.includes(name) || ignorePackingExtensions.some(ext => name.endsWith(`.${ext}`))) {
+        if (
+          ignorePackingFileNames.includes(name) ||
+          ignorePackingExtensions.some((ext) => name.endsWith(`.${ext}`))
+        ) {
           continue;
         }
         const fullPath = path.join(root, name);
@@ -723,55 +789,66 @@ async function diffFromPackage(
   await writePromise;
 }
 
-export async function enumZipEntries(zipFn: string, callback: (entry: any, zipFile: any) => void, nestedPath = '') {
+export async function enumZipEntries(
+  zipFn: string,
+  callback: (entry: any, zipFile: any) => void,
+  nestedPath = '',
+) {
   return new Promise((resolve, reject) => {
-    openZipFile(zipFn, { lazyEntries: true }, async (err: any, zipfile: ZipFile) => {
-      if (err) {
-        return reject(err);
-      }
-
-      zipfile.on('end', resolve);
-      zipfile.on('error', reject);
-      zipfile.on('entry', async (entry) => {
-        const fullPath = nestedPath + entry.fileName;
-
-        try {
-          if (
-            !entry.fileName.endsWith('/') &&
-            entry.fileName.toLowerCase().endsWith('.hap')
-          ) {
-            const tempDir = path.join(os.tmpdir(), `nested_zip_${Date.now()}`);
-            await fs.ensureDir(tempDir);
-            const tempZipPath = path.join(tempDir, 'temp.zip');
-
-            await new Promise((res, rej) => {
-              zipfile.openReadStream(entry, async (err, readStream) => {
-                if (err) return rej(err);
-                const writeStream = fs.createWriteStream(tempZipPath);
-                readStream.pipe(writeStream);
-                writeStream.on('finish', res);
-                writeStream.on('error', rej);
-              });
-            });
-
-            await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
-
-            await fs.remove(tempDir);
-          }
-
-          const result = callback(entry, zipfile, fullPath);
-          if (result && typeof result.then === 'function') {
-            await result;
-          }
-        } catch (error) {
-          console.error('处理文件时出错:', error);
+    openZipFile(
+      zipFn,
+      { lazyEntries: true },
+      async (err: any, zipfile: ZipFile) => {
+        if (err) {
+          return reject(err);
         }
 
-        zipfile.readEntry();
-      });
+        zipfile.on('end', resolve);
+        zipfile.on('error', reject);
+        zipfile.on('entry', async (entry) => {
+          const fullPath = nestedPath + entry.fileName;
 
-      zipfile.readEntry();
-    });
+          try {
+            if (
+              !entry.fileName.endsWith('/') &&
+              entry.fileName.toLowerCase().endsWith('.hap')
+            ) {
+              const tempDir = path.join(
+                os.tmpdir(),
+                `nested_zip_${Date.now()}`,
+              );
+              await fs.ensureDir(tempDir);
+              const tempZipPath = path.join(tempDir, 'temp.zip');
+
+              await new Promise((res, rej) => {
+                zipfile.openReadStream(entry, async (err, readStream) => {
+                  if (err) return rej(err);
+                  const writeStream = fs.createWriteStream(tempZipPath);
+                  readStream.pipe(writeStream);
+                  writeStream.on('finish', res);
+                  writeStream.on('error', rej);
+                });
+              });
+
+              await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
+
+              await fs.remove(tempDir);
+            }
+
+            const result = callback(entry, zipfile, fullPath);
+            if (result && typeof result.then === 'function') {
+              await result;
+            }
+          } catch (error) {
+            console.error('处理文件时出错:', error);
+          }
+
+          zipfile.readEntry();
+        });
+
+        zipfile.readEntry();
+      },
+    );
   });
 }
 
@@ -817,11 +894,20 @@ export const commands = {
       options.platform || (await question('平台(ios/android/harmony):')),
     );
 
-    const { bundleName, entryFile, intermediaDir, output, dev, sourcemap } =
-      translateOptions({
-        ...options,
-        platform,
-      });
+    const {
+      bundleName,
+      entryFile,
+      intermediaDir,
+      output,
+      dev,
+      sourcemap,
+      taro,
+      expo,
+      rncli,
+    } = translateOptions({
+      ...options,
+      platform,
+    });
 
     const bundleParams = await checkPlugins();
     const sourcemapPlugin = bundleParams.sourcemap;
@@ -839,20 +925,25 @@ export const commands = {
 
     console.log(`Bundling with react-native: ${version}`);
 
-    await runReactNativeBundleCommand(
+    await runReactNativeBundleCommand({
       bundleName,
       dev,
       entryFile,
-      intermediaDir,
+      outputFolder: intermediaDir,
       platform,
-      sourcemap || sourcemapPlugin ? sourcemapOutput : '',
-    );
+      sourcemapOutput: sourcemap || sourcemapPlugin ? sourcemapOutput : '',
+      cli: {
+        taro,
+        expo,
+        rncli,
+      },
+    });
 
     await pack(path.resolve(intermediaDir), realOutput);
 
     const v = await question('是否现在上传此热更包?(Y/N)');
     if (v.toLowerCase() === 'y') {
-    const versionName = await this.publish({
+      const versionName = await this.publish({
         args: [realOutput],
         options: {
           platform,
