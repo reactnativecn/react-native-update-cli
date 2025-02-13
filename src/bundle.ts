@@ -111,7 +111,7 @@ async function runReactNativeBundleCommand({
 
   const getTaroCli = () => {
     try {
-      cliPath = require.resolve('@tarojs/cli/bin/taro.js', {
+      cliPath = require.resolve('@tarojs/cli/bin/taro', {
         paths: [process.cwd()],
       });
     } catch (e) {}
