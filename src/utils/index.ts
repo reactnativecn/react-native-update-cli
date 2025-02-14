@@ -55,7 +55,7 @@ export function getRNVersion() {
   };
 }
 
-export async function getApkInfo(fn) {
+export async function getApkInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);
   const bundleFile = await appInfoParser.parser.getEntry(
     /assets\/index.android.bundle/,

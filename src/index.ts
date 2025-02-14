@@ -2,8 +2,24 @@
 
 import { loadSession } from './api';
 import updateNotifier from 'update-notifier';
-import { printVersionCommand } from './utils/index.js';
+import { printVersionCommand } from './utils';
 import pkg from '../package.json';
+import path from 'node:path';
+import i18next from 'i18next';
+
+const scriptName: 'cresc' | 'pushy' = path.basename(process.argv[1]) as
+  | 'cresc'
+  | 'pushy';
+global.IS_CRESC = scriptName === 'cresc';
+
+i18next.init({
+  lng: global.IS_CRESC ? 'en' : 'zh',
+  debug: process.env.NODE_ENV !== 'production',
+  resources: {
+    en: require('./locales/en.json'),
+    zh: require('./locales/zh.json'),
+  },
+});
 
 updateNotifier({ pkg }).notify({
   isGlobal: true,

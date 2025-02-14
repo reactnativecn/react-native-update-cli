@@ -121,7 +121,7 @@ export async function uploadFile(fn: string, key?: string) {
         timeout: 1000,
       });
       // console.log({pingResult});
-      if (isNaN(pingResult.avg) || pingResult.avg > 150) {
+      if (Number.isNaN(pingResult.avg) || pingResult.avg > 150) {
         realUrl = backupUrl;
       }
     }
