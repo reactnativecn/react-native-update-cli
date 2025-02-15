@@ -42,7 +42,7 @@ class Zip {
     regex = decodeNullUnicode(regex);
     return new Promise((resolve, reject) => {
       this.unzip.getBuffer([regex], { type }, (err, buffers) => {
-        console.log(buffers);
+        // console.log(buffers);
         err ? reject(err) : resolve(buffers[regex]);
       });
     });
