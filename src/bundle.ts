@@ -30,6 +30,7 @@ async function runReactNativeBundleCommand({
   platform,
   sourcemapOutput,
   config,
+  disableHermes,
   cli,
 }: {
   bundleName: string;
@@ -39,6 +40,7 @@ async function runReactNativeBundleCommand({
   platform: string;
   sourcemapOutput: string;
   config?: string;
+  disableHermes?: boolean;
   cli: {
     taro?: boolean;
     expo?: boolean;
@@ -84,7 +86,7 @@ async function runReactNativeBundleCommand({
           require.resolve('@expo/cli/package.json', {
             paths: [process.cwd()],
           }),
-        ),
+        ).toString(),
       ).version;
       // expo cli 0.10.17 (expo 49) 开始支持 bundle:embed
       if (semverSatisfies(expoCliVersion, '>= 0.10.17')) {
@@ -221,7 +223,9 @@ async function runReactNativeBundleCommand({
       } else {
         let hermesEnabled: boolean | undefined = false;
 
-        if (platform === 'android') {
+        if (disableHermes) {
+          hermesEnabled = false;
+        } else if (platform === 'android') {
           const gradlePropeties = await new Promise<{
             hermesEnabled?: boolean;
           }>((resolve) => {
@@ -904,6 +908,7 @@ export const commands = {
       taro,
       expo,
       rncli,
+      disableHermes,
     } = translateOptions({
       ...options,
       platform,
@@ -932,6 +937,7 @@ export const commands = {
       outputFolder: intermediaDir,
       platform,
       sourcemapOutput: sourcemap || sourcemapPlugin ? sourcemapOutput : '',
+      disableHermes,
       cli: {
         taro,
         expo,
