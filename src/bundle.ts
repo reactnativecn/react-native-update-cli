@@ -225,6 +225,7 @@ async function runReactNativeBundleCommand({
 
         if (disableHermes) {
           hermesEnabled = false;
+          console.log('Hermes disabled');
         } else if (platform === 'android') {
           const gradlePropeties = await new Promise<{
             hermesEnabled?: boolean;

@@ -6,6 +6,8 @@ import { printVersionCommand } from './utils';
 import pkg from '../package.json';
 import path from 'node:path';
 import i18next from 'i18next';
+import en from './locales/en';
+import zh from './locales/zh';
 
 const scriptName: 'cresc' | 'pushy' = path.basename(process.argv[1]) as
   | 'cresc'
@@ -14,10 +16,10 @@ global.IS_CRESC = scriptName === 'cresc';
 
 i18next.init({
   lng: global.IS_CRESC ? 'en' : 'zh',
-  debug: process.env.NODE_ENV !== 'production',
+  // debug: process.env.NODE_ENV !== 'production',
   resources: {
-    en: require('./locales/en.json'),
-    zh: require('./locales/zh.json'),
+    en,
+    zh,
   },
 });
 
