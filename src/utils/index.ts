@@ -9,8 +9,9 @@ import latestVersion from '@badisi/latest-version';
 import { checkPlugins } from './check-plugin';
 
 import { read } from 'read';
+import { tempDir } from './constants';
 
-export async function question(query, password) {
+export async function question(query: string, password: boolean) {
   if (NO_INTERACTIVE) {
     return '';
   }
@@ -21,7 +22,7 @@ export async function question(query, password) {
   });
 }
 
-export function translateOptions(options) {
+export function translateOptions(options: Record<string, string>) {
   const ret = {};
   for (const key in options) {
     const v = options[key];
@@ -163,16 +164,16 @@ export async function getIpaInfo(fn: string) {
   return { versionName, buildTime, ...appCredential };
 }
 
-const localDir = path.resolve(os.homedir(), '.pushy');
+const localDir = path.resolve(os.homedir(), tempDir);
 fs.ensureDirSync(localDir);
-export function saveToLocal(originPath, destName) {
+export function saveToLocal(originPath: string, destName: string) {
   // TODO
   // const destPath = path.join(localDir, destName);
   // fs.ensureDirSync(path.dirname(destPath));
   // fs.copyFileSync(originPath, destPath);
 }
 
-async function getLatestVersion(pkgName) {
+async function getLatestVersion(pkgName: string) {
   return Promise.race([
     latestVersion(pkgName)
       .then((p) => p.latest)
@@ -225,6 +226,6 @@ export async function printVersionCommand() {
   }
 }
 
-export const pricingPageUrl = 'https://pushy.reactnative.cn/pricing.html';
+
 
 export { checkPlugins };
