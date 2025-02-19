@@ -4,18 +4,13 @@ import { loadSession } from './api';
 import updateNotifier from 'update-notifier';
 import { printVersionCommand } from './utils';
 import pkg from '../package.json';
-import path from 'node:path';
 import i18next from 'i18next';
 import en from './locales/en';
 import zh from './locales/zh';
-
-const scriptName: 'cresc' | 'pushy' = path.basename(process.argv[1]) as
-  | 'cresc'
-  | 'pushy';
-global.IS_CRESC = scriptName === 'cresc';
+import { IS_CRESC } from './utils/constants';
 
 i18next.init({
-  lng: global.IS_CRESC ? 'en' : 'zh',
+  lng: IS_CRESC ? 'en' : 'zh',
   // debug: process.env.NODE_ENV !== 'production',
   resources: {
     en,
@@ -57,7 +52,7 @@ async function run() {
 
   const argv = require('cli-arguments').parse(require('../cli.json'));
   global.NO_INTERACTIVE = argv.options['no-interactive'];
-  global.USE_ACC_OSS = argv.options['acc'];
+  global.USE_ACC_OSS = argv.options.acc;
 
   loadSession()
     .then(() => commands[argv.command](argv))

@@ -6,7 +6,7 @@ import ProgressBar from 'progress';
 import packageJson from '../package.json';
 import tcpp from 'tcp-ping';
 import filesizeParser from 'filesize-parser';
-import { pricingPageUrl, credentialFile } from './utils/constants';
+import { pricingPageUrl, credentialFile, IS_CRESC } from './utils/constants';
 import type { Session } from 'types';
 import FormData from 'form-data';
 
@@ -15,10 +15,12 @@ const tcpPing = util.promisify(tcpp.ping);
 let session: Session | undefined;
 let savedSession: Session | undefined;
 
-const defaultEndpoint = global.IS_CRESC
+const defaultEndpoint = IS_CRESC
   ? 'https://api.cresc.dev'
   : 'https://update.reactnative.cn/api';
-let host = process.env.PUSHY_REGISTRY || defaultEndpoint;
+
+const host =
+  process.env.PUSHY_REGISTRY || process.env.RNU_API || defaultEndpoint;
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 
@@ -27,8 +29,6 @@ export const getSession = () => session;
 export const replaceSession = (newSession: { token: string }) => {
   session = newSession;
 };
-
-
 
 export const loadSession = async () => {
   if (fs.existsSync(credentialFile)) {
@@ -60,7 +60,6 @@ export const closeSession = () => {
     savedSession = undefined;
   }
   session = undefined;
-  host = process.env.PUSHY_REGISTRY || defaultEndpoint;
 };
 
 async function query(url: string, options: fetch.RequestInit) {

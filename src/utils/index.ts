@@ -11,7 +11,7 @@ import { checkPlugins } from './check-plugin';
 import { read } from 'read';
 import { tempDir } from './constants';
 
-export async function question(query: string, password: boolean) {
+export async function question(query: string, password?: boolean) {
   if (NO_INTERACTIVE) {
     return '';
   }
