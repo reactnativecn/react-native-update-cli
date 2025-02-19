@@ -297,7 +297,7 @@ function getHermesOSBin() {
 
 async function checkGradleConfig() {
   let enableHermes = false;
-  let crunchPngs;
+  let crunchPngs: boolean | undefined;
   try {
     const gradleConfig = await g2js.parseFile('android/app/build.gradle');
     crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;

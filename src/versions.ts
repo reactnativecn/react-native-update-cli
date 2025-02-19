@@ -5,7 +5,7 @@ import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import { compare } from 'compare-versions';
 
-async function showVersion(appId, offset) {
+async function showVersion(appId: string, offset: number) {
   const { data, count } = await get(`/app/${appId}/version/list`);
   console.log(`Offset ${offset}`);
   for (const version of data) {
@@ -18,7 +18,7 @@ async function showVersion(appId, offset) {
       packageInfo += `...and ${count - 3} more`;
     }
     if (count === 0) {
-      packageInfo = `(no package)`;
+      packageInfo = 'no package';
     } else {
       packageInfo = `[${packageInfo}]`;
     }

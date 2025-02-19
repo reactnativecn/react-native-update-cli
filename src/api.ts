@@ -6,10 +6,9 @@ import ProgressBar from 'progress';
 import packageJson from '../package.json';
 import tcpp from 'tcp-ping';
 import filesizeParser from 'filesize-parser';
-import { pricingPageUrl } from './utils/constants';
+import { pricingPageUrl, credentialFile } from './utils/constants';
 import type { Session } from 'types';
 import FormData from 'form-data';
-import { credentialFile } from 'utils/constants';
 
 const tcpPing = util.promisify(tcpp.ping);
 
