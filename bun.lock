@@ -41,6 +41,8 @@
         "@types/semver": "^7.5.8",
         "@types/tcp-ping": "^0.1.6",
         "@types/update-notifier": "^6.0.8",
+        "@types/yauzl": "^2.10.3",
+        "@types/yazl": "^2.4.6",
         "typescript": "^5.7.2",
       },
     },
@@ -173,6 +175,10 @@
     "@types/tcp-ping": ["@types/tcp-ping@0.1.6", "", {}, "sha512-1TTOm3cK+0NrZ6uTlY51YERzo5tEW3RybX1594vy9oiZOc1vsVL4LmdiIklDJXYLlzmve5lBkM5GjvwBG1Bc4A=="],
 
     "@types/update-notifier": ["@types/update-notifier@6.0.8", "", { "dependencies": { "@types/configstore": "*", "boxen": "^7.1.1" } }, "sha512-IlDFnfSVfYQD+cKIg63DEXn3RFmd7W1iYtKQsJodcHK9R1yr8aKbKaPKfBxzPpcHCq2DU8zUq4PIPmy19Thjfg=="],
+
+    "@types/yauzl": ["@types/yauzl@2.10.3", "", { "dependencies": { "@types/node": "*" } }, "sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q=="],
+
+    "@types/yazl": ["@types/yazl@2.4.6", "", { "dependencies": { "@types/node": "*" } }, "sha512-/ifFjQtcKaoZOjl5NNCQRR0fAKafB3Foxd7J/WvFPTMea46zekapcR30uzkwIkKAAuq5T6d0dkwz754RFH27hg=="],
 
     "@xhmikosr/archive-type": ["@xhmikosr/archive-type@7.0.0", "", { "dependencies": { "file-type": "^19.0.0" } }, "sha512-sIm84ZneCOJuiy3PpWR5bxkx3HaNt1pqaN+vncUBZIlPZCq8ASZH+hBVdu5H8znR7qYC6sKwx+ie2Q7qztJTxA=="],
 

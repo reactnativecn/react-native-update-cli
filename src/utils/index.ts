@@ -23,7 +23,7 @@ export async function question(query: string, password?: boolean) {
 }
 
 export function translateOptions(options: Record<string, string>) {
-  const ret = {};
+  const ret: Record<string, string> = {};
   for (const key in options) {
     const v = options[key];
     if (typeof v === 'string') {
@@ -40,19 +40,21 @@ export function translateOptions(options: Record<string, string>) {
 
 export function getRNVersion() {
   const version = JSON.parse(
-    fs.readFileSync(
-      require.resolve('react-native/package.json', {
-        paths: [process.cwd()],
-      }),
-    ),
+    fs
+      .readFileSync(
+        require.resolve('react-native/package.json', {
+          paths: [process.cwd()],
+        }),
+      )
+      .toString(),
   ).version;
 
-  // We only care about major and minor version.
-  const match = /^(\d+)\.(\d+)\./.exec(version);
+  const [, major, minor] = /^(\d+)\.(\d+)\./.exec(version) || [];
+
   return {
     version,
-    major: match[1] | 0,
-    minor: match[2] | 0,
+    major: Number(major),
+    minor: Number(minor),
   };
 }
 
@@ -173,17 +175,22 @@ export function saveToLocal(originPath: string, destName: string) {
   // fs.copyFileSync(originPath, destPath);
 }
 
-async function getLatestVersion(pkgName: string) {
-  return Promise.race([
-    latestVersion(pkgName)
-      .then((p) => p.latest)
-      .catch(() => ''),
-    new Promise((resolve) => setTimeout(() => resolve(''), 2000)),
-  ]);
+async function getLatestVersion(pkgNames: string[]) {
+  return latestVersion(pkgNames, {
+    useCache: true,
+    requestOptions: {
+      timeout: 2000,
+    },
+  })
+    .then((pkgs) => pkgs.map((pkg) => pkg.latest))
+    .catch(() => []);
 }
 
 export async function printVersionCommand() {
-  let latestPushyCliVersion = await getLatestVersion('react-native-update-cli');
+  let [latestPushyCliVersion, latestPushyVersion] = await getLatestVersion([
+    'react-native-update-cli',
+    'react-native-update',
+  ]);
   latestPushyCliVersion = latestPushyCliVersion
     ? ` （最新：${chalk.green(latestPushyCliVersion)}）`
     : '';
@@ -199,7 +206,6 @@ export async function printVersionCommand() {
       },
     );
     pushyVersion = require(PACKAGE_JSON_PATH).version;
-    let latestPushyVersion = await getLatestVersion('react-native-update');
     latestPushyVersion = latestPushyVersion
       ? ` （最新：${chalk.green(latestPushyVersion)}）`
       : '';
@@ -225,7 +231,5 @@ export async function printVersionCommand() {
     }
   }
 }
-
-
 
 export { checkPlugins };
