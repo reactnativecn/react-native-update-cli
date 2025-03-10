@@ -5,6 +5,7 @@ import { checkPlatform, getSelectedApp } from './app';
 
 import { getApkInfo, getIpaInfo, getAppInfo } from './utils';
 import Table from 'tty-table';
+import { depVersions } from 'utils/dep-versions';
 
 export async function listPackage(appId: string) {
   const { data } = await get(`/app/${appId}/package/list?limit=1000`);
@@ -79,6 +80,7 @@ export const commands = {
       name: versionName,
       hash,
       buildTime,
+      deps: depVersions,
     });
     saveToLocal(fn, `${appId}/package/${id}.ipa`);
     console.log(
@@ -116,6 +118,7 @@ export const commands = {
       name: versionName,
       hash,
       buildTime,
+      deps: depVersions,
     });
     saveToLocal(fn, `${appId}/package/${id}.apk`);
     console.log(
@@ -153,6 +156,7 @@ export const commands = {
       name: versionName,
       hash,
       buildTime,
+      deps: depVersions,
     });
     saveToLocal(fn, `${appId}/package/${id}.app`);
     console.log(

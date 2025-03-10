@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { getRNVersion, translateOptions } from './utils';
+import { translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
@@ -10,6 +10,7 @@ import semverSatisfies from 'semver/functions/satisfies';
 const g2js = require('gradle-to-js/lib/parser');
 import os from 'node:os';
 const properties = require('properties');
+import { depVersions } from './utils/dep-versions';
 
 let bsdiff;
 let hdiff;
@@ -82,11 +83,13 @@ async function runReactNativeBundleCommand({
         paths: [process.cwd()],
       });
       const expoCliVersion = JSON.parse(
-        fs.readFileSync(
-          require.resolve('@expo/cli/package.json', {
-            paths: [process.cwd()],
-          }),
-        ).toString(),
+        fs
+          .readFileSync(
+            require.resolve('@expo/cli/package.json', {
+              paths: [process.cwd()],
+            }),
+          )
+          .toString(),
       ).version;
       // expo cli 0.10.17 (expo 49) 开始支持 bundle:embed
       if (semverSatisfies(expoCliVersion, '>= 0.10.17')) {
@@ -175,19 +178,11 @@ async function runReactNativeBundleCommand({
       platform,
       '--reset-cache',
     ]);
-    
+
     if (cli.taro) {
-      reactNativeBundleArgs.push(...[
-        '--type',
-        'rn',
-      ])
+      reactNativeBundleArgs.push(...['--type', 'rn']);
     } else {
-      reactNativeBundleArgs.push(...[
-        '--dev',
-        dev,
-        '--entry-file',
-        entryFile,
-      ]) 
+      reactNativeBundleArgs.push(...['--dev', dev, '--entry-file', entryFile]);
     }
 
     if (sourcemapOutput) {
@@ -927,9 +922,7 @@ export const commands = {
       throw new Error('Platform must be specified.');
     }
 
-    const { version, major, minor } = getRNVersion();
-
-    console.log(`Bundling with react-native: ${version}`);
+    console.log(`Bundling with react-native: ${depVersions['react-native']}`);
 
     await runReactNativeBundleCommand({
       bundleName,

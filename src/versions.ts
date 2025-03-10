@@ -4,6 +4,7 @@ import { question, saveToLocal } from './utils';
 import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import { compare } from 'compare-versions';
+import { depVersions } from 'utils/dep-versions';
 
 async function showVersion(appId: string, offset: number) {
   const { data, count } = await get(`/app/${appId}/version/list`);
@@ -103,6 +104,7 @@ export const commands = {
       hash,
       description: description || (await question('输入版本描述:')),
       metaInfo: metaInfo || (await question('输入自定义的 meta info:')),
+      deps: depVersions,
     });
     // TODO local diff
     saveToLocal(fn, `${appId}/ppk/${id}.ppk`);
