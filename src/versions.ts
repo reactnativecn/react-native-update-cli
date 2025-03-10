@@ -4,7 +4,7 @@ import { question, saveToLocal } from './utils';
 import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import { compare } from 'compare-versions';
-import { depVersions } from 'utils/dep-versions';
+import { depVersions } from './utils/dep-versions';
 
 async function showVersion(appId: string, offset: number) {
   const { data, count } = await get(`/app/${appId}/version/list`);
@@ -14,11 +14,11 @@ async function showVersion(appId: string, offset: number) {
       .slice(0, 3)
       .map((v) => v.name)
       .join(', ');
-    const count = version.packages.length;
-    if (count > 3) {
-      packageInfo += `...and ${count - 3} more`;
+    const pkgCount = version.packages.length;
+    if (pkgCount > 3) {
+      packageInfo += `...and ${pkgCount - 3} more`;
     }
-    if (count === 0) {
+    if (pkgCount === 0) {
       packageInfo = 'no package';
     } else {
       packageInfo = `[${packageInfo}]`;
@@ -32,7 +32,7 @@ async function showVersion(appId: string, offset: number) {
   return data;
 }
 
-async function listVersions(appId) {
+async function listVersions(appId: string) {
   let offset = 0;
   while (true) {
     await showVersion(appId, offset);
@@ -53,7 +53,7 @@ async function listVersions(appId) {
   }
 }
 
-async function chooseVersion(appId) {
+async function chooseVersion(appId: string) {
   let offset = 0;
   while (true) {
     const data = await showVersion(appId, offset);

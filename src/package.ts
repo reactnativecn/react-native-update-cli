@@ -5,7 +5,7 @@ import { checkPlatform, getSelectedApp } from './app';
 
 import { getApkInfo, getIpaInfo, getAppInfo } from './utils';
 import Table from 'tty-table';
-import { depVersions } from 'utils/dep-versions';
+import { depVersions } from './utils/dep-versions';
 
 export async function listPackage(appId: string) {
   const { data } = await get(`/app/${appId}/package/list?limit=1000`);
