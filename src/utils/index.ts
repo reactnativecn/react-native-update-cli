@@ -10,6 +10,7 @@ import { checkPlugins } from './check-plugin';
 
 import { read } from 'read';
 import { tempDir } from './constants';
+import { depVersions } from './dep-versions';
 
 export async function question(query: string, password?: boolean) {
   if (NO_INTERACTIVE) {
@@ -36,26 +37,6 @@ export function translateOptions(options: Record<string, string>) {
     }
   }
   return ret;
-}
-
-export function getRNVersion() {
-  const version = JSON.parse(
-    fs
-      .readFileSync(
-        require.resolve('react-native/package.json', {
-          paths: [process.cwd()],
-        }),
-      )
-      .toString(),
-  ).version;
-
-  const [, major, minor] = /^(\d+)\.(\d+)\./.exec(version) || [];
-
-  return {
-    version,
-    major: Number(major),
-    minor: Number(minor),
-  };
 }
 
 export async function getApkInfo(fn: string) {
@@ -198,21 +179,11 @@ export async function printVersionCommand() {
     `react-native-update-cli: ${pkg.version}${latestPushyCliVersion}`,
   );
   let pushyVersion = '';
-  try {
-    const PACKAGE_JSON_PATH = require.resolve(
-      'react-native-update/package.json',
-      {
-        paths: [process.cwd()],
-      },
-    );
-    pushyVersion = require(PACKAGE_JSON_PATH).version;
-    latestPushyVersion = latestPushyVersion
-      ? ` （最新：${chalk.green(latestPushyVersion)}）`
-      : '';
-    console.log(`react-native-update: ${pushyVersion}${latestPushyVersion}`);
-  } catch (e) {
-    console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
-  }
+  pushyVersion = depVersions['react-native-update'];
+  latestPushyVersion = latestPushyVersion
+    ? ` （最新：${chalk.green(latestPushyVersion)}）`
+    : '';
+  console.log(`react-native-update: ${pushyVersion}${latestPushyVersion}`);
   if (pushyVersion) {
     if (semverSatisfies(pushyVersion, '<8.5.2')) {
       console.warn(
@@ -229,6 +200,8 @@ export async function printVersionCommand() {
         '当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10',
       );
     }
+  } else {
+    console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
   }
 }
 
