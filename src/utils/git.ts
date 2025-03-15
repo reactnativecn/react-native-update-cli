@@ -6,7 +6,7 @@ export interface CommitInfo {
   hash: string;
   message: string;
   author: string;
-  date: number;
+  date: string;
   origin: string;
 }
 
@@ -40,7 +40,7 @@ export async function getCommitInfo(): Promise<CommitInfo | undefined> {
       hash: oid,
       message: commit.message,
       author: commit.author.name || commit.committer.name,
-      date: commit.committer.timestamp,
+      date: String(commit.committer.timestamp),
       origin: origin.url,
     };
   } catch (error) {
