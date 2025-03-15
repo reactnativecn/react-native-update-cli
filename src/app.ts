@@ -72,20 +72,24 @@ export async function chooseApp(platform: Platform) {
 }
 
 export const commands = {
-  createApp: async function ({ options }) {
+  createApp: async function ({
+    options,
+  }: {
+    options: { name: string; downloadUrl: string; platform: Platform };
+  }) {
     const name = options.name || (await question('应用名称:'));
     const { downloadUrl } = options;
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );
-    const { id } = await post('/app/create', { name, platform });
+    const { id } = await post('/app/create', { name, platform, downloadUrl });
     console.log(`已成功创建应用（id: ${id}）`);
     await this.selectApp({
       args: [id],
-      options: { platform, downloadUrl },
+      options: { platform },
     });
   },
-  deleteApp: async ({ args, options }) => {
+  deleteApp: async ({ args, options }: { args: string[]; options: { platform: Platform } }) => {
     const { platform } = options;
     const id = args[0] || chooseApp(platform);
     if (!id) {
@@ -94,11 +98,11 @@ export const commands = {
     await doDelete(`/app/${id}`);
     console.log('操作成功');
   },
-  apps: async ({ options }) => {
+  apps: async ({ options }: { options: { platform: Platform } }) => {
     const { platform } = options;
     listApp(platform);
   },
-  selectApp: async ({ args, options }) => {
+  selectApp: async ({ args, options }: { args: string[]; options: { platform: Platform } }) => {
     const platform = checkPlatform(
       options.platform || (await question('平台(ios/android/harmony):')),
     );
@@ -106,7 +110,7 @@ export const commands = {
       ? Number.parseInt(args[0])
       : (await chooseApp(platform)).id;
 
-    let updateInfo = {};
+    let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> = {};
     if (fs.existsSync('update.json')) {
       try {
         updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));

@@ -92,7 +92,7 @@ function queryWithoutBody(method: string) {
 }
 
 function queryWithBody(method: string) {
-  return (api: string, body: Record<string, any>) =>
+  return (api: string, body?: Record<string, any>) =>
     query(host + api, {
       method,
       headers: {

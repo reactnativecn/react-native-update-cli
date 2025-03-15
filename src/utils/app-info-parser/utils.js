@@ -30,7 +30,7 @@ function mapInfoResource (apkInfo, resourceMap) {
   iteratorObj(apkInfo)
   return apkInfo
   function iteratorObj (obj) {
-    for (var i in obj) {
+    for (const i in obj) {
       if (isArray(obj[i])) {
         iteratorArray(obj[i])
       } else if (isObject(obj[i])) {
