@@ -5,6 +5,7 @@ import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import { compare } from 'compare-versions';
 import { depVersions } from './utils/dep-versions';
+import { getCommitInfo } from './utils/git';
 
 async function showVersion(appId: string, offset: number) {
   const { data, count } = await get(`/app/${appId}/version/list`);
@@ -98,13 +99,15 @@ export const commands = {
 
     const { hash } = await uploadFile(fn);
 
-    const versionName = name || (await question('输入版本名称: ')) || '(未命名)';
+    const versionName =
+      name || (await question('输入版本名称: ')) || '(未命名)';
     const { id } = await post(`/app/${appId}/version/create`, {
       name: versionName,
       hash,
       description: description || (await question('输入版本描述:')),
       metaInfo: metaInfo || (await question('输入自定义的 meta info:')),
       deps: depVersions,
+      commit: await getCommitInfo(),
     });
     // TODO local diff
     saveToLocal(fn, `${appId}/ppk/${id}.ppk`);

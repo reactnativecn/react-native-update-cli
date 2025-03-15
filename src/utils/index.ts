@@ -11,7 +11,6 @@ import { checkPlugins } from './check-plugin';
 import { read } from 'read';
 import { tempDir } from './constants';
 import { depVersions } from './dep-versions';
-import { getCommitInfo } from './git';
 
 export async function question(query: string, password?: boolean) {
   if (NO_INTERACTIVE) {
@@ -169,8 +168,6 @@ async function getLatestVersion(pkgNames: string[]) {
 }
 
 export async function printVersionCommand() {
-  const result = await getCommitInfo();
-  console.log(JSON.stringify(result, null, 2));
   let [latestPushyCliVersion, latestPushyVersion] = await getLatestVersion([
     'react-native-update-cli',
     'react-native-update',
