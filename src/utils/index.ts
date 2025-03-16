@@ -158,7 +158,7 @@ export function saveToLocal(originPath: string, destName: string) {
 
 async function getLatestVersion(pkgNames: string[]) {
   return latestVersion(pkgNames, {
-    useCache: true,
+    // useCache: true,
     requestOptions: {
       timeout: 2000,
     },
