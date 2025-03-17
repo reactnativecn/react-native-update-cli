@@ -102,13 +102,13 @@ async function runReactNativeBundleCommand({
 
   const getRnCli = () => {
     try {
-      // rn >= 0.75
-      cliPath = require.resolve('@react-native-community/cli/build/bin.js', {
+      // rn < 0.75
+      cliPath = require.resolve('react-native/local-cli/cli.js', {
         paths: [process.cwd()],
       });
     } catch (e) {
-      // rn < 0.75
-      cliPath = require.resolve('react-native/local-cli/cli.js', {
+      // rn >= 0.75
+      cliPath = require.resolve('@react-native-community/cli/build/bin.js', {
         paths: [process.cwd()],
       });
     }
