@@ -6,18 +6,19 @@ import ProgressBar from 'progress';
 import packageJson from '../package.json';
 import tcpp from 'tcp-ping';
 import filesizeParser from 'filesize-parser';
-import { pricingPageUrl, credentialFile, IS_CRESC } from './utils/constants';
+import {
+  pricingPageUrl,
+  credentialFile,
+  defaultEndpoint,
+} from './utils/constants';
 import type { Session } from 'types';
 import FormData from 'form-data';
+import { t } from './utils/i18n';
 
 const tcpPing = util.promisify(tcpp.ping);
 
 let session: Session | undefined;
 let savedSession: Session | undefined;
-
-const defaultEndpoint = IS_CRESC
-  ? 'https://api.cresc.dev'
-  : 'https://update.reactnative.cn/api';
 
 const host =
   process.env.PUSHY_REGISTRY || process.env.RNU_API || defaultEndpoint;
@@ -73,7 +74,7 @@ async function query(url: string, options: fetch.RequestInit) {
   if (resp.status !== 200) {
     const message = json?.message || resp.statusText;
     if (resp.status === 401) {
-      throw new Error('登录信息已过期，请使用 pushy login 命令重新登录');
+      throw new Error(t('loginExpired'));
     }
     throw new Error(message);
   }
@@ -133,10 +134,13 @@ export async function uploadFile(fn: string, key?: string) {
 
   const fileSize = fs.statSync(fn).size;
   if (maxSize && fileSize > filesizeParser(maxSize)) {
+    const readableFileSize = `${(fileSize / 1048576).toFixed(1)}m`;
     throw new Error(
-      `此文件大小 ${(fileSize / 1048576).toFixed(
-        1,
-      )}m , 超出当前额度 ${maxSize} 。您可以考虑升级付费业务以提升此额度。详情请访问: ${pricingPageUrl}`,
+      t('fileSizeExceeded', {
+        fileSize: readableFileSize,
+        maxSize,
+        pricingPageUrl,
+      }),
     );
   }
 

@@ -6,6 +6,7 @@ import { choosePackage } from './package';
 import { compare } from 'compare-versions';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import { Platform } from 'types';
 
 async function showVersion(appId: string, offset: number) {
   const { data, count } = await get(`/app/${appId}/version/list`);
@@ -61,7 +62,7 @@ async function chooseVersion(appId: string) {
     const cmd = await question(
       'Enter versionId or page Up/page Down/Begin(U/D/B)',
     );
-    switch (cmd.toLowerCase()) {
+    switch (cmd.toUpperCase()) {
       case 'U':
         offset = Math.max(0, offset - 10);
         break;
@@ -82,7 +83,12 @@ async function chooseVersion(appId: string) {
 }
 
 export const commands = {
-  publish: async function ({ args, options }) {
+  publish: async function ({ args, options }: { args: string[]; options: {
+    name: string;
+    description?: string;
+    metaInfo?: string;
+    platform?: Platform;
+  } }) {
     const fn = args[0];
     const { name, description, metaInfo } = options;
 
@@ -136,7 +142,7 @@ export const commands = {
       versionId = null;
     }
 
-    let pkgId;
+    let pkgId: string | undefined;
     let pkgVersion = options.packageVersion;
     let minPkgVersion = options.minPackageVersion;
     let maxPkgVersion = options.maxPackageVersion;

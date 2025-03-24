@@ -13,4 +13,14 @@ export default {
 `,
   multipleLocksFound:
     '检测到多种不同格式的锁文件({lockFiles})，这可能导致依赖关系不一致而使热更异常。',
+  loginExpired: '登录信息已过期，请使用 `pushy login` 命令重新登录',
+  fileSizeExceeded:
+    '此文件大小 {{fileSize}} , 超出当前额度 {{maxSize}} 。您可以考虑升级付费业务以提升此额度。详情请访问: {{pricingPageUrl}}',
+  bundleNotFound:
+    '找不到 bundle 文件。请确保此 {{packageType}} 为 release 版本，且 bundle 文件名为默认的 `{{entryFile}}`',
+  buildTimeNotFound:
+    '无法获取此包的编译时间戳。请更新 `react-native-update` 到最新版本后重新打包上传。',
+  latestVersionTag: '（最新：{{version}}）',
+  rnuVersionNotFound:
+    'react-native-update: 无法获取版本号。请在项目目录中运行命令',
 };

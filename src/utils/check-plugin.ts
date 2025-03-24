@@ -17,10 +17,10 @@ export async function checkPlugins(): Promise<BundleParams> {
       const isEnabled = await plugin.detect();
       if (isEnabled && plugin.bundleParams) {
         Object.assign(params, plugin.bundleParams);
-        console.log(`检测到 ${plugin.name} 插件,应用相应打包配置`);
+        console.log(`detected ${plugin.name} plugin`);
       }
     } catch (err) {
-      console.warn(`检测 ${plugin.name} 插件时出错:`, err);
+      console.warn(`error while detecting ${plugin.name} plugin:`, err);
     }
   }
 

@@ -2,12 +2,18 @@ import i18next from 'i18next';
 import en from '../locales/en';
 import zh from '../locales/zh';
 import { IS_CRESC } from './constants';
+
 i18next.init({
   lng: IS_CRESC ? 'en' : 'zh',
   // debug: process.env.NODE_ENV !== 'production',
+  // debug: true,
   resources: {
-    en,
-    zh,
+    en: {
+      translation: en,
+    },
+    zh: {
+      translation: zh,
+    },
   },
 });
 

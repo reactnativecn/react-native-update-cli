@@ -9,8 +9,9 @@ import latestVersion from '@badisi/latest-version';
 import { checkPlugins } from './check-plugin';
 
 import { read } from 'read';
-import { tempDir } from './constants';
+import { IS_CRESC, tempDir } from './constants';
 import { depVersions } from './dep-versions';
+import { t } from './i18n';
 
 export async function question(query: string, password?: boolean) {
   if (NO_INTERACTIVE) {
@@ -46,7 +47,10 @@ export async function getApkInfo(fn: string) {
   );
   if (!bundleFile) {
     throw new Error(
-      '找不到bundle文件。请确保此apk为release版本，且bundle文件名为默认的index.android.bundle',
+      t('bundleNotFound', {
+        packageType: 'apk',
+        entryFile: 'index.android.bundle',
+      }),
     );
   }
   const updateJsonFile = await appInfoParser.parser.getEntry(
@@ -66,21 +70,22 @@ export async function getApkInfo(fn: string) {
     }
   }
   if (buildTime == 0) {
-    throw new Error(
-      '无法获取此包的编译时间戳。请更新 react-native-update 到最新版本后重新打包上传。',
-    );
+    throw new Error(t('buildTimeNotFound'));
   }
   return { versionName, buildTime, ...appCredential };
 }
 
-export async function getAppInfo(fn) {
+export async function getAppInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);
   const bundleFile = await appInfoParser.parser.getEntryFromHarmonyApp(
     /rawfile\/bundle.harmony.js/,
   );
   if (!bundleFile) {
     throw new Error(
-      '找不到bundle文件。请确保此app为release版本，且bundle文件名为默认的bundle.harmony.js',
+      t('bundleNotFound', {
+        packageType: 'app',
+        entryFile: 'bundle.harmony.js',
+      }),
     );
   }
   const updateJsonFile = await appInfoParser.parser.getEntryFromHarmonyApp(
@@ -103,9 +108,7 @@ export async function getAppInfo(fn) {
     buildTime = pushy_build_time;
   }
   if (buildTime == 0) {
-    throw new Error(
-      '无法获取此包的编译时间戳。请更新 react-native-update 到最新版本后重新打包上传。',
-    );
+    throw new Error(t('buildTimeNotFound'));
   }
   return { versionName, buildTime, ...appCredential };
 }
@@ -117,7 +120,10 @@ export async function getIpaInfo(fn: string) {
   );
   if (!bundleFile) {
     throw new Error(
-      '找不到bundle文件。请确保此ipa为release版本，且bundle文件名为默认的main.jsbundle',
+      t('bundleNotFound', {
+        packageType: 'ipa',
+        entryFile: 'main.jsbundle',
+      }),
     );
   }
   const updateJsonFile = await appInfoParser.parser.getEntry(
@@ -139,9 +145,7 @@ export async function getIpaInfo(fn: string) {
     );
   }
   if (!buildTimeTxtBuffer) {
-    throw new Error(
-      '无法获取此包的编译时间戳。请更新 react-native-update 到最新版本后重新打包上传。',
-    );
+    throw new Error(t('buildTimeNotFound'));
   }
   const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
   return { versionName, buildTime, ...appCredential };
@@ -168,40 +172,51 @@ async function getLatestVersion(pkgNames: string[]) {
 }
 
 export async function printVersionCommand() {
-  let [latestPushyCliVersion, latestPushyVersion] = await getLatestVersion([
+  let [latestRnuCliVersion, latestRnuVersion] = await getLatestVersion([
     'react-native-update-cli',
     'react-native-update',
   ]);
-  latestPushyCliVersion = latestPushyCliVersion
-    ? ` （最新：${chalk.green(latestPushyCliVersion)}）`
+  latestRnuCliVersion = latestRnuCliVersion
+    ? ` ${t('latestVersionTag', {
+        version: chalk.green(latestRnuCliVersion),
+      })}`
     : '';
   console.log(
-    `react-native-update-cli: ${pkg.version}${latestPushyCliVersion}`,
+    `react-native-update-cli: ${pkg.version}${latestRnuCliVersion}`,
   );
-  let pushyVersion = '';
-  pushyVersion = depVersions['react-native-update'];
-  latestPushyVersion = latestPushyVersion
-    ? ` （最新：${chalk.green(latestPushyVersion)}）`
+  let rnuVersion = '';
+  rnuVersion = depVersions['react-native-update'];
+  latestRnuVersion = latestRnuVersion
+    ? ` ${t('latestVersionTag', { version: chalk.green(latestRnuVersion) })}`
     : '';
-  console.log(`react-native-update: ${pushyVersion}${latestPushyVersion}`);
-  if (pushyVersion) {
-    if (semverSatisfies(pushyVersion, '<8.5.2')) {
-      console.warn(
-        `当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8 .
-        如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
-      );
-    } else if (semverSatisfies(pushyVersion, '9.0.0 - 9.2.1')) {
-      console.warn(
-        `当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动，可直接热更）: npm i react-native-update@9 .
-        如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
-      );
-    } else if (semverSatisfies(pushyVersion, '10.0.0 - 10.17.0')) {
-      console.warn(
-        '当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10',
-      );
+  console.log(`react-native-update: ${rnuVersion}${latestRnuVersion}`);
+  if (rnuVersion) {
+    if (IS_CRESC) {
+      if (semverSatisfies(rnuVersion, '<10.27.0')) {
+        console.error(
+          'Unsupported version, please update to the latest version: npm i react-native-update@latest',
+        );
+        process.exit(1);
+      }
+    } else {
+      if (semverSatisfies(rnuVersion, '<8.5.2')) {
+        console.warn(
+          `当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8 .
+          如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
+        );
+      } else if (semverSatisfies(rnuVersion, '9.0.0 - 9.2.1')) {
+        console.warn(
+          `当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动，可直接热更）: npm i react-native-update@9 .
+          如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
+        );
+      } else if (semverSatisfies(rnuVersion, '10.0.0 - 10.17.0')) {
+        console.warn(
+          '当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10',
+        );
+      }
     }
   } else {
-    console.log('react-native-update: 无法获取版本号，请在项目目录中运行命令');
+    console.log(t('rnuVersionNotFound'));
   }
 }
 
