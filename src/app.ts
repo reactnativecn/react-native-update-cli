@@ -4,16 +4,14 @@ import Table from 'tty-table';
 
 import { post, get, doDelete } from './api';
 import type { Platform } from './types';
+import { t } from './utils/i18n';
 
-const validPlatforms = {
-  ios: 1,
-  android: 1,
-  harmony: 1,
-};
+const validPlatforms = ['ios', 'android', 'harmony'];
+
 
 export function checkPlatform(platform: Platform) {
-  if (!validPlatforms[platform]) {
-    throw new Error(`无法识别的平台 '${platform}'`);
+  if (!validPlatforms.includes(platform)) {
+    throw new Error(t('unsupportedPlatform', { platform }));
   }
   return platform;
 }
@@ -22,27 +20,23 @@ export function getSelectedApp(platform: Platform) {
   checkPlatform(platform);
 
   if (!fs.existsSync('update.json')) {
-    throw new Error(
-      `App not selected. run 'pushy selectApp --platform ${platform}' first!`,
-    );
+    throw new Error(t('appNotSelected', { platform }));
   }
   const updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
   if (!updateInfo[platform]) {
-    throw new Error(
-      `App not selected. run 'pushy selectApp --platform ${platform}' first!`,
-    );
+    throw new Error(t('appNotSelected', { platform }));
   }
   return updateInfo[platform];
 }
 
-export async function listApp(platform: Platform) {
+export async function listApp(platform: Platform | '' = '') {
   const { data } = await get('/app/list');
   const list = platform ? data.filter((v) => v.platform === platform) : data;
 
   const header = [
-    { value: '应用 id' },
-    { value: '应用名称' },
-    { value: '平台' },
+    { value: t('appId') },
+    { value: t('appName') },
+    { value: t('platform') },
   ];
   const rows = [];
   for (const app of list) {
@@ -51,11 +45,7 @@ export async function listApp(platform: Platform) {
 
   console.log(Table(header, rows).render());
 
-  if (platform) {
-    console.log(`\共 ${list.length} ${platform} 个应用`);
-  } else {
-    console.log(`\共 ${list.length} 个应用`);
-  }
+  console.log(`\n${t('totalApps', { count: list.length, platform })}`);
   return list;
 }
 
@@ -63,7 +53,7 @@ export async function chooseApp(platform: Platform) {
   const list = await listApp(platform);
 
   while (true) {
-    const id = await question('输入应用 id:');
+    const id = await question(t('enterAppIdQuestion'));
     const app = list.find((v) => v.id === Number(id));
     if (app) {
       return app;
@@ -77,13 +67,13 @@ export const commands = {
   }: {
     options: { name: string; downloadUrl: string; platform: Platform };
   }) {
-    const name = options.name || (await question('应用名称:'));
+    const name = options.name || (await question(t('appNameQuestion')));
     const { downloadUrl } = options;
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform || (await question(t('platformQuestion'))),
     );
     const { id } = await post('/app/create', { name, platform, downloadUrl });
-    console.log(`已成功创建应用（id: ${id}）`);
+    console.log(t('createAppSuccess', { id }));
     await this.selectApp({
       args: [id],
       options: { platform },
@@ -93,10 +83,10 @@ export const commands = {
     const { platform } = options;
     const id = args[0] || chooseApp(platform);
     if (!id) {
-      console.log('已取消');
+      console.log(t('cancelled'));
     }
     await doDelete(`/app/${id}`);
-    console.log('操作成功');
+    console.log(t('operationSuccess'));
   },
   apps: async ({ options }: { options: { platform: Platform } }) => {
     const { platform } = options;
@@ -104,7 +94,7 @@ export const commands = {
   },
   selectApp: async ({ args, options }: { args: string[]; options: { platform: Platform } }) => {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform || (await question(t('platformQuestion'))),
     );
     const id = args[0]
       ? Number.parseInt(args[0])
@@ -115,9 +105,7 @@ export const commands = {
       try {
         updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
       } catch (e) {
-        console.error(
-          'Failed to parse file `update.json`. Try to remove it manually.',
-        );
+        console.error(t('failedToParseUpdateJson'));
         throw e;
       }
     }

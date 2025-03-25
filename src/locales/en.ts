@@ -25,4 +25,18 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   latestVersionTag: '(latest: {{version}})',
   rnuVersionNotFound:
     'react-native-update: Cannot get the version number. Please run the command in the project directory',
+  unsupportedPlatform: 'Unsupported platform `{{platform}}`',
+  appId: 'App ID',
+  appName: 'App Name',
+  platform: 'Platform',
+  totalApps: 'Total {{count}} apps',
+  appNotSelected:
+    'App not selected. run `cresc selectApp --platform {{platform}}` first!',
+  enterAppIdQuestion: 'Enter AppId:',
+  appNameQuestion: 'App Name:',
+  platformQuestion: 'Platform(ios/android/harmony):',
+  createAppSuccess: 'App created successfully (id: {{id}})',
+  cancelled: 'Cancelled',
+  operationSuccess: 'Operation successful',
+  failedToParseUpdateJson: 'Failed to parse file `update.json`. Try to remove it manually.',
 };

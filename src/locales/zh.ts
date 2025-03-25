@@ -23,4 +23,18 @@ export default {
   latestVersionTag: '（最新：{{version}}）',
   rnuVersionNotFound:
     'react-native-update: 无法获取版本号。请在项目目录中运行命令',
+  unsupportedPlatform: '无法识别的平台 `{{platform}}`',
+  appId: '应用 id',
+  appName: '应用名称',
+  platform: '平台',
+  totalApps: '共 {{count}} 个{{platform}}应用',
+  appNotSelected:
+    '尚未选择应用。请先运行 `pushy selectApp --platform {{platform}}` 来选择应用',
+  enterAppIdQuestion: '输入应用 id:',
+  appNameQuestion: '应用名称:',
+  platformQuestion: '平台(ios/android/harmony):',
+  createAppSuccess: '已成功创建应用（id: {{id}}）',
+  cancelled: '已取消',
+  operationSuccess: '操作成功',
+  failedToParseUpdateJson: '无法解析文件 `update.json`。请手动删除它。',
 };
