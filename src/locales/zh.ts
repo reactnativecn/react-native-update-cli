@@ -37,4 +37,5 @@ export default {
   cancelled: '已取消',
   operationSuccess: '操作成功',
   failedToParseUpdateJson: '无法解析文件 `update.json`。请手动删除它。',
+  ppkPackageGenerated: 'ppk 热更包已生成并保存到: {{output}}',
 };

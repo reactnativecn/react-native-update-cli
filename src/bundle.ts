@@ -11,6 +11,7 @@ const g2js = require('gradle-to-js/lib/parser');
 import os from 'node:os';
 const properties = require('properties');
 import { depVersions } from './utils/dep-versions';
+import { t } from './utils/i18n';
 
 let bsdiff;
 let hdiff;
@@ -512,7 +513,7 @@ async function pack(dir: string, output: string) {
     });
     zipfile.end();
   });
-  console.log(`ppk热更包已生成并保存到: ${output}`);
+  console.log(t('ppkPackageGenerated', { output }));
 }
 
 export function readEntire(entry: string, zipFile: ZipFile) {

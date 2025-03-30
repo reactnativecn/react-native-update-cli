@@ -39,4 +39,5 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   cancelled: 'Cancelled',
   operationSuccess: 'Operation successful',
   failedToParseUpdateJson: 'Failed to parse file `update.json`. Try to remove it manually.',
+  ppkPackageGenerated: 'ppk package generated and saved to: {{output}}',
 };
