@@ -5,7 +5,6 @@ import updateNotifier from 'update-notifier';
 import { printVersionCommand } from './utils';
 import pkg from '../package.json';
 import { t } from './utils/i18n';
-import { addGitIgnore } from './utils/add-gitignore';
 
 updateNotifier({ pkg }).notify({
   isGlobal: true,
@@ -33,7 +32,6 @@ const commands = {
 };
 
 async function run() {
-  addGitIgnore();
   await printVersionCommand();
   if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
     process.exit();

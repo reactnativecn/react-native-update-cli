@@ -13,6 +13,8 @@ const properties = require('properties');
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
 import { tempDir } from './utils/constants';
+import { checkLockFiles } from './utils/check-lockfile';
+import { addGitIgnore } from './utils/add-gitignore';
 
 let bsdiff;
 let hdiff;
@@ -912,6 +914,9 @@ export const commands = {
       tempDir,
       platform,
     });
+
+    checkLockFiles();
+    addGitIgnore();
 
     const bundleParams = await checkPlugins();
     const sourcemapPlugin = bundleParams.sourcemap;

@@ -1,11 +1,11 @@
 import fs from 'node:fs';
-import path from 'node:path';
+// import path from 'node:path';
 import { credentialFile, tempDir } from './constants';
 
 export function addGitIgnore() {
   const shouldIgnore = [credentialFile, tempDir];
 
-  const gitignorePath = path.join(process.cwd(), '.gitignore');
+  const gitignorePath = '.gitignore';
 
   if (!fs.existsSync(gitignorePath)) {
     return;
@@ -16,7 +16,7 @@ export function addGitIgnore() {
   const gitignoreLines = gitignoreContent.split('\n');
 
   for (const line of gitignoreLines) {
-    const index = shouldIgnore.indexOf(line);
+    const index = shouldIgnore.indexOf(line.trim());
     if (index !== -1) {
       shouldIgnore.splice(index, 1);
     }
