@@ -12,6 +12,7 @@ import os from 'node:os';
 const properties = require('properties');
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
+import { tempDir } from './utils/constants';
 
 let bsdiff;
 let hdiff;
@@ -908,6 +909,7 @@ export const commands = {
       disableHermes,
     } = translateOptions({
       ...options,
+      tempDir,
       platform,
     });
 

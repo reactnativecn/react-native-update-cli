@@ -136,11 +136,11 @@
           "hasValue": true
         },
         "intermediaDir": {
-          "default": ".pushy/intermedia/${platform}",
+          "default": "${tempDir}/intermedia/${platform}",
           "hasValue": true
         },
         "output": {
-          "default": ".pushy/output/${platform}.${time}.ppk",
+          "default": "${tempDir}/output/${platform}.${time}.ppk",
           "hasValue": true
         },
         "sourcemap": {
@@ -167,7 +167,7 @@
       "description": "Create diff patch",
       "options": {
         "output": {
-          "default": ".pushy/output/diff",
+          "default": "${tempDir}/output/diff",
           "hasValue": true
         }
       }
@@ -176,7 +176,7 @@
       "description": "Create diff patch from a Android package(.apk)",
       "options": {
         "output": {
-          "default": ".pushy/output/diff-${time}.apk-patch",
+          "default": "${tempDir}/output/diff-${time}.apk-patch",
           "hasValue": true
         }
       }
@@ -185,7 +185,7 @@
       "description": "Create diff patch from a iOS package(.ipa)",
       "options": {
         "output": {
-          "default": ".pushy/output/diff-${time}.ipa-patch",
+          "default": "${tempDir}/output/diff-${time}.ipa-patch",
           "hasValue": true
         }
       }
@@ -194,7 +194,7 @@
       "description": "Create hdiff patch",
       "options": {
         "output": {
-          "default": ".pushy/output/hdiff",
+          "default": "${tempDir}/output/hdiff",
           "hasValue": true
         }
       }
@@ -203,7 +203,7 @@
       "description": "Create hdiff patch from a Android package(.apk)",
       "options": {
         "output": {
-          "default": ".pushy/output/hdiff-${time}.apk-patch",
+          "default": "${tempDir}/output/hdiff-${time}.apk-patch",
           "hasValue": true
         }
       }
@@ -212,7 +212,7 @@
       "description": "Create hdiff patch from a Prepare package(.ppk)",
       "options": {
         "output": {
-          "default": ".pushy/output/hdiff-${time}.ppk-patch",
+          "default": "${tempDir}/output/hdiff-${time}.ppk-patch",
           "hasValue": true
         }
       }
@@ -221,7 +221,7 @@
       "description": "Create hdiff patch from a Harmony package(.app)",
       "options": {
         "output": {
-          "default": ".pushy/output/hdiff-${time}.app-patch",
+          "default": "${tempDir}/output/hdiff-${time}.app-patch",
           "hasValue": true
         }
       }
@@ -230,7 +230,7 @@
       "description": "Create hdiff patch from a iOS package(.ipa)",
       "options": {
         "output": {
-          "default": ".pushy/output/hdiff-${time}.ipa-patch",
+          "default": "${tempDir}/output/hdiff-${time}.ipa-patch",
           "hasValue": true
         }
       }
