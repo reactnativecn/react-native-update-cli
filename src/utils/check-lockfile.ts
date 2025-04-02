@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { t } from '../../lib/utils/i18n';
+import { t } from './i18n';
 
 const lockFiles = [
   'package-lock.json',
@@ -16,9 +16,14 @@ export function checkLockFiles() {
       existingLockFiles.push(file);
     }
   }
-  if (existingLockFiles.length === 0) {
-    console.warn(t('lockFilesNotFound'));
-  } else if (existingLockFiles.length > 1) {
-    console.warn(t('multipleLockFilesFound'));
+  if (existingLockFiles.length === 1) {
+    return;
   }
+  console.warn(t('lockBestPractice'));
+  if (existingLockFiles.length === 0) {
+    throw new Error(t('lockNotFound'));
+  }
+  throw new Error(
+    t('multipleLocksFound', { lockFiles: existingLockFiles.join(', ') }),
+  );
 }

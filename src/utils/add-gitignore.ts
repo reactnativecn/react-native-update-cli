@@ -23,6 +23,7 @@ export function addGitIgnore() {
   }
 
   if (shouldIgnore.length > 0) {
+    gitignoreLines.push('# react-native-update');
     for (const line of shouldIgnore) {
       gitignoreLines.push(line);
       console.log(`Added ${line} to .gitignore`);
