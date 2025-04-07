@@ -41,7 +41,7 @@ export async function getCommitInfo(): Promise<CommitInfo | undefined> {
       message: commit.message,
       author: commit.author.name || commit.committer.name,
       timestamp: String(commit.committer.timestamp),
-      origin: origin.url,
+      origin: origin?.url,
     };
   } catch (error) {
     console.error(error);
