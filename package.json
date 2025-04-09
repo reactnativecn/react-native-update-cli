@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.43.1",
+  "version": "1.43.2",
   "description": "command line tool for react-native-update (remote updates for react native)",
   "main": "index.js",
   "bin": {
@@ -41,7 +41,7 @@
     "cgbi-to-png": "^1.0.7",
     "chalk": "4",
     "cli-arguments": "^0.2.1",
-    "commander": "^13.1.0",
+    "commander": "^10",
     "compare-versions": "^6.1.1",
     "filesize-parser": "^1.5.1",
     "form-data": "^4.0.2",
@@ -63,7 +63,7 @@
     "yazl": "3.3.1"
   },
   "engines": {
-    "node": ">= 10"
+    "node": ">= 14"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
