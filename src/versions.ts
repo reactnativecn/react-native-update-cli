@@ -247,7 +247,7 @@ export const commands = {
     }
 
     if (!pkgVersion) {
-      const pkg = data.find((d) => d.id === pkgId);
+      const pkg = data.find((d) => String(d.id) === String(pkgId));
       if (pkg) {
         pkgVersion = pkg.name;
       }
