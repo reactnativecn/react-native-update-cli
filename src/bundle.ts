@@ -477,7 +477,7 @@ async function uploadSourcemapForSentry(
 }
 
 const ignorePackingFileNames = ['.', '..', 'index.bundlejs.map'];
-const ignorePackingExtensions = ['DS_Store'];
+const ignorePackingExtensions = ['DS_Store','txt.map'];
 async function pack(dir: string, output: string) {
   console.log('Packing');
   fs.ensureDirSync(path.dirname(output));
