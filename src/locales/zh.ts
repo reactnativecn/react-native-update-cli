@@ -27,7 +27,7 @@ export default {
   appId: '应用 id',
   appName: '应用名称',
   platform: '平台',
-  totalApps: '共 {{count}} 个{{platform}}应用',
+  totalApps: '共 {{count}} 个 {{platform}} 应用',
   appNotSelected:
     '尚未选择应用。请先运行 `pushy selectApp --platform {{platform}}` 来选择应用',
   enterAppIdQuestion: '输入应用 id:',

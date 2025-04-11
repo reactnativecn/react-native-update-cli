@@ -29,7 +29,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   appId: 'App ID',
   appName: 'App Name',
   platform: 'Platform',
-  totalApps: 'Total {{count}} apps',
+  totalApps: 'Total {{count}} {{platform}} apps',
   appNotSelected:
     'App not selected. run `cresc selectApp --platform {{platform}}` first!',
   enterAppIdQuestion: 'Enter AppId:',
