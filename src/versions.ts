@@ -6,24 +6,51 @@ import { choosePackage } from './package';
 import { compare } from 'compare-versions';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import { Platform } from 'types';
+import type { Platform } from 'types';
+
+interface Package {
+  id: string;
+  name: string;
+}
+
+interface Version {
+  id: string;
+  hash: string;
+  name: string;
+  packages?: Package[];
+}
+
+interface CommandOptions {
+  name?: string;
+  description?: string;
+  metaInfo?: string;
+  platform?: Platform;
+  versionId?: string;
+  packageId?: string;
+  packageVersion?: string;
+  minPackageVersion?: string;
+  maxPackageVersion?: string;
+  rollout?: string;
+}
 
 async function showVersion(appId: string, offset: number) {
   const { data, count } = await get(`/app/${appId}/version/list`);
   console.log(`Offset ${offset}`);
   for (const version of data) {
-    let packageInfo = version.packages
-      .slice(0, 3)
-      .map((v) => v.name)
-      .join(', ');
-    const pkgCount = version.packages.length;
-    if (pkgCount > 3) {
-      packageInfo += `...and ${pkgCount - 3} more`;
-    }
+    const pkgCount = version.packages?.length || 0;
+    let packageInfo = '';
     if (pkgCount === 0) {
       packageInfo = 'no package';
     } else {
-      packageInfo = `[${packageInfo}]`;
+      packageInfo = version.packages
+        ?.slice(0, 3)
+        .map((pkg: Package) => pkg.name)
+        .join(', ');
+      if (pkgCount > 3) {
+        packageInfo += `...and ${pkgCount - 3} more`;
+      } else {
+        packageInfo = `[${packageInfo}]`;
+      }
     }
     console.log(
       `${version.id}) ${version.hash.slice(0, 8)} ${
@@ -73,7 +100,10 @@ async function chooseVersion(appId: string) {
         offset = 0;
         break;
       default: {
-        const v = data.find((v) => v.id === (cmd | 0));
+        const versionId = Number.parseInt(cmd, 10);
+        const v = data.find(
+          (version: Version) => version.id === String(versionId),
+        );
         if (v) {
           return v;
         }
@@ -83,12 +113,13 @@ async function chooseVersion(appId: string) {
 }
 
 export const commands = {
-  publish: async function ({ args, options }: { args: string[]; options: {
-    name: string;
-    description?: string;
-    metaInfo?: string;
-    platform?: Platform;
-  } }) {
+  publish: async function ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: CommandOptions;
+  }) {
     const fn = args[0];
     const { name, description, metaInfo } = options;
 
@@ -99,7 +130,8 @@ export const commands = {
     }
 
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform ||
+        ((await question('平台(ios/android/harmony):')) as Platform),
     );
     const { appId } = await getSelectedApp(platform);
 
@@ -125,33 +157,40 @@ export const commands = {
     }
     return versionName;
   },
-  versions: async ({ options }) => {
+  versions: async ({ options }: { options: CommandOptions }) => {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform ||
+        ((await question('平台(ios/android/harmony):')) as Platform),
     );
     const { appId } = await getSelectedApp(platform);
     await listVersions(appId);
   },
-  update: async ({ args, options }) => {
+  update: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: CommandOptions;
+  }) => {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform ||
+        ((await question('平台(ios/android/harmony):')) as Platform),
     );
     const { appId } = await getSelectedApp(platform);
     let versionId = options.versionId || (await chooseVersion(appId)).id;
     if (versionId === 'null') {
-      versionId = null;
+      versionId = undefined;
     }
 
     let pkgId: string | undefined;
     let pkgVersion = options.packageVersion;
     let minPkgVersion = options.minPackageVersion;
     let maxPkgVersion = options.maxPackageVersion;
-    let rollout = options.rollout;
-    if (rollout === undefined) {
-      rollout = null;
-    } else {
+    let rollout: number | undefined = undefined;
+
+    if (options.rollout !== undefined) {
       try {
-        rollout = Number.parseInt(rollout);
+        rollout = Number.parseInt(options.rollout);
       } catch (e) {
         throw new Error('rollout 必须是 1-100 的整数');
       }
@@ -159,15 +198,18 @@ export const commands = {
         throw new Error('rollout 必须是 1-100 的整数');
       }
     }
+
     if (minPkgVersion) {
       minPkgVersion = String(minPkgVersion).trim();
       const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-      const pkgs = data.filter((d) => compare(d.name, minPkgVersion, '>='));
+      const pkgs = data.filter((pkg: Package) =>
+        compare(pkg.name, minPkgVersion, '>='),
+      );
       if (pkgs.length === 0) {
         throw new Error(`未查询到 >= ${minPkgVersion} 的原生版本`);
       }
-      if (rollout) {
-        const rolloutConfig = {};
+      if (rollout !== undefined) {
+        const rolloutConfig: Record<string, number> = {};
         for (const pkg of pkgs) {
           rolloutConfig[pkg.name] = rollout;
         }
@@ -178,7 +220,7 @@ export const commands = {
         });
         console.log(
           `已在原生版本 ${pkgs
-            .map((p) => p.name)
+            .map((pkg: Package) => pkg.name)
             .join(', ')} 上设置灰度发布 ${rollout}% 热更版本 ${versionId}`,
         );
       }
@@ -196,12 +238,14 @@ export const commands = {
     if (maxPkgVersion) {
       maxPkgVersion = String(maxPkgVersion).trim();
       const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-      const pkgs = data.filter((d) => compare(d.name, maxPkgVersion, '<='));
+      const pkgs = data.filter((pkg: Package) =>
+        compare(pkg.name, maxPkgVersion, '<='),
+      );
       if (pkgs.length === 0) {
         throw new Error(`未查询到 <= ${maxPkgVersion} 的原生版本`);
       }
-      if (rollout) {
-        const rolloutConfig = {};
+      if (rollout !== undefined) {
+        const rolloutConfig: Record<string, number> = {};
         for (const pkg of pkgs) {
           rolloutConfig[pkg.name] = rollout;
         }
@@ -212,7 +256,7 @@ export const commands = {
         });
         console.log(
           `已在原生版本 ${pkgs
-            .map((p) => p.name)
+            .map((pkg: Package) => pkg.name)
             .join(', ')} 上设置灰度发布 ${rollout}% 热更版本 ${versionId}`,
         );
       }
@@ -231,7 +275,7 @@ export const commands = {
     const { data } = await get(`/app/${appId}/package/list?limit=1000`);
     if (pkgVersion) {
       pkgVersion = pkgVersion.trim();
-      const pkg = data.find((d) => d.name === pkgVersion);
+      const pkg = data.find((pkg: Package) => pkg.name === pkgVersion);
       if (pkg) {
         pkgId = pkg.id;
       } else {
@@ -247,13 +291,13 @@ export const commands = {
     }
 
     if (!pkgVersion) {
-      const pkg = data.find((d) => String(d.id) === String(pkgId));
+      const pkg = data.find((pkg: Package) => String(pkg.id) === String(pkgId));
       if (pkg) {
         pkgVersion = pkg.name;
       }
     }
 
-    if (rollout) {
+    if (rollout !== undefined && pkgVersion) {
       await put(`/app/${appId}/version/${versionId}`, {
         config: {
           rollout: {
@@ -265,24 +309,35 @@ export const commands = {
         `已将在原生版本 ${pkgVersion} (id: ${pkgId}) 上设置灰度发布 ${rollout}% 热更版本 ${versionId} `,
       );
     }
-    await put(`/app/${appId}/package/${pkgId}`, {
-      versionId,
-    });
-    console.log(
-      `已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion} (id: ${pkgId})`,
-    );
+
+    if (versionId !== undefined) {
+      await put(`/app/${appId}/package/${pkgId}`, {
+        versionId,
+      });
+      console.log(
+        `已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion} (id: ${pkgId})`,
+      );
+    }
   },
-  updateVersionInfo: async ({ args, options }) => {
+  updateVersionInfo: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: CommandOptions;
+  }) => {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform ||
+        ((await question('平台(ios/android/harmony):')) as Platform),
     );
     const { appId } = await getSelectedApp(platform);
     const versionId = options.versionId || (await chooseVersion(appId)).id;
 
-    const updateParams = {};
-    options.name && (updateParams.name = options.name);
-    options.description && (updateParams.description = options.description);
-    options.metaInfo && (updateParams.metaInfo = options.metaInfo);
+    const updateParams: Record<string, string> = {};
+    if (options.name) updateParams.name = options.name;
+    if (options.description) updateParams.description = options.description;
+    if (options.metaInfo) updateParams.metaInfo = options.metaInfo;
+
     await put(`/app/${appId}/version/${versionId}`, updateParams);
     console.log('操作成功');
   },
