@@ -1,5 +1,6 @@
 import { get, post, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
+import { t } from './utils/i18n';
 
 import { checkPlatform, getSelectedApp } from './app';
 
@@ -34,7 +35,7 @@ export async function listPackage(appId: string) {
   }
 
   console.log(Table(header, rows).render());
-  console.log(`\n共 ${data.length} 个包`);
+  console.log(t('totalPackages', { count: data.length }));
   return data;
 }
 
@@ -54,7 +55,7 @@ export const commands = {
   uploadIpa: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
-      throw new Error('使用方法: pushy uploadIpa ipa后缀文件');
+      throw new Error(t('usageUploadIpa'));
     }
     const {
       versionName,
@@ -93,7 +94,7 @@ export const commands = {
   uploadApk: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
-      throw new Error('使用方法: pushy uploadApk apk后缀文件');
+      throw new Error(t('usageUploadApk'));
     }
     const {
       versionName,
@@ -132,7 +133,7 @@ export const commands = {
   uploadApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.app')) {
-      throw new Error('使用方法: pushy uploadApp app后缀文件');
+      throw new Error(t('usageUploadApp'));
     }
     const {
       versionName,
@@ -171,21 +172,21 @@ export const commands = {
   parseApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.app')) {
-      throw new Error('使用方法: pushy parseApp app后缀文件');
+      throw new Error(t('usageParseApp'));
     }
     console.log(await getAppInfo(fn));
   },
   parseIpa: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
-      throw new Error('使用方法: pushy parseIpa ipa后缀文件');
+      throw new Error(t('usageParseIpa'));
     }
     console.log(await getIpaInfo(fn));
   },
   parseApk: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
-      throw new Error('使用方法: pushy parseApk apk后缀文件');
+      throw new Error(t('usageParseApk'));
     }
     console.log(await getApkInfo(fn));
   },

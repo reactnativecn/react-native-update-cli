@@ -1,6 +1,7 @@
 import { question } from './utils';
 import { post, get, replaceSession, saveSession, closeSession } from './api';
 import crypto from 'node:crypto';
+import { t } from './utils/i18n';
 
 function md5(str: string) {
   return crypto.createHash('md5').update(str).digest('hex');
@@ -16,11 +17,11 @@ export const commands = {
     });
     replaceSession({ token });
     await saveSession();
-    console.log(`欢迎使用 pushy 热更新服务， ${info.name}.`);
+    console.log(t('welcomeMessage', { name: info.name }));
   },
   logout: async () => {
     await closeSession();
-    console.log('已退出登录');
+    console.log(t('loggedOut'));
   },
   me: async () => {
     const me = await get('/user/me');
