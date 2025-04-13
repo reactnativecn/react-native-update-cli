@@ -214,17 +214,13 @@ async function runReactNativeBundleCommand({
 
     reactNativeBundleProcess.on('close', async (exitCode) => {
       if (exitCode) {
-        reject(
-          new Error(
-            `"react-native bundle" command exited with code ${exitCode}.`,
-          ),
-        );
+        reject(new Error(t('bundleCommandError', { code: exitCode })));
       } else {
         let hermesEnabled: boolean | undefined = false;
 
         if (disableHermes) {
           hermesEnabled = false;
-          console.log('Hermes disabled');
+          console.log(t('hermesDisabled'));
         } else if (platform === 'android') {
           const gradlePropeties = await new Promise<{
             hermesEnabled?: boolean;
@@ -283,8 +279,8 @@ async function copyHarmonyBundle(outputFolder: string) {
     await fs.ensureDir(outputFolder);
     await fs.copy(harmonyRawPath, outputFolder);
   } catch (error: any) {
-    console.error('copyHarmonyBundle 错误:', error);
-    throw new Error(`复制文件失败: ${error.message}`);
+    console.error(t('copyHarmonyBundleError', { error }));
+    throw new Error(t('copyFileFailed', { error: error.message }));
   }
 }
 
@@ -355,7 +351,7 @@ async function compileHermesByteCode(
     );
     args.push('-output-source-map');
   }
-  console.log(`Running hermesc: ${hermesCommand} ${args.join(' ')}`);
+  console.log(t('runningHermesc', { command: hermesCommand, args: args.join(' ') }));
   spawnSync(hermesCommand, args, {
     stdio: 'ignore',
   });
@@ -365,7 +361,7 @@ async function compileHermesByteCode(
     if (!fs.existsSync(composerPath)) {
       return;
     }
-    console.log('Composing source map');
+    console.log(t('composingSourceMap'));
     spawnSync(
       'node',
       [
@@ -400,16 +396,14 @@ async function copyDebugidForSentry(
         },
       );
     } catch (error) {
-      console.error(
-        '无法找到 Sentry copy-debugid.js 脚本文件，请确保已正确安装 @sentry/react-native',
-      );
+      console.error(t('sentryCliNotFound'));
       return;
     }
 
     if (!fs.existsSync(copyDebugidPath)) {
       return;
     }
-    console.log('Copying debugid');
+    console.log(t('copyingDebugId'));
     spawnSync(
       'node',
       [
@@ -453,9 +447,9 @@ async function uploadSourcemapForSentry(
         stdio: 'inherit',
       },
     );
-    console.log(`Sentry release created for version: ${version}`);
+    console.log(t('sentryReleaseCreated', { version }));
 
-    console.log('Uploading sourcemap');
+    console.log(t('uploadingSourcemap'));
     spawnSync(
       'node',
       [
@@ -479,7 +473,7 @@ async function uploadSourcemapForSentry(
 const ignorePackingFileNames = ['.', '..', 'index.bundlejs.map'];
 const ignorePackingExtensions = ['DS_Store','txt.map'];
 async function pack(dir: string, output: string) {
-  console.log('Packing');
+  console.log(t('packing'));
   fs.ensureDirSync(path.dirname(output));
   await new Promise<void>((resolve, reject) => {
     const zipfile = new ZipFile();
@@ -516,7 +510,7 @@ async function pack(dir: string, output: string) {
     });
     zipfile.end();
   });
-  console.log(t('ppkPackageGenerated', { output }));
+  console.log(t('fileGenerated', { file: output }));
 }
 
 export function readEntire(entry: string, zipFile: ZipFile) {
@@ -671,7 +665,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
 
   for (const k in originEntries) {
     if (!newEntries[k]) {
-      console.log(`Delete ${k}`);
+      console.log(t('deleteFile', { file: k }));
       deletes[k] = 1;
     }
   }
@@ -844,7 +838,7 @@ export async function enumZipEntries(
               await result;
             }
           } catch (error) {
-            console.error('处理文件时出错:', error);
+            console.error(t('processingError', { error }));
           }
 
           zipfile.readEntry();
@@ -860,7 +854,7 @@ function diffArgsCheck(args, options, diffFn) {
   const [origin, next] = args;
 
   if (!origin || !next) {
-    console.error(`Usage: pushy ${diffFn} <origin> <next>`);
+    console.error(t('usageDiff', { command: diffFn }));
     process.exit(1);
   }
 
@@ -927,7 +921,7 @@ export const commands = {
     const realOutput = output.replace(/\$\{time\}/g, `${Date.now()}`);
 
     if (!platform) {
-      throw new Error('Platform must be specified.');
+      throw new Error(t('platformRequired'));
     }
 
     console.log(`Bundling with react-native: ${depVersions['react-native']}`);
@@ -972,14 +966,14 @@ export const commands = {
   async diff({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(args, options, 'diff');
 
-    await diffFromPPK(origin, next, realOutput, 'index.bundlejs');
+    await diffFromPPK(origin, next, realOutput);
     console.log(`${realOutput} generated.`);
   },
 
   async hdiff({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(args, options, 'hdiff');
 
-    await diffFromPPK(origin, next, realOutput, 'index.bundlejs');
+    await diffFromPPK(origin, next, realOutput);
     console.log(`${realOutput} generated.`);
   },
 

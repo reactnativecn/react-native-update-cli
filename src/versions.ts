@@ -1,5 +1,6 @@
 import { get, post, put, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
+import { t } from './utils/i18n';
 
 import { checkPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
@@ -35,7 +36,7 @@ interface CommandOptions {
 
 async function showVersion(appId: string, offset: number) {
   const { data, count } = await get(`/app/${appId}/version/list`);
-  console.log(`Offset ${offset}`);
+  console.log(t('offset', { offset }));
   for (const version of data) {
     const pkgCount = version.packages?.length || 0;
     let packageInfo = '';
@@ -149,7 +150,7 @@ export const commands = {
     });
     // TODO local diff
     saveToLocal(fn, `${appId}/ppk/${id}.ppk`);
-    console.log(`已成功上传新热更包（id: ${id}）`);
+    console.log(t('packageUploadSuccess', { id }));
 
     const v = await question('是否现在将此热更应用到原生包上？(Y/N)');
     if (v.toLowerCase() === 'y') {
@@ -192,10 +193,10 @@ export const commands = {
       try {
         rollout = Number.parseInt(options.rollout);
       } catch (e) {
-        throw new Error('rollout 必须是 1-100 的整数');
+        throw new Error(t('rolloutRangeError'));
       }
       if (rollout < 1 || rollout > 100) {
-        throw new Error('rollout 必须是 1-100 的整数');
+        throw new Error(t('rolloutRangeError'));
       }
     }
 
@@ -206,7 +207,7 @@ export const commands = {
         compare(pkg.name, minPkgVersion, '>='),
       );
       if (pkgs.length === 0) {
-        throw new Error(`未查询到 >= ${minPkgVersion} 的原生版本`);
+        throw new Error(t('nativeVersionNotFound', { version: minPkgVersion }));
       }
       if (rollout !== undefined) {
         const rolloutConfig: Record<string, number> = {};
@@ -219,9 +220,10 @@ export const commands = {
           },
         });
         console.log(
-          `已在原生版本 ${pkgs
-            .map((pkg: Package) => pkg.name)
-            .join(', ')} 上设置灰度发布 ${rollout}% 热更版本 ${versionId}`,
+          `${t('rolloutConfigSet', {
+            versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
+            rollout: rollout,
+          })}`,
         );
       }
       for (const pkg of pkgs) {
@@ -229,10 +231,14 @@ export const commands = {
           versionId,
         });
         console.log(
-          `已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`,
+          `${t('versionBind', {
+            version: versionId,
+            nativeVersion: pkg.name,
+            id: pkg.id,
+          })}`,
         );
       }
-      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
+      console.log(t('operationComplete', { count: pkgs.length }));
       return;
     }
     if (maxPkgVersion) {
@@ -242,7 +248,7 @@ export const commands = {
         compare(pkg.name, maxPkgVersion, '<='),
       );
       if (pkgs.length === 0) {
-        throw new Error(`未查询到 <= ${maxPkgVersion} 的原生版本`);
+        throw new Error(t('nativeVersionNotFoundLess', { version: maxPkgVersion }));
       }
       if (rollout !== undefined) {
         const rolloutConfig: Record<string, number> = {};
@@ -255,9 +261,10 @@ export const commands = {
           },
         });
         console.log(
-          `已在原生版本 ${pkgs
-            .map((pkg: Package) => pkg.name)
-            .join(', ')} 上设置灰度发布 ${rollout}% 热更版本 ${versionId}`,
+          `${t('rolloutConfigSet', {
+            versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
+            rollout: rollout,
+          })}`,
         );
       }
       for (const pkg of pkgs) {
@@ -265,10 +272,14 @@ export const commands = {
           versionId,
         });
         console.log(
-          `已将热更版本 ${versionId} 绑定到原生版本 ${pkg.name} (id: ${pkg.id})`,
+          `${t('versionBind', {
+            version: versionId,
+            nativeVersion: pkg.name,
+            id: pkg.id,
+          })}`,
         );
       }
-      console.log(`操作完成，共已绑定 ${pkgs.length} 个原生版本`);
+      console.log(t('operationComplete', { count: pkgs.length }));
       return;
     }
 
@@ -279,7 +290,7 @@ export const commands = {
       if (pkg) {
         pkgId = pkg.id;
       } else {
-        throw new Error(`未查询到匹配原生版本：${pkgVersion}`);
+        throw new Error(t('nativeVersionNotFoundMatch', { version: pkgVersion }));
       }
     }
     if (!pkgId) {
@@ -287,7 +298,7 @@ export const commands = {
     }
 
     if (!pkgId) {
-      throw new Error('请提供 packageId 或 packageVersion 参数');
+      throw new Error(t('packageIdRequired'));
     }
 
     if (!pkgVersion) {
@@ -306,7 +317,10 @@ export const commands = {
         },
       });
       console.log(
-        `已将在原生版本 ${pkgVersion} (id: ${pkgId}) 上设置灰度发布 ${rollout}% 热更版本 ${versionId} `,
+        `${t('rolloutConfigSet', {
+          versions: pkgVersion,
+          rollout: rollout,
+        })}`,
       );
     }
 
@@ -315,9 +329,14 @@ export const commands = {
         versionId,
       });
       console.log(
-        `已将热更版本 ${versionId} 绑定到原生版本 ${pkgVersion} (id: ${pkgId})`,
+        `${t('versionBind', {
+          version: versionId,
+          nativeVersion: pkgVersion,
+          id: pkgId,
+        })}`,
       );
     }
+    console.log(t('operationSuccess'));
   },
   updateVersionInfo: async ({
     args,
@@ -339,6 +358,6 @@ export const commands = {
     if (options.metaInfo) updateParams.metaInfo = options.metaInfo;
 
     await put(`/app/${appId}/version/${versionId}`, updateParams);
-    console.log('操作成功');
+    console.log(t('operationSuccess'));
   },
 };

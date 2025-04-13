@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 // import path from 'node:path';
 import { credentialFile, tempDir } from './constants';
+import { t } from './i18n';
 
 export function addGitIgnore() {
   const shouldIgnore = [credentialFile, tempDir];
@@ -26,7 +27,7 @@ export function addGitIgnore() {
     gitignoreLines.push('# react-native-update');
     for (const line of shouldIgnore) {
       gitignoreLines.push(line);
-      console.log(`Added ${line} to .gitignore`);
+      console.log(t('addedToGitignore', { line }));
     }
 
     fs.writeFileSync(gitignorePath, gitignoreLines.join('\n'));
