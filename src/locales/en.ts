@@ -40,7 +40,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   operationSuccess: 'Operation successful',
   failedToParseUpdateJson: 'Failed to parse file `update.json`. Try to remove it manually.',
   ppkPackageGenerated: 'ppk package generated and saved to: {{- output}}',
-  welcomeMessage: 'Welcome to pushy hot update service, {{name}}.',
+  Message: 'Welcome to Cresc hot update service, {{name}}.',
   loggedOut: 'Logged out',
   usageUnderDevelopment: 'Usage is under development now.',
   hermesDisabled: 'Hermes disabled',
