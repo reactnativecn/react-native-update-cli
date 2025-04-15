@@ -50,7 +50,7 @@ export default {
   packing: '正在打包',
   deletingFile: '删除 {{- file}}',
   bundlingWithRN: '正在使用 react-native {{version}} 打包',
-  fileGenerated: '已生成 {{- file}}。',
+  fileGenerated: '已生成 {{- file}}',
   processingError: '处理文件时出错：{{error}}',
   usageDiff: '用法：pushy {{command}} <origin> <next>',
   pluginDetected: '检测到 {{name}} 插件',
