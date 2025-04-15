@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.43.5",
+  "version": "1.43.6",
   "description": "command line tool for react-native-update (remote updates for react native)",
   "main": "index.js",
   "bin": {
@@ -58,7 +58,6 @@
     "semver": "^7.7.1",
     "tcp-ping": "^0.1.1",
     "tty-table": "4.2",
-    "update-notifier": "^5.1.0",
     "yauzl": "^3.2.0",
     "yazl": "3.3.1"
   },
@@ -67,18 +66,21 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@swc/cli": "^0.6.0",
-    "@swc/core": "^1.11.18",
+    "@swc/cli": "^0.7.2",
+    "@swc/core": "^1.11.21",
     "@types/filesize-parser": "^1.5.3",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "^22.14.0",
+    "@types/node": "^22.14.1",
     "@types/node-fetch": "^2.6.12",
     "@types/progress": "^2.0.7",
     "@types/semver": "^7.7.0",
     "@types/tcp-ping": "^0.1.6",
-    "@types/update-notifier": "^6.0.8",
     "@types/yauzl": "^2.10.3",
     "@types/yazl": "^2.4.6",
     "typescript": "^5.8.3"
-  }
+  },
+  "trustedDependencies": [
+    "@biomejs/biome",
+    "@swc/core"
+  ]
 }

@@ -1,15 +1,8 @@
 #!/usr/bin/env node
 
 import { loadSession } from './api';
-import updateNotifier from 'update-notifier';
 import { printVersionCommand } from './utils';
-import pkg from '../package.json';
 import { t } from './utils/i18n';
-
-updateNotifier({ pkg }).notify({
-  isGlobal: true,
-  message: t('updateNotifier'),
-});
 
 function printUsage() {
   // const commandName = args[0];

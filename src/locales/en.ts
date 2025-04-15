@@ -1,6 +1,4 @@
 export default {
-  updateNotifier:
-    'Run `{updateCommand}` to update the CLI to get continuous improvements in features, performance, and security.',
   loginFirst:
     'Not logged in.\nPlease run `cresc login` in the project directory to login.',
   lockNotFound:
@@ -38,7 +36,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   createAppSuccess: 'App created successfully (id: {{id}})',
   cancelled: 'Cancelled',
   operationSuccess: 'Operation successful',
-  failedToParseUpdateJson: 'Failed to parse file `update.json`. Try to remove it manually.',
+  failedToParseUpdateJson:
+    'Failed to parse file `update.json`. Try to remove it manually.',
   ppkPackageGenerated: 'ppk package generated and saved to: {{- output}}',
   Message: 'Welcome to Cresc hot update service, {{name}}.',
   loggedOut: 'Logged out',
@@ -48,13 +47,14 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   runningHermesc: 'Running hermesc: {{command}} {{args}}',
   composingSourceMap: 'Composing source map',
   copyingDebugId: 'Copying debugid',
-  sentryCliNotFound: 'Cannot find Sentry CLI tool, please make sure @sentry/cli is properly installed',
+  sentryCliNotFound:
+    'Cannot find Sentry CLI tool, please make sure @sentry/cli is properly installed',
   sentryReleaseCreated: 'Sentry release created for version: {{version}}',
   uploadingSourcemap: 'Uploading sourcemap',
   packing: 'Packing',
-  deletingFile: 'Delete {{file}}',
+  deletingFile: 'Delete {{- file}}',
   bundlingWithRN: 'Bundling with react-native: {{version}}',
-  fileGenerated: '{{file}} generated.',
+  fileGenerated: '{{- file}} generated.',
   processingError: 'Error processing file: {{error}}',
   usageDiff: 'Usage: cresc {{command}} <origin> <next>',
   pluginDetected: 'detected {{name}} plugin',
@@ -74,7 +74,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   usageParseIpa: 'Usage: cresc parseIpa <ipa file>',
   usageParseApk: 'Usage: cresc parseApk <apk file>',
   offset: 'Offset {{offset}}',
-  packageUploadSuccess: 'Successfully uploaded new hot update package (id: {{id}})',
+  packageUploadSuccess:
+    'Successfully uploaded new hot update package (id: {{id}})',
   rolloutRangeError: 'rollout must be an integer between 1-100',
   nativeVersionNotFound: 'No native version found >= {{version}}',
   nativeVersionNotFoundLess: 'No native version found <= {{version}}',
@@ -82,10 +83,13 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   packageIdRequired: 'Please provide packageId or packageVersion parameter',
   operationComplete: 'Operation complete, bound to {{count}} native versions',
   platformRequired: 'Platform must be specified.',
-  bundleCommandError: '"react-native bundle" command exited with code {{code}}.',
+  bundleCommandError:
+    '"react-native bundle" command exited with code {{code}}.',
   copyHarmonyBundleError: 'Error copying Harmony bundle: {{error}}',
   copyFileFailed: 'Failed to copy file: {{error}}',
-  deleteFile: 'Delete {{file}}',
-  rolloutConfigSet: 'Set {{rollout}}% rollout for version {{version}} on native version(s) {{versions}}',
-  versionBind: 'Bound version {{version}} to native version {{nativeVersion}} (id: {{id}})',
+  deleteFile: 'Delete {{- file}}',
+  rolloutConfigSet:
+    'Set {{rollout}}% rollout for version {{version}} on native version(s) {{versions}}',
+  versionBind:
+    'Bound version {{version}} to native version {{nativeVersion}} (id: {{id}})',
 };

@@ -1,6 +1,4 @@
 export default {
-  updateNotifier:
-    '建议运行 `{updateCommand}` 来更新命令行工具以获得功能、性能和安全性的持续改进',
   loginFirst: '尚未登录。\n请在项目目录中运行`pushy login`命令来登录',
   lockNotFound:
     '没有检测到任何 lock 文件，这可能导致依赖关系不一致而使热更异常。',
@@ -50,9 +48,9 @@ export default {
   sentryReleaseCreated: '已为版本 {{version}} 创建 Sentry release',
   uploadingSourcemap: '正在上传 sourcemap',
   packing: '正在打包',
-  deletingFile: '删除 {{file}}',
+  deletingFile: '删除 {{- file}}',
   bundlingWithRN: '正在使用 react-native {{version}} 打包',
-  fileGenerated: '已生成 {{file}}。',
+  fileGenerated: '已生成 {{- file}}。',
   processingError: '处理文件时出错：{{error}}',
   usageDiff: '用法：pushy {{command}} <origin> <next>',
   pluginDetected: '检测到 {{name}} 插件',
@@ -83,7 +81,9 @@ export default {
   bundleCommandError: '"react-native bundle" 命令退出，代码为 {{code}}。',
   copyHarmonyBundleError: '复制 Harmony bundle 错误：{{error}}',
   copyFileFailed: '复制文件失败：{{error}}',
-  deleteFile: '删除 {{file}}',
-  rolloutConfigSet: '已在原生版本 {{versions}} 上设置灰度发布 {{rollout}}% 热更版本 {{version}}',
-  versionBind: '已将热更版本 {{version}} 绑定到原生版本 {{nativeVersion}} (id: {{id}})',
+  deleteFile: '删除 {{- file}}',
+  rolloutConfigSet:
+    '已在原生版本 {{versions}} 上设置灰度发布 {{rollout}}% 热更版本 {{version}}',
+  versionBind:
+    '已将热更版本 {{version}} 绑定到原生版本 {{nativeVersion}} (id: {{id}})',
 };
