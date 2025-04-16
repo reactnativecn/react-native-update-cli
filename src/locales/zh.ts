@@ -10,7 +10,7 @@ export default {
 这样可以最大限度避免因依赖关系不一致而导致的热更异常，也降低供应链攻击等安全隐患。
 `,
   multipleLocksFound:
-    '检测到多种不同格式的锁文件({{lockFiles}})，这可能导致依赖关系不一致而使热更异常。',
+    '检测到多种不同格式的锁文件({{- lockFiles}})，这可能导致依赖关系不一致而使热更异常。',
   loginExpired: '登录信息已过期，请使用 `pushy login` 命令重新登录',
   fileSizeExceeded:
     '此文件大小 {{fileSize}} , 超出当前额度 {{maxSize}} 。您可以考虑升级付费业务以提升此额度。详情请访问: {{pricingPageUrl}}',

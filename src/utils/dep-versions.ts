@@ -1,19 +1,21 @@
 const currentPackage = require(`${process.cwd()}/package.json`);
 
-const depKeys = Object.keys(currentPackage.dependencies);
-const devDepKeys = Object.keys(currentPackage.devDependencies);
-const dedupedDeps = [...new Set([...depKeys, ...devDepKeys])];
-
 const _depVersions: Record<string, string> = {};
 
-for (const dep of dedupedDeps) {
-  try {
-    const packageJsonPath = require.resolve(`${dep}/package.json`, {
-      paths: [process.cwd()],
-    });
-    const version = require(packageJsonPath).version;
-    _depVersions[dep] = version;
-  } catch (e) {}
+if (currentPackage) {
+  const depKeys = currentPackage.dependencies ? Object.keys(currentPackage.dependencies) : [];
+  const devDepKeys = currentPackage.devDependencies ? Object.keys(currentPackage.devDependencies) : [];
+  const dedupedDeps = [...new Set([...depKeys, ...devDepKeys])];
+
+  for (const dep of dedupedDeps) {
+    try {
+      const packageJsonPath = require.resolve(`${dep}/package.json`, {
+        paths: [process.cwd()],
+      });
+      const version = require(packageJsonPath).version;
+      _depVersions[dep] = version;
+    } catch (e) {}
+  }
 }
 
 export const depVersions = Object.keys(_depVersions)
