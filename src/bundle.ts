@@ -1,8 +1,12 @@
 import path from 'node:path';
 import { translateOptions } from './utils';
 import * as fs from 'fs-extra';
-import { ZipFile } from 'yazl';
-import { open as openZipFile } from 'yauzl';
+import { ZipFile as YazlZipFile } from 'yazl';
+import {
+  type Entry,
+  open as openZipFile,
+  type ZipFile as YauzlZipFile,
+} from 'yauzl';
 import { question, checkPlugins } from './utils';
 import { checkPlatform } from './app';
 import { spawn, spawnSync } from 'node:child_process';
@@ -16,9 +20,11 @@ import { tempDir } from './utils/constants';
 import { checkLockFiles } from './utils/check-lockfile';
 import { addGitIgnore } from './utils/add-gitignore';
 
-let bsdiff;
-let hdiff;
-let diff;
+type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
+
+let bsdiff: Diff;
+let hdiff: Diff;
+let diff: Diff;
 try {
   bsdiff = require('node-bsdiff').diff;
 } catch (e) {}
@@ -59,9 +65,7 @@ async function runReactNativeBundleCommand({
   if (platform === 'android') {
     gradleConfig = await checkGradleConfig();
     if (gradleConfig.crunchPngs !== false) {
-      console.warn(
-        'android 的 crunchPngs 选项似乎尚未禁用（如已禁用则请忽略此提示），这可能导致热更包体积异常增大，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8-android-%E7%9A%84-crunch-%E4%BC%98%E5%8C%96 \n',
-      );
+      console.warn(t('androidCrunchPngsWarning'));
     }
   }
 
@@ -321,7 +325,7 @@ async function compileHermesByteCode(
   sourcemapOutput: string,
   shouldCleanSourcemap: boolean,
 ) {
-  console.log('Hermes enabled, now compiling to hermes bytecode:\n');
+  console.log(t('hermesEnabledCompiling'));
   // >= rn 0.69
   const rnDir = path.dirname(
     require.resolve('react-native', {
@@ -351,7 +355,9 @@ async function compileHermesByteCode(
     );
     args.push('-output-source-map');
   }
-  console.log(t('runningHermesc', { command: hermesCommand, args: args.join(' ') }));
+  console.log(
+    t('runningHermesc', { command: hermesCommand, args: args.join(' ') }),
+  );
   spawnSync(hermesCommand, args, {
     stdio: 'ignore',
   });
@@ -387,7 +393,7 @@ async function copyDebugidForSentry(
   sourcemapOutput: string,
 ) {
   if (sourcemapOutput) {
-    let copyDebugidPath;
+    let copyDebugidPath: string | undefined;
     try {
       copyDebugidPath = require.resolve(
         '@sentry/react-native/scripts/copy-debugid.js',
@@ -426,13 +432,13 @@ async function uploadSourcemapForSentry(
   version: string,
 ) {
   if (sourcemapOutput) {
-    let sentryCliPath;
+    let sentryCliPath: string | undefined;
     try {
       sentryCliPath = require.resolve('@sentry/cli/bin/sentry-cli', {
         paths: [process.cwd()],
       });
     } catch (error) {
-      console.error('无法找到 Sentry CLI 工具，请确保已正确安装 @sentry/cli');
+      console.error(t('sentryCliNotFound'));
       return;
     }
 
@@ -471,12 +477,12 @@ async function uploadSourcemapForSentry(
 }
 
 const ignorePackingFileNames = ['.', '..', 'index.bundlejs.map'];
-const ignorePackingExtensions = ['DS_Store','txt.map'];
+const ignorePackingExtensions = ['DS_Store', 'txt.map'];
 async function pack(dir: string, output: string) {
   console.log(t('packing'));
   fs.ensureDirSync(path.dirname(output));
   await new Promise<void>((resolve, reject) => {
-    const zipfile = new ZipFile();
+    const zipfile = new YazlZipFile();
 
     function addDirectory(root: string, rel: string) {
       if (rel) {
@@ -513,10 +519,13 @@ async function pack(dir: string, output: string) {
   console.log(t('fileGenerated', { file: output }));
 }
 
-export function readEntire(entry: string, zipFile: ZipFile) {
+export function readEntry(
+  entry: Entry,
+  zipFile: YauzlZipFile,
+): Promise<Buffer> {
   const buffers: Buffer[] = [];
   return new Promise((resolve, reject) => {
-    zipFile.openReadStream(entry, (err: any, stream: any) => {
+    zipFile.openReadStream(entry, (err, stream) => {
       stream.pipe({
         write(chunk: Buffer) {
           buffers.push(chunk);
@@ -544,7 +553,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
   const originEntries = {};
   const originMap = {};
 
-  let originSource;
+  let originSource: Buffer | undefined;
 
   await enumZipEntries(origin, (entry, zipFile) => {
     originEntries[entry.fileName] = entry;
@@ -557,7 +566,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
         entry.fileName === 'bundle.harmony.js'
       ) {
         // This is source.
-        return readEntire(entry, zipFile).then((v) => (originSource = v));
+        return readEntry(entry, zipFile).then((v) => (originSource = v));
       }
     }
   });
@@ -570,7 +579,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
 
   const copies = {};
 
-  const zipfile = new ZipFile();
+  const zipfile = new YazlZipFile();
 
   const writePromise = new Promise((resolve, reject) => {
     zipfile.outputStream.on('error', (err) => {
@@ -607,7 +616,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       }
     } else if (entry.fileName === 'index.bundlejs') {
       //console.log('Found bundle');
-      return readEntire(entry, nextZipfile).then((newSource) => {
+      return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
@@ -617,7 +626,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       });
     } else if (entry.fileName === 'bundle.harmony.js') {
       //console.log('Found bundle');
-      return readEntire(entry, nextZipfile).then((newSource) => {
+      return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
@@ -691,9 +700,9 @@ async function diffFromPackage(
   const originEntries = {};
   const originMap = {};
 
-  let originSource;
+  let originSource: Buffer | undefined;
 
-  await enumZipEntries(origin, (entry: any, zipFile: any) => {
+  await enumZipEntries(origin, (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
       const fn = transformPackagePath(entry.fileName);
       if (!fn) {
@@ -707,7 +716,7 @@ async function diffFromPackage(
 
       if (fn === originBundleName) {
         // This is source.
-        return readEntire(entry, zipFile).then((v) => (originSource = v));
+        return readEntry(entry, zipFile).then((v) => (originSource = v));
       }
     }
   });
@@ -720,7 +729,7 @@ async function diffFromPackage(
 
   const copies = {};
 
-  const zipfile = new ZipFile();
+  const zipfile = new YazlZipFile();
 
   const writePromise = new Promise((resolve, reject) => {
     zipfile.outputStream.on('error', (err) => {
@@ -737,7 +746,7 @@ async function diffFromPackage(
       zipfile.addEmptyDirectory(entry.fileName);
     } else if (entry.fileName === 'index.bundlejs') {
       //console.log('Found bundle');
-      return readEntire(entry, nextZipfile).then((newSource) => {
+      return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
@@ -747,7 +756,7 @@ async function diffFromPackage(
       });
     } else if (entry.fileName === 'bundle.harmony.js') {
       //console.log('Found bundle');
-      return readEntire(entry, nextZipfile).then((newSource) => {
+      return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
@@ -789,14 +798,18 @@ async function diffFromPackage(
 
 export async function enumZipEntries(
   zipFn: string,
-  callback: (entry: any, zipFile: any) => void,
+  callback: (
+    entry: Entry,
+    zipFile: YauzlZipFile,
+    nestedPath?: string,
+  ) => Promise<any>,
   nestedPath = '',
 ) {
   return new Promise((resolve, reject) => {
     openZipFile(
       zipFn,
       { lazyEntries: true },
-      async (err: any, zipfile: ZipFile) => {
+      async (err: any, zipfile: YauzlZipFile) => {
         if (err) {
           return reject(err);
         }
@@ -850,7 +863,7 @@ export async function enumZipEntries(
   });
 }
 
-function diffArgsCheck(args, options, diffFn) {
+function diffArgsCheck(args: string[], options: any, diffFn: string) {
   const [origin, next] = args;
 
   if (!origin || !next) {
@@ -889,7 +902,7 @@ function diffArgsCheck(args, options, diffFn) {
 export const commands = {
   bundle: async function ({ options }) {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform || (await question(t('platformPrompt'))),
     );
 
     const {
@@ -943,7 +956,7 @@ export const commands = {
 
     await pack(path.resolve(intermediaDir), realOutput);
 
-    const v = await question('是否现在上传此热更包?(Y/N)');
+    const v = await question(t('uploadBundlePrompt'));
     if (v.toLowerCase() === 'y') {
       const versionName = await this.publish({
         args: [realOutput],

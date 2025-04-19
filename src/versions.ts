@@ -125,9 +125,7 @@ export const commands = {
     const { name, description, metaInfo } = options;
 
     if (!fn || !fn.endsWith('.ppk')) {
-      throw new Error(
-        '使用方法: pushy publish ppk后缀文件 --platform ios|android|harmony',
-      );
+      throw new Error(t('publishUsage'));
     }
 
     const platform = checkPlatform(
@@ -204,7 +202,7 @@ export const commands = {
       minPkgVersion = String(minPkgVersion).trim();
       const { data } = await get(`/app/${appId}/package/list?limit=1000`);
       const pkgs = data.filter((pkg: Package) =>
-        compare(pkg.name, minPkgVersion, '>='),
+        compare(pkg.name, minPkgVersion!, '>='),
       );
       if (pkgs.length === 0) {
         throw new Error(t('nativeVersionNotFound', { version: minPkgVersion }));
@@ -245,10 +243,12 @@ export const commands = {
       maxPkgVersion = String(maxPkgVersion).trim();
       const { data } = await get(`/app/${appId}/package/list?limit=1000`);
       const pkgs = data.filter((pkg: Package) =>
-        compare(pkg.name, maxPkgVersion, '<='),
+        compare(pkg.name, maxPkgVersion!, '<='),
       );
       if (pkgs.length === 0) {
-        throw new Error(t('nativeVersionNotFoundLess', { version: maxPkgVersion }));
+        throw new Error(
+          t('nativeVersionNotFoundLess', { version: maxPkgVersion }),
+        );
       }
       if (rollout !== undefined) {
         const rolloutConfig: Record<string, number> = {};
@@ -290,7 +290,9 @@ export const commands = {
       if (pkg) {
         pkgId = pkg.id;
       } else {
-        throw new Error(t('nativeVersionNotFoundMatch', { version: pkgVersion }));
+        throw new Error(
+          t('nativeVersionNotFoundMatch', { version: pkgVersion }),
+        );
       }
     }
     if (!pkgId) {

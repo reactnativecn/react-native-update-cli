@@ -8,7 +8,6 @@ function printUsage() {
   // const commandName = args[0];
   // TODO: print usage of commandName, or print global usage.
 
-  console.log('Usage is under development now.');
   console.log(
     'Visit `https://github.com/reactnativecn/react-native-update` for document.',
   );

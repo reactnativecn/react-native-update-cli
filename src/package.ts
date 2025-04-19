@@ -13,22 +13,23 @@ import type { Platform } from 'types';
 export async function listPackage(appId: string) {
   const { data } = await get(`/app/${appId}/package/list?limit=1000`);
 
-  const header = [{ value: '原生包 Id' }, { value: '原生版本' }];
+  const header = [
+    { value: t('nativePackageId') },
+    { value: t('nativeVersion') },
+  ];
   const rows = [];
   for (const pkg of data) {
     const { version } = pkg;
     let versionInfo = '';
     if (version) {
-      versionInfo = `, 已绑定：${version.name} (${version.id})`;
-    } else {
-      // versionInfo = ' (newest)';
+      versionInfo = t('boundTo', { name: version.name, id: version.id });
     }
     let output = pkg.name;
     if (pkg.status === 'paused') {
-      output += '(已暂停)';
+      output += t('pausedStatus');
     }
     if (pkg.status === 'expired') {
-      output += '(已过期)';
+      output += t('expiredStatus');
     }
     output += versionInfo;
     rows.push([pkg.id, output]);
@@ -43,7 +44,7 @@ export async function choosePackage(appId: string) {
   const list = await listPackage(appId);
 
   while (true) {
-    const id = await question('输入原生包 id:');
+    const id = await question(t('enterNativePackageId'));
     const app = list.find((v) => v.id === Number(id));
     if (app) {
       return app;
@@ -66,15 +67,11 @@ export const commands = {
     const { appId, appKey } = await getSelectedApp('ios');
 
     if (appIdInPkg && appIdInPkg != appId) {
-      throw new Error(
-        `appId不匹配！当前ipa: ${appIdInPkg}, 当前update.json: ${appId}`,
-      );
+      throw new Error(t('appIdMismatchIpa', { appIdInPkg, appId }));
     }
 
     if (appKeyInPkg && appKeyInPkg !== appKey) {
-      throw new Error(
-        `appKey不匹配！当前ipa: ${appKeyInPkg}, 当前update.json: ${appKey}`,
-      );
+      throw new Error(t('appKeyMismatchIpa', { appKeyInPkg, appKey }));
     }
 
     const { hash } = await uploadFile(fn);
@@ -87,9 +84,7 @@ export const commands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.ipa`);
-    console.log(
-      `已成功上传ipa原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
-    );
+    console.log(t('ipaUploadSuccess', { id, version: versionName, buildTime }));
   },
   uploadApk: async ({ args }: { args: string[] }) => {
     const fn = args[0];
@@ -105,15 +100,11 @@ export const commands = {
     const { appId, appKey } = await getSelectedApp('android');
 
     if (appIdInPkg && appIdInPkg != appId) {
-      throw new Error(
-        `appId不匹配！当前apk: ${appIdInPkg}, 当前update.json: ${appId}`,
-      );
+      throw new Error(t('appIdMismatchApk', { appIdInPkg, appId }));
     }
 
     if (appKeyInPkg && appKeyInPkg !== appKey) {
-      throw new Error(
-        `appKey不匹配！当前apk: ${appKeyInPkg}, 当前update.json: ${appKey}`,
-      );
+      throw new Error(t('appKeyMismatchApk', { appKeyInPkg, appKey }));
     }
 
     const { hash } = await uploadFile(fn);
@@ -126,9 +117,7 @@ export const commands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.apk`);
-    console.log(
-      `已成功上传apk原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
-    );
+    console.log(t('apkUploadSuccess', { id, version: versionName, buildTime }));
   },
   uploadApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
@@ -144,15 +133,11 @@ export const commands = {
     const { appId, appKey } = await getSelectedApp('harmony');
 
     if (appIdInPkg && appIdInPkg != appId) {
-      throw new Error(
-        `appId不匹配！当前app: ${appIdInPkg}, 当前update.json: ${appId}`,
-      );
+      throw new Error(t('appIdMismatchApp', { appIdInPkg, appId }));
     }
 
     if (appKeyInPkg && appKeyInPkg !== appKey) {
-      throw new Error(
-        `appKey不匹配！当前app: ${appKeyInPkg}, 当前update.json: ${appKey}`,
-      );
+      throw new Error(t('appKeyMismatchApp', { appKeyInPkg, appKey }));
     }
 
     const { hash } = await uploadFile(fn);
@@ -165,9 +150,7 @@ export const commands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.app`);
-    console.log(
-      `已成功上传app原生包（id: ${id}, version: ${versionName}, buildTime: ${buildTime}）`,
-    );
+    console.log(t('appUploadSuccess', { id, version: versionName, buildTime }));
   },
   parseApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
@@ -192,7 +175,7 @@ export const commands = {
   },
   packages: async ({ options }: { options: { platform: Platform } }) => {
     const platform = checkPlatform(
-      options.platform || (await question('平台(ios/android/harmony):')),
+      options.platform || (await question(t('platformPrompt'))),
     );
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);
