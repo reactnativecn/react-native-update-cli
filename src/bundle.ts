@@ -19,6 +19,7 @@ import { t } from './utils/i18n';
 import { tempDir } from './utils/constants';
 import { checkLockFiles } from './utils/check-lockfile';
 import { addGitIgnore } from './utils/add-gitignore';
+import { commands as versionCommands } from './versions';
 
 type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
 
@@ -916,6 +917,9 @@ export const commands = {
       expo,
       rncli,
       disableHermes,
+      name,
+      description,
+      metaInfo,
     } = translateOptions({
       ...options,
       tempDir,
@@ -956,14 +960,17 @@ export const commands = {
 
     await pack(path.resolve(intermediaDir), realOutput);
 
-    const v = await question(t('uploadBundlePrompt'));
-    if (v.toLowerCase() === 'y') {
-      const versionName = await this.publish({
+    if (name && description && metaInfo) {
+      const versionName = await versionCommands.publish({
         args: [realOutput],
         options: {
           platform,
+          name,
+          description,
+          metaInfo,
         },
       });
+      
       if (isSentry) {
         await copyDebugidForSentry(bundleName, intermediaDir, sourcemapOutput);
         await uploadSourcemapForSentry(
@@ -972,6 +979,25 @@ export const commands = {
           sourcemapOutput,
           versionName,
         );
+      }
+    } else if (!options['no-interactive']) {
+      const v = await question(t('uploadBundlePrompt'));
+      if (v.toLowerCase() === 'y') {
+        const versionName = await versionCommands.publish({
+          args: [realOutput],
+          options: {
+            platform,
+          },
+        });
+        if (isSentry) {
+          await copyDebugidForSentry(bundleName, intermediaDir, sourcemapOutput);
+          await uploadSourcemapForSentry(
+            bundleName,
+            intermediaDir,
+            sourcemapOutput,
+            versionName,
+          );
+        }
       }
     }
   },
