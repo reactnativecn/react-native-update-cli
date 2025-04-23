@@ -118,7 +118,7 @@
       "description": "Bundle javascript and copy assets."
     },
     "bundle": {
-      "description": "Bundle javascript code only.",
+      "description": "Bundle javascript code only and optionally publish.",
       "options": {
         "dev": {
           "default": "false",
@@ -157,6 +157,18 @@
         },
         "disableHermes": {
           "default": false
+        },
+        "name": {
+          "hasValue": true,
+          "description": "Version name for publishing"
+        },
+        "description": {
+          "hasValue": true,
+          "description": "Version description for publishing"
+        },
+        "metaInfo": {
+          "hasValue": true,
+          "description": "Meta information for publishing"
         }
       }
     },
