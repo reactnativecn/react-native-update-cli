@@ -48,7 +48,7 @@ export default {
     'Failed to parse file `update.json`. Try to remove it manually.',
   fileGenerated: '{{- file}} generated.',
   fileSizeExceeded:
-    'This file size is {{fileSize}} , exceeding the current quota {{maxSize}} . You may consider upgrading to a higher plan to increase this quota. Details can be found at: {{pricingPageUrl}}',
+    'This file size is {{fileSize}} , exceeding the current quota {{maxSize}} . You may consider upgrading to a higher plan to increase this quota. Details can be found at: {{- pricingPageUrl}}',
   hermesDisabled: 'Hermes disabled',
   hermesEnabledCompiling: 'Hermes enabled, now compiling to hermes bytecode:\n',
   ipaUploadSuccess:

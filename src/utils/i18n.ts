@@ -15,6 +15,9 @@ i18next.init({
       translation: zh,
     },
   },
+  interpolation: {
+    escapeValue: false,
+  },
 });
 
 declare module 'i18next' {
