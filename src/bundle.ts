@@ -960,7 +960,7 @@ export const commands = {
 
     await pack(path.resolve(intermediaDir), realOutput);
 
-    if (name && description && metaInfo) {
+    if (name) {
       const versionName = await versionCommands.publish({
         args: [realOutput],
         options: {
