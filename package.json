@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.44.3",
+  "version": "1.44.5",
   "description": "command line tool for react-native-update (remote updates for react native)",
   "main": "index.js",
   "bin": {
@@ -35,7 +35,7 @@
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
   "dependencies": {
-    "@badisi/latest-version": "^7.0.14",
+    "@colors/colors": "^1.6.0",
     "bplist-parser": "^0.3.2",
     "bytebuffer": "^5.0.1",
     "cgbi-to-png": "^1.0.7",
@@ -46,6 +46,7 @@
     "filesize-parser": "^1.5.1",
     "form-data": "^4.0.2",
     "fs-extra": "8",
+    "global-dirs": "^4.0.0",
     "gradle-to-js": "^2.0.1",
     "i18next": "^24.2.3",
     "isomorphic-git": "^1.30.1",
@@ -55,6 +56,7 @@
     "progress": "^2.0.3",
     "properties": "^1.2.1",
     "read": "^4.1.0",
+    "registry-auth-token": "^5.1.0",
     "semver": "^7.7.1",
     "tcp-ping": "^0.1.1",
     "tty-table": "4.2",
@@ -82,8 +84,5 @@
   "trustedDependencies": [
     "@biomejs/biome",
     "@swc/core"
-  ],
-  "patchedDependencies": {
-    "@badisi/latest-version@7.0.14": "patches/@badisi%2Flatest-version@7.0.14.patch"
-  }
+  ]
 }

@@ -5,7 +5,7 @@ import pkg from '../../package.json';
 import AppInfoParser from './app-info-parser';
 import semverSatisfies from 'semver/functions/satisfies';
 import chalk from 'chalk';
-import latestVersion from '@badisi/latest-version';
+import latestVersion from '../utils/latest-version';
 import { checkPlugins } from './check-plugin';
 
 import { read } from 'read';
