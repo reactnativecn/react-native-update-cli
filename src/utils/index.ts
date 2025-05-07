@@ -98,7 +98,7 @@ export async function getAppInfo(fn: string) {
   const metaJsonFile = await appInfoParser.parser.getEntryFromHarmonyApp(
     /rawfile\/meta.json/,
   );
-  let metaData = {};
+  let metaData: Record<string, any> = {};
   if (metaJsonFile) {
     metaData = JSON.parse(metaJsonFile.toString());
   }
@@ -181,16 +181,13 @@ export async function printVersionCommand() {
         version: chalk.green(latestRnuCliVersion),
       })}`
     : '';
-  console.log(
-    `react-native-update-cli: ${pkg.version}${latestRnuCliVersion}`,
-  );
-  let rnuVersion = '';
-  rnuVersion = depVersions['react-native-update'];
-  latestRnuVersion = latestRnuVersion
-    ? ` ${t('latestVersionTag', { version: chalk.green(latestRnuVersion) })}`
-    : '';
-  console.log(`react-native-update: ${rnuVersion}${latestRnuVersion}`);
+  console.log(`react-native-update-cli: ${pkg.version}${latestRnuCliVersion}`);
+  const rnuVersion = depVersions['react-native-update'];
   if (rnuVersion) {
+    latestRnuVersion = latestRnuVersion
+      ? ` ${t('latestVersionTag', { version: chalk.green(latestRnuVersion) })}`
+      : '';
+    console.log(`react-native-update: ${rnuVersion}${latestRnuVersion}`);
     if (IS_CRESC) {
       if (semverSatisfies(rnuVersion, '<10.27.0')) {
         console.error(

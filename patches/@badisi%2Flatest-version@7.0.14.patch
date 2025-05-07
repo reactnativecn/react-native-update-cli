@@ -1,0 +1,23 @@
+diff --git a/index.js b/index.js
+index a7af7990160fa54a549cbb6245017d55e6b150f5..74b3372c53b9c693af5b571722bafd97e448a34b 100644
+--- a/index.js
++++ b/index.js
+@@ -100,7 +100,7 @@ var downloadMetadata = (pkgName, options) => {
+       }
+     });
+     const abort = (error) => {
+-      request.removeAllListeners();
++      // request.removeAllListeners();
+       request.destroy();
+       reject(error);
+     };
+@@ -110,6 +110,9 @@ var downloadMetadata = (pkgName, options) => {
+     request.once("error", (err) => {
+       abort(err);
+     });
++    request.on("close", () => {
++      request.removeAllListeners();
++    });
+   });
+ };
+ var getCacheDir = (name = "@badisi/latest-version") => {

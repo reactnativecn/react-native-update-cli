@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.44.2",
+  "version": "1.44.3",
   "description": "command line tool for react-native-update (remote updates for react native)",
   "main": "index.js",
   "bin": {
@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "build": "swc src -d lib --strip-leading-paths",
-    "prepare": "npm run build && chmod +x lib/index.js",
+    "prepublishOnly": "npm run build && chmod +x lib/index.js",
     "lint": "tsc --noEmit & biome check --write ."
   },
   "repository": {
@@ -35,7 +35,7 @@
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
   "dependencies": {
-    "@badisi/latest-version": "^7.0.13",
+    "@badisi/latest-version": "^7.0.14",
     "bplist-parser": "^0.3.2",
     "bytebuffer": "^5.0.1",
     "cgbi-to-png": "^1.0.7",
@@ -66,8 +66,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
-    "@swc/cli": "^0.7.2",
-    "@swc/core": "^1.11.21",
+    "@swc/cli": "0.7.3",
+    "@swc/core": "^1.11.24",
     "@types/filesize-parser": "^1.5.3",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.14.1",
@@ -82,5 +82,8 @@
   "trustedDependencies": [
     "@biomejs/biome",
     "@swc/core"
-  ]
+  ],
+  "patchedDependencies": {
+    "@badisi/latest-version@7.0.14": "patches/@badisi%2Flatest-version@7.0.14.patch"
+  }
 }
