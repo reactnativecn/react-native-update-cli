@@ -1,5 +1,5 @@
 import { question } from './utils';
-import fs from 'node:fs';
+import fs from 'fs';
 import Table from 'tty-table';
 
 import { post, get, doDelete } from './api';
@@ -7,7 +7,6 @@ import type { Platform } from './types';
 import { t } from './utils/i18n';
 
 const validPlatforms = ['ios', 'android', 'harmony'];
-
 
 export function checkPlatform(platform: Platform) {
   if (!validPlatforms.includes(platform)) {
@@ -79,7 +78,13 @@ export const commands = {
       options: { platform },
     });
   },
-  deleteApp: async ({ args, options }: { args: string[]; options: { platform: Platform } }) => {
+  deleteApp: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: { platform: Platform };
+  }) => {
     const { platform } = options;
     const id = args[0] || chooseApp(platform);
     if (!id) {
@@ -92,7 +97,13 @@ export const commands = {
     const { platform } = options;
     listApp(platform);
   },
-  selectApp: async ({ args, options }: { args: string[]; options: { platform: Platform } }) => {
+  selectApp: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: { platform: Platform };
+  }) => {
     const platform = checkPlatform(
       options.platform || (await question(t('platformQuestion'))),
     );
@@ -100,7 +111,9 @@ export const commands = {
       ? Number.parseInt(args[0])
       : (await chooseApp(platform)).id;
 
-    let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> = {};
+    let updateInfo: Partial<
+      Record<Platform, { appId: number; appKey: string }>
+    > = {};
     if (fs.existsSync('update.json')) {
       try {
         updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));

@@ -12,8 +12,8 @@ import {
   underline,
   yellow,
 } from '@colors/colors/safe';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, readFileSync } from 'fs';
+import { dirname } from 'path';
 import latestVersion, {
   type Package,
   type PackageJson,

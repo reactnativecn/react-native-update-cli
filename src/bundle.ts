@@ -1,4 +1,4 @@
-import path from 'node:path';
+import path from 'path';
 import { translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile as YazlZipFile } from 'yazl';
@@ -9,10 +9,10 @@ import {
 } from 'yauzl';
 import { question, checkPlugins } from './utils';
 import { checkPlatform } from './app';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'child_process';
 import semverSatisfies from 'semver/functions/satisfies';
 const g2js = require('gradle-to-js/lib/parser');
-import os from 'node:os';
+import os from 'os';
 const properties = require('properties');
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
@@ -901,7 +901,7 @@ function diffArgsCheck(args: string[], options: any, diffFn: string) {
 }
 
 export const commands = {
-  bundle: async function ({ options }) {
+  bundle: async ({ options }) => {
     const platform = checkPlatform(
       options.platform || (await question(t('platformPrompt'))),
     );
@@ -970,7 +970,7 @@ export const commands = {
           metaInfo,
         },
       });
-      
+
       if (isSentry) {
         await copyDebugidForSentry(bundleName, intermediaDir, sourcemapOutput);
         await uploadSourcemapForSentry(
@@ -990,7 +990,11 @@ export const commands = {
           },
         });
         if (isSentry) {
-          await copyDebugidForSentry(bundleName, intermediaDir, sourcemapOutput);
+          await copyDebugidForSentry(
+            bundleName,
+            intermediaDir,
+            sourcemapOutput,
+          );
           await uploadSourcemapForSentry(
             bundleName,
             intermediaDir,

@@ -12,7 +12,8 @@
         "noDoubleEquals": "off"
       },
       "style": {
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "useNodejsImportProtocol": "off"
       },
       "a11y": {
         "useValidAnchor": "off"

@@ -1,14 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import type {
   RequestOptions as HttpRequestOptions,
   Agent,
   IncomingMessage,
-} from 'node:http';
-import type { RequestOptions as HttpsRequestOptions } from 'node:https';
-import { join, dirname, resolve as pathResolve, parse } from 'node:path';
+} from 'http';
+import type { RequestOptions as HttpsRequestOptions } from 'https';
+import { join, dirname, resolve as pathResolve, parse } from 'path';
 import { npm, yarn } from 'global-dirs';
-import { homedir } from 'node:os';
-import { URL } from 'node:url';
+import { homedir } from 'os';
+import { URL } from 'url';
 
 import getRegistryUrl from 'registry-auth-token/registry-url';
 import registryAuthToken from 'registry-auth-token';

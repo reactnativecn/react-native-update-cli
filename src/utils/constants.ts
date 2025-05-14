@@ -1,4 +1,4 @@
-import path from 'node:path';
+import path from 'path';
 
 const scriptName = path.basename(process.argv[1]) as 'cresc' | 'pushy';
 export const IS_CRESC = scriptName === 'cresc';

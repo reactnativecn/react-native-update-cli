@@ -1,6 +1,6 @@
 import { question } from './utils';
 import { post, get, replaceSession, saveSession, closeSession } from './api';
-import crypto from 'node:crypto';
+import crypto from 'crypto';
 import { t } from './utils/i18n';
 
 function md5(str: string) {
