@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import pkg from '../../package.json';
 import AppInfoParser from './app-info-parser';
-import semverSatisfies from 'semver/functions/satisfies';
+import { satisfies } from 'compare-versions';
 import chalk from 'chalk';
 import latestVersion from '../utils/latest-version';
 import { checkPlugins } from './check-plugin';
@@ -189,24 +189,24 @@ export async function printVersionCommand() {
       : '';
     console.log(`react-native-update: ${rnuVersion}${latestRnuVersion}`);
     if (IS_CRESC) {
-      if (semverSatisfies(rnuVersion, '<10.27.0')) {
+      if (satisfies(rnuVersion, '<10.27.0')) {
         console.error(
           'Unsupported version, please update to the latest version: npm i react-native-update@latest',
         );
         process.exit(1);
       }
     } else {
-      if (semverSatisfies(rnuVersion, '<8.5.2')) {
+      if (satisfies(rnuVersion, '<8.5.2')) {
         console.warn(
           `当前版本已不再支持，请至少升级到 v8 的最新小版本后重新打包（代码无需改动）: npm i react-native-update@8 .
           如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
         );
-      } else if (semverSatisfies(rnuVersion, '9.0.0 - 9.2.1')) {
+      } else if (satisfies(rnuVersion, '9.0.0 - 9.2.1')) {
         console.warn(
           `当前版本已不再支持，请至少升级到 v9 的最新小版本后重新打包（代码无需改动，可直接热更）: npm i react-native-update@9 .
           如有使用安装 apk 的功能，请注意添加所需权限 https://pushy.reactnative.cn/docs/api#async-function-downloadandinstallapkurl`,
         );
-      } else if (semverSatisfies(rnuVersion, '10.0.0 - 10.17.0')) {
+      } else if (satisfies(rnuVersion, '10.0.0 - 10.17.0')) {
         console.warn(
           '当前版本已不再支持，请升级到 v10 的最新小版本（代码无需改动，可直接热更）: npm i react-native-update@10',
         );

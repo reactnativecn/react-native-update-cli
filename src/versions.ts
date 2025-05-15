@@ -7,7 +7,7 @@ import { choosePackage } from './package';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import type { Package, Platform, Version } from 'types';
-import semverSatisfies from 'semver/functions/satisfies';
+import { satisfies } from 'compare-versions';
 
 interface CommandOptions {
   name?: string;
@@ -170,7 +170,8 @@ export const commands = {
     const { id } = await post(`/app/${appId}/version/create`, {
       name: versionName,
       hash,
-      description: description || (await question(t('versionDescriptionQuestion'))),
+      description:
+        description || (await question(t('versionDescriptionQuestion'))),
       metaInfo: metaInfo || (await question(t('versionMetaInfoQuestion'))),
       deps: depVersions,
       commit: await getCommitInfo(),
@@ -233,7 +234,7 @@ export const commands = {
     if (minPkgVersion) {
       minPkgVersion = String(minPkgVersion).trim();
       pkgsToBind = allPkgs.filter((pkg: Package) =>
-        semverSatisfies(pkg.name, `>=${minPkgVersion}`),
+        satisfies(pkg.name, `>=${minPkgVersion}`),
       );
       if (pkgsToBind.length === 0) {
         throw new Error(
@@ -243,7 +244,7 @@ export const commands = {
     } else if (maxPkgVersion) {
       maxPkgVersion = String(maxPkgVersion).trim();
       pkgsToBind = allPkgs.filter((pkg: Package) =>
-        semverSatisfies(pkg.name, `<=${maxPkgVersion}`),
+        satisfies(pkg.name, `<=${maxPkgVersion}`),
       );
       if (pkgsToBind.length === 0) {
         throw new Error(
@@ -263,7 +264,7 @@ export const commands = {
     } else if (semverRange) {
       semverRange = semverRange.trim();
       pkgsToBind = allPkgs.filter((pkg: Package) =>
-        semverSatisfies(pkg.name, semverRange!),
+        satisfies(pkg.name, semverRange!),
       );
       if (pkgsToBind.length === 0) {
         throw new Error(

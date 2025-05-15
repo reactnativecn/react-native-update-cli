@@ -8,9 +8,9 @@ import {
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
 import { question, checkPlugins } from './utils';
-import { checkPlatform, getPlatform } from './app';
+import { getPlatform } from './app';
 import { spawn, spawnSync } from 'child_process';
-import semverSatisfies from 'semver/functions/satisfies';
+import { satisfies } from 'compare-versions';
 const g2js = require('gradle-to-js/lib/parser');
 import os from 'os';
 const properties = require('properties');
@@ -101,7 +101,7 @@ async function runReactNativeBundleCommand({
           .toString(),
       ).version;
       // expo cli 0.10.17 (expo 49) 开始支持 bundle:embed
-      if (semverSatisfies(expoCliVersion, '>= 0.10.17')) {
+      if (satisfies(expoCliVersion, '>= 0.10.17')) {
         usingExpo = true;
       } else {
         cliPath = undefined;
