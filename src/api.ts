@@ -11,7 +11,7 @@ import {
   credentialFile,
   defaultEndpoint,
 } from './utils/constants';
-import type { Session } from 'types';
+import type { Session, Package } from 'types';
 import FormData from 'form-data';
 import { t } from './utils/i18n';
 
@@ -177,3 +177,8 @@ export async function uploadFile(fn: string, key?: string) {
   // const body = await response.json();
   return { hash: key || formData.key };
 }
+
+export const getAllPackages = async (appId: string) => {
+  const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+  return data as Package[] | undefined | null;
+};

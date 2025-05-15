@@ -8,7 +8,13 @@ import { t } from './utils/i18n';
 
 const validPlatforms = ['ios', 'android', 'harmony'];
 
-export function checkPlatform(platform: Platform) {
+export async function getPlatform(platform?: string) {
+  return assertPlatform(
+    platform || (await question(t('platformQuestion'))),
+  ) as Platform;
+}
+
+export function assertPlatform(platform: string) {
   if (!validPlatforms.includes(platform)) {
     throw new Error(t('unsupportedPlatform', { platform }));
   }
@@ -16,7 +22,7 @@ export function checkPlatform(platform: Platform) {
 }
 
 export function getSelectedApp(platform: Platform) {
-  checkPlatform(platform);
+  assertPlatform(platform);
 
   if (!fs.existsSync('update.json')) {
     throw new Error(t('appNotSelected', { platform }));
@@ -68,9 +74,7 @@ export const commands = {
   }) {
     const name = options.name || (await question(t('appNameQuestion')));
     const { downloadUrl } = options;
-    const platform = checkPlatform(
-      options.platform || (await question(t('platformQuestion'))),
-    );
+    const platform = await getPlatform(options.platform);
     const { id } = await post('/app/create', { name, platform, downloadUrl });
     console.log(t('createAppSuccess', { id }));
     await this.selectApp({
@@ -104,9 +108,7 @@ export const commands = {
     args: string[];
     options: { platform: Platform };
   }) => {
-    const platform = checkPlatform(
-      options.platform || (await question(t('platformQuestion'))),
-    );
+    const platform = await getPlatform(options.platform);
     const id = args[0]
       ? Number.parseInt(args[0])
       : (await chooseApp(platform)).id;

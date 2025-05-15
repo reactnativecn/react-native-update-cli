@@ -8,7 +8,7 @@ import {
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
 import { question, checkPlugins } from './utils';
-import { checkPlatform } from './app';
+import { checkPlatform, getPlatform } from './app';
 import { spawn, spawnSync } from 'child_process';
 import semverSatisfies from 'semver/functions/satisfies';
 const g2js = require('gradle-to-js/lib/parser');
@@ -902,9 +902,7 @@ function diffArgsCheck(args: string[], options: any, diffFn: string) {
 
 export const commands = {
   bundle: async ({ options }) => {
-    const platform = checkPlatform(
-      options.platform || (await question(t('platformPrompt'))),
-    );
+    const platform = await getPlatform(options.platform);
 
     const {
       bundleName,

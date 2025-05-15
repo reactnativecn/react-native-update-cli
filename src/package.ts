@@ -1,8 +1,8 @@
-import { get, post, uploadFile } from './api';
+import { get, getAllPackages, post, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
 import { t } from './utils/i18n';
 
-import { checkPlatform, getSelectedApp } from './app';
+import { checkPlatform, getPlatform, getSelectedApp } from './app';
 
 import { getApkInfo, getIpaInfo, getAppInfo } from './utils';
 import Table from 'tty-table';
@@ -11,14 +11,14 @@ import { getCommitInfo } from './utils/git';
 import type { Platform } from 'types';
 
 export async function listPackage(appId: string) {
-  const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+  const allPkgs = await getAllPackages(appId);
 
   const header = [
     { value: t('nativePackageId') },
     { value: t('nativeVersion') },
   ];
   const rows = [];
-  for (const pkg of data) {
+  for (const pkg of allPkgs) {
     const { version } = pkg;
     let versionInfo = '';
     if (version) {
@@ -36,8 +36,8 @@ export async function listPackage(appId: string) {
   }
 
   console.log(Table(header, rows).render());
-  console.log(t('totalPackages', { count: data.length }));
-  return data;
+  console.log(t('totalPackages', { count: allPkgs.length }));
+  return allPkgs;
 }
 
 export async function choosePackage(appId: string) {
@@ -174,9 +174,7 @@ export const commands = {
     console.log(await getApkInfo(fn));
   },
   packages: async ({ options }: { options: { platform: Platform } }) => {
-    const platform = checkPlatform(
-      options.platform || (await question(t('platformPrompt'))),
-    );
+    const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);
   },

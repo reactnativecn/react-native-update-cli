@@ -8,3 +8,15 @@ export interface Session {
 }
 
 export type Platform = 'ios' | 'android' | 'harmony';
+
+export interface Package {
+  id: string;
+  name: string;
+}
+
+export interface Version {
+  id: string;
+  hash: string;
+  name: string;
+  packages?: Package[];
+}

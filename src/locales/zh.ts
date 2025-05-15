@@ -69,9 +69,11 @@ export default {
     '检测到多种不同格式的锁文件({{- lockFiles}})，这可能导致依赖关系不一致而使热更异常。',
   nativePackageId: '原生包 Id',
   nativeVersion: '原生版本',
-  nativeVersionNotFound: '未查询到 >= {{version}} 的原生版本',
-  nativeVersionNotFoundLess: '未查询到 <= {{version}} 的原生版本',
+  nativeVersionNotFoundGte: '未查询到 >= {{version}} 的原生版本',
+  nativeVersionNotFoundLte: '未查询到 <= {{version}} 的原生版本',
   nativeVersionNotFoundMatch: '未查询到匹配原生版本：{{version}}',
+  nativePackageIdNotFound: '未查询到原生包 id: {{id}}',
+  noPackagesFound: '未查询到任何原生包（appId: {{appId}}）',
   offset: '偏移量 {{offset}}',
   operationComplete: '操作完成，共已绑定 {{count}} 个原生版本',
   operationSuccess: '操作成功',
@@ -115,4 +117,9 @@ export default {
   versionBind:
     '已将热更版本 {{version}} 绑定到原生版本 {{nativeVersion}} (id: {{id}})',
   welcomeMessage: '欢迎使用 pushy 热更新服务，{{name}}。',
+  versionNameQuestion: '输入版本名称:',
+  versionDescriptionQuestion: '输入版本描述:',
+  versionMetaInfoQuestion: '输入自定义的 meta info:',
+  updateNativePackageQuestion: '是否现在将此热更应用到原生包上？(Y/N)',
+  unnamed: '(未命名)',
 };

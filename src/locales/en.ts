@@ -73,9 +73,11 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'Multiple lock files detected ({{- lockFiles}}), which may cause inconsistent dependencies and hot-updating issues.',
   nativePackageId: 'Native Package ID',
   nativeVersion: 'Native Version',
-  nativeVersionNotFound: 'No native version found >= {{version}}',
-  nativeVersionNotFoundLess: 'No native version found <= {{version}}',
+  nativeVersionNotFoundGte: 'No native version found >= {{version}}',
+  nativeVersionNotFoundLte: 'No native version found <= {{version}}',
   nativeVersionNotFoundMatch: 'No matching native version found: {{version}}',
+  nativePackageIdNotFound: 'No native package id found: {{id}}',
+  noPackagesFound: 'No packages found. (appId: {{appId}})',
   offset: 'Offset {{offset}}',
   operationComplete: 'Operation complete, bound to {{count}} native versions',
   operationSuccess: 'Operation successful',
@@ -122,4 +124,9 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   versionBind:
     'Bound version {{version}} to native version {{nativeVersion}} (id: {{id}})',
   welcomeMessage: 'Welcome to Cresc hot update service, {{name}}.',
+  versionNameQuestion: 'Enter version name:',
+  versionDescriptionQuestion: 'Enter version description:',
+  versionMetaInfoQuestion: 'Enter custom meta info:',
+  updateNativePackageQuestion: 'Bind to native package now?(Y/N)',
+  unnamed: '(Unnamed)',
 };

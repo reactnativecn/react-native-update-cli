@@ -1,25 +1,13 @@
-import { get, post, put, uploadFile } from './api';
+import { get, getAllPackages, post, put, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
 import { t } from './utils/i18n';
 
-import { checkPlatform, getSelectedApp } from './app';
+import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
-import { compare } from 'compare-versions';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import type { Platform } from 'types';
-
-interface Package {
-  id: string;
-  name: string;
-}
-
-interface Version {
-  id: string;
-  hash: string;
-  name: string;
-  packages?: Package[];
-}
+import type { Package, Platform, Version } from 'types';
+import semverSatisfies from 'semver/functions/satisfies';
 
 interface CommandOptions {
   name?: string;
@@ -31,6 +19,7 @@ interface CommandOptions {
   packageVersion?: string;
   minPackageVersion?: string;
   maxPackageVersion?: string;
+  semverRange?: string;
   rollout?: string;
 }
 
@@ -113,6 +102,49 @@ async function chooseVersion(appId: string) {
   }
 }
 
+export const bindVersionToPackages = async ({
+  appId,
+  versionId,
+  pkgs,
+  rollout,
+}: {
+  appId: string;
+  versionId: string;
+  pkgs: Package[];
+  rollout?: number;
+}) => {
+  if (rollout !== undefined) {
+    const rolloutConfig: Record<string, number> = {};
+    for (const pkg of pkgs) {
+      rolloutConfig[pkg.name] = rollout;
+    }
+    await put(`/app/${appId}/version/${versionId}`, {
+      config: {
+        rollout: rolloutConfig,
+      },
+    });
+    console.log(
+      `${t('rolloutConfigSet', {
+        versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
+        rollout: rollout,
+      })}`,
+    );
+  }
+  for (const pkg of pkgs) {
+    await put(`/app/${appId}/package/${pkg.id}`, {
+      versionId,
+    });
+    console.log(
+      `${t('versionBind', {
+        version: versionId,
+        nativeVersion: pkg.name,
+        id: pkg.id,
+      })}`,
+    );
+  }
+  console.log(t('operationComplete', { count: pkgs.length }));
+};
+
 export const commands = {
   publish: async function ({
     args,
@@ -128,21 +160,18 @@ export const commands = {
       throw new Error(t('publishUsage'));
     }
 
-    const platform = checkPlatform(
-      options.platform ||
-        ((await question('平台(ios/android/harmony):')) as Platform),
-    );
+    const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
 
     const { hash } = await uploadFile(fn);
 
     const versionName =
-      name || (await question('输入版本名称: ')) || '(未命名)';
+      name || (await question(t('versionNameQuestion'))) || t('unnamed');
     const { id } = await post(`/app/${appId}/version/create`, {
       name: versionName,
       hash,
-      description: description || (await question('输入版本描述:')),
-      metaInfo: metaInfo || (await question('输入自定义的 meta info:')),
+      description: description || (await question(t('versionDescriptionQuestion'))),
+      metaInfo: metaInfo || (await question(t('versionMetaInfoQuestion'))),
       deps: depVersions,
       commit: await getCommitInfo(),
     });
@@ -150,17 +179,14 @@ export const commands = {
     saveToLocal(fn, `${appId}/ppk/${id}.ppk`);
     console.log(t('packageUploadSuccess', { id }));
 
-    const v = await question('是否现在将此热更应用到原生包上？(Y/N)');
+    const v = await question(t('updateNativePackageQuestion'));
     if (v.toLowerCase() === 'y') {
       await this.update({ args: [], options: { versionId: id, platform } });
     }
     return versionName;
   },
   versions: async ({ options }: { options: CommandOptions }) => {
-    const platform = checkPlatform(
-      options.platform ||
-        ((await question('平台(ios/android/harmony):')) as Platform),
-    );
+    const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
     await listVersions(appId);
   },
@@ -171,20 +197,18 @@ export const commands = {
     args: string[];
     options: CommandOptions;
   }) => {
-    const platform = checkPlatform(
-      options.platform ||
-        ((await question('平台(ios/android/harmony):')) as Platform),
-    );
+    const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
     let versionId = options.versionId || (await chooseVersion(appId)).id;
     if (versionId === 'null') {
       versionId = undefined;
     }
 
-    let pkgId: string | undefined;
+    let pkgId = options.packageId;
     let pkgVersion = options.packageVersion;
     let minPkgVersion = options.minPackageVersion;
     let maxPkgVersion = options.maxPackageVersion;
+    let semverRange = options.semverRange;
     let rollout: number | undefined = undefined;
 
     if (options.rollout !== undefined) {
@@ -198,146 +222,78 @@ export const commands = {
       }
     }
 
-    if (minPkgVersion) {
-      minPkgVersion = String(minPkgVersion).trim();
-      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-      const pkgs = data.filter((pkg: Package) =>
-        compare(pkg.name, minPkgVersion!, '>='),
-      );
-      if (pkgs.length === 0) {
-        throw new Error(t('nativeVersionNotFound', { version: minPkgVersion }));
-      }
-      if (rollout !== undefined) {
-        const rolloutConfig: Record<string, number> = {};
-        for (const pkg of pkgs) {
-          rolloutConfig[pkg.name] = rollout;
-        }
-        await put(`/app/${appId}/version/${versionId}`, {
-          config: {
-            rollout: rolloutConfig,
-          },
-        });
-        console.log(
-          `${t('rolloutConfigSet', {
-            versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
-            rollout: rollout,
-          })}`,
-        );
-      }
-      for (const pkg of pkgs) {
-        await put(`/app/${appId}/package/${pkg.id}`, {
-          versionId,
-        });
-        console.log(
-          `${t('versionBind', {
-            version: versionId,
-            nativeVersion: pkg.name,
-            id: pkg.id,
-          })}`,
-        );
-      }
-      console.log(t('operationComplete', { count: pkgs.length }));
-      return;
-    }
-    if (maxPkgVersion) {
-      maxPkgVersion = String(maxPkgVersion).trim();
-      const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-      const pkgs = data.filter((pkg: Package) =>
-        compare(pkg.name, maxPkgVersion!, '<='),
-      );
-      if (pkgs.length === 0) {
-        throw new Error(
-          t('nativeVersionNotFoundLess', { version: maxPkgVersion }),
-        );
-      }
-      if (rollout !== undefined) {
-        const rolloutConfig: Record<string, number> = {};
-        for (const pkg of pkgs) {
-          rolloutConfig[pkg.name] = rollout;
-        }
-        await put(`/app/${appId}/version/${versionId}`, {
-          config: {
-            rollout: rolloutConfig,
-          },
-        });
-        console.log(
-          `${t('rolloutConfigSet', {
-            versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
-            rollout: rollout,
-          })}`,
-        );
-      }
-      for (const pkg of pkgs) {
-        await put(`/app/${appId}/package/${pkg.id}`, {
-          versionId,
-        });
-        console.log(
-          `${t('versionBind', {
-            version: versionId,
-            nativeVersion: pkg.name,
-            id: pkg.id,
-          })}`,
-        );
-      }
-      console.log(t('operationComplete', { count: pkgs.length }));
-      return;
+    const allPkgs = await getAllPackages(appId);
+
+    if (!allPkgs) {
+      throw new Error(t('noPackagesFound', { appId }));
     }
 
-    const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-    if (pkgVersion) {
+    let pkgsToBind: Package[] = [];
+
+    if (minPkgVersion) {
+      minPkgVersion = String(minPkgVersion).trim();
+      pkgsToBind = allPkgs.filter((pkg: Package) =>
+        semverSatisfies(pkg.name, `>=${minPkgVersion}`),
+      );
+      if (pkgsToBind.length === 0) {
+        throw new Error(
+          t('nativeVersionNotFoundGte', { version: minPkgVersion }),
+        );
+      }
+    } else if (maxPkgVersion) {
+      maxPkgVersion = String(maxPkgVersion).trim();
+      pkgsToBind = allPkgs.filter((pkg: Package) =>
+        semverSatisfies(pkg.name, `<=${maxPkgVersion}`),
+      );
+      if (pkgsToBind.length === 0) {
+        throw new Error(
+          t('nativeVersionNotFoundLte', { version: maxPkgVersion }),
+        );
+      }
+    } else if (pkgVersion) {
       pkgVersion = pkgVersion.trim();
-      const pkg = data.find((pkg: Package) => pkg.name === pkgVersion);
+      const pkg = allPkgs.find((pkg: Package) => pkg.name === pkgVersion);
       if (pkg) {
-        pkgId = pkg.id;
+        pkgsToBind = [pkg];
       } else {
         throw new Error(
           t('nativeVersionNotFoundMatch', { version: pkgVersion }),
         );
       }
-    }
-    if (!pkgId) {
-      pkgId = options.packageId || (await choosePackage(appId)).id;
-    }
+    } else if (semverRange) {
+      semverRange = semverRange.trim();
+      pkgsToBind = allPkgs.filter((pkg: Package) =>
+        semverSatisfies(pkg.name, semverRange!),
+      );
+      if (pkgsToBind.length === 0) {
+        throw new Error(
+          t('nativeVersionNotFoundMatch', { version: semverRange }),
+        );
+      }
+    } else {
+      if (!pkgId) {
+        pkgId = (await choosePackage(appId)).id;
+      }
 
-    if (!pkgId) {
-      throw new Error(t('packageIdRequired'));
-    }
-
-    if (!pkgVersion) {
-      const pkg = data.find((pkg: Package) => String(pkg.id) === String(pkgId));
+      if (!pkgId) {
+        throw new Error(t('packageIdRequired'));
+      }
+      const pkg = allPkgs.find(
+        (pkg: Package) => String(pkg.id) === String(pkgId),
+      );
       if (pkg) {
-        pkgVersion = pkg.name;
+        pkgsToBind = [pkg];
+      } else {
+        throw new Error(t('nativePackageIdNotFound', { id: pkgId }));
       }
     }
 
-    if (rollout !== undefined && pkgVersion) {
-      await put(`/app/${appId}/version/${versionId}`, {
-        config: {
-          rollout: {
-            [pkgVersion]: rollout,
-          },
-        },
-      });
-      console.log(
-        `${t('rolloutConfigSet', {
-          versions: pkgVersion,
-          rollout: rollout,
-        })}`,
-      );
-    }
-
-    if (versionId !== undefined) {
-      await put(`/app/${appId}/package/${pkgId}`, {
-        versionId,
-      });
-      console.log(
-        `${t('versionBind', {
-          version: versionId,
-          nativeVersion: pkgVersion,
-          id: pkgId,
-        })}`,
-      );
-    }
+    await bindVersionToPackages({
+      appId,
+      versionId,
+      pkgs: pkgsToBind,
+      rollout,
+    });
     console.log(t('operationSuccess'));
   },
   updateVersionInfo: async ({
@@ -347,10 +303,7 @@ export const commands = {
     args: string[];
     options: CommandOptions;
   }) => {
-    const platform = checkPlatform(
-      options.platform ||
-        ((await question('平台(ios/android/harmony):')) as Platform),
-    );
+    const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
     const versionId = options.versionId || (await chooseVersion(appId)).id;
 
