@@ -1,6 +1,6 @@
 const Unzip = require('isomorphic-unzip');
 const { isBrowser, decodeNullUnicode } = require('./utils');
-import { enumZipEntries, readEntire } from '../../bundle';
+import { enumZipEntries, readEntry } from '../../bundle';
 
 class Zip {
   constructor(file) {
@@ -53,7 +53,7 @@ class Zip {
       let originSource;
       await enumZipEntries(this.file, (entry, zipFile) => {
         if (regex.test(entry.fileName)) {
-          return readEntire(entry, zipFile).then((v) => (originSource = v));
+          return readEntry(entry, zipFile).then((v) => (originSource = v));
         }
       });
       return originSource;
