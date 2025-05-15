@@ -87,7 +87,7 @@
         "maxPackageVersion": {
           "hasValue": true
         },
-        "semverRange": {
+        "packageVersionRange": {
           "hasValue": true
         },
         "rollout": {

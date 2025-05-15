@@ -19,7 +19,7 @@ interface CommandOptions {
   packageVersion?: string;
   minPackageVersion?: string;
   maxPackageVersion?: string;
-  semverRange?: string;
+  packageVersionRange?: string;
   rollout?: string;
 }
 
@@ -209,7 +209,7 @@ export const commands = {
     let pkgVersion = options.packageVersion;
     let minPkgVersion = options.minPackageVersion;
     let maxPkgVersion = options.maxPackageVersion;
-    let semverRange = options.semverRange;
+    let packageVersionRange = options.packageVersionRange;
     let rollout: number | undefined = undefined;
 
     if (options.rollout !== undefined) {
@@ -261,14 +261,14 @@ export const commands = {
           t('nativeVersionNotFoundMatch', { version: pkgVersion }),
         );
       }
-    } else if (semverRange) {
-      semverRange = semverRange.trim();
+    } else if (packageVersionRange) {
+      packageVersionRange = packageVersionRange.trim();
       pkgsToBind = allPkgs.filter((pkg: Package) =>
-        satisfies(pkg.name, semverRange!),
+        satisfies(pkg.name, packageVersionRange!),
       );
       if (pkgsToBind.length === 0) {
         throw new Error(
-          t('nativeVersionNotFoundMatch', { version: semverRange }),
+          t('nativeVersionNotFoundMatch', { version: packageVersionRange }),
         );
       }
     } else {
