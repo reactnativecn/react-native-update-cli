@@ -2,7 +2,7 @@ import { get, getAllPackages, post, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
 import { t } from './utils/i18n';
 
-import { checkPlatform, getPlatform, getSelectedApp } from './app';
+import { getPlatform, getSelectedApp } from './app';
 
 import { getApkInfo, getIpaInfo, getAppInfo } from './utils';
 import Table from 'tty-table';

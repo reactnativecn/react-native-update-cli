@@ -96,7 +96,7 @@ export default {
   rnuVersionNotFound:
     'react-native-update: 无法获取版本号。请在项目目录中运行命令',
   rolloutConfigSet:
-    '已在原生版本 {{versions}} 上设置灰度发布 {{rollout}}% 热更版本 {{version}}',
+    '已在原生版本 {{versions}} 上设置灰度发布 {{rollout}}% 热更包 {{version}}',
   rolloutRangeError: 'rollout 必须是 1-100 的整数',
   runningHermesc: '运行 hermesc：{{- command}} {{- args}}',
   sentryCliNotFound: '无法找到 Sentry CLI 工具，请确保已正确安装 @sentry/cli',
@@ -115,7 +115,7 @@ export default {
   usageUploadApp: '使用方法: pushy uploadApp app后缀文件',
   usageUploadIpa: '使用方法: pushy uploadIpa ipa后缀文件',
   versionBind:
-    '已将热更版本 {{version}} 绑定到原生版本 {{nativeVersion}} (id: {{id}})',
+    '已将热更包 {{version}} 绑定到原生版本 {{nativeVersion}} (id: {{id}})',
   welcomeMessage: '欢迎使用 pushy 热更新服务，{{name}}。',
   versionNameQuestion: '输入版本名称:',
   versionDescriptionQuestion: '输入版本描述:',

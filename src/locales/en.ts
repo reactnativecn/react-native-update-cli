@@ -101,7 +101,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   rnuVersionNotFound:
     'react-native-update: Cannot get the version number. Please run the command in the project directory',
   rolloutConfigSet:
-    'Set {{rollout}}% rollout for version {{version}} on native version(s) {{versions}}',
+    'Set {{rollout}}% rollout for OTA update {{version}} on native version(s) {{versions}}',
   rolloutRangeError: 'rollout must be an integer between 1-100',
   runningHermesc: 'Running hermesc: {{- command}} {{- args}}',
   sentryCliNotFound:
@@ -122,10 +122,10 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   usageUploadApp: 'Usage: cresc uploadApp <app file>',
   usageUploadIpa: 'Usage: cresc uploadIpa <ipa file>',
   versionBind:
-    'Bound version {{version}} to native version {{nativeVersion}} (id: {{id}})',
+    'Bound hot update {{version}} to native version {{nativeVersion}} (id: {{id}})',
   welcomeMessage: 'Welcome to Cresc hot update service, {{name}}.',
-  versionNameQuestion: 'Enter version name:',
-  versionDescriptionQuestion: 'Enter version description:',
+  versionNameQuestion: 'Enter OTA update name:',
+  versionDescriptionQuestion: 'Enter OTA update description:',
   versionMetaInfoQuestion: 'Enter custom meta info:',
   updateNativePackageQuestion: 'Bind to native package now?(Y/N)',
   unnamed: '(Unnamed)',

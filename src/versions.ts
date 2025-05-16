@@ -307,7 +307,6 @@ export const commands = {
       rollout,
       dryRun: options.dryRun,
     });
-    console.log(t('operationSuccess'));
   },
   updateVersionInfo: async ({
     args,
