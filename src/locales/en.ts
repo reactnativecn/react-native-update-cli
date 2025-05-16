@@ -129,4 +129,5 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   versionMetaInfoQuestion: 'Enter custom meta info:',
   updateNativePackageQuestion: 'Bind to native package now?(Y/N)',
   unnamed: '(Unnamed)',
+  dryRun: 'Below is the dry-run result, no actual operation will be performed:',
 };

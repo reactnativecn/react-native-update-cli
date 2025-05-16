@@ -8,6 +8,7 @@ import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import type { Package, Platform, Version } from 'types';
 import { satisfies } from 'compare-versions';
+import chalk from 'chalk';
 
 interface CommandOptions {
   name?: string;
@@ -21,6 +22,7 @@ interface CommandOptions {
   maxPackageVersion?: string;
   packageVersionRange?: string;
   rollout?: string;
+  dryRun?: boolean;
 }
 
 async function showVersion(appId: string, offset: number) {
@@ -107,22 +109,29 @@ export const bindVersionToPackages = async ({
   versionId,
   pkgs,
   rollout,
+  dryRun,
 }: {
   appId: string;
   versionId: string;
   pkgs: Package[];
   rollout?: number;
+  dryRun?: boolean;
 }) => {
+  if (dryRun) {
+    console.log(chalk.yellow(t('dryRun')));
+  }
   if (rollout !== undefined) {
     const rolloutConfig: Record<string, number> = {};
     for (const pkg of pkgs) {
       rolloutConfig[pkg.name] = rollout;
     }
-    await put(`/app/${appId}/version/${versionId}`, {
-      config: {
-        rollout: rolloutConfig,
-      },
-    });
+    if (!dryRun) {
+      await put(`/app/${appId}/version/${versionId}`, {
+        config: {
+          rollout: rolloutConfig,
+        },
+      });
+    }
     console.log(
       `${t('rolloutConfigSet', {
         versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
@@ -131,9 +140,11 @@ export const bindVersionToPackages = async ({
     );
   }
   for (const pkg of pkgs) {
-    await put(`/app/${appId}/package/${pkg.id}`, {
-      versionId,
-    });
+    if (!dryRun) {
+      await put(`/app/${appId}/package/${pkg.id}`, {
+        versionId,
+      });
+    }
     console.log(
       `${t('versionBind', {
         version: versionId,
@@ -294,6 +305,7 @@ export const commands = {
       versionId,
       pkgs: pkgsToBind,
       rollout,
+      dryRun: options.dryRun,
     });
     console.log(t('operationSuccess'));
   },
