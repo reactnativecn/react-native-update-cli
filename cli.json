@@ -175,11 +175,49 @@
         "metaInfo": {
           "hasValue": true,
           "description": "Meta information for publishing"
+        },
+        "packageVersion": {
+          "hasValue": true
         }
       }
     },
     "release": {
       "description": "Push builded file to server."
+    },
+    "releaseFull": {
+      "options": {
+        "origin": {
+          "hasValue": true
+        },
+        "next": {
+          "hasValue": true
+        },
+        "output": {
+          "hasValue": true,
+          "default": "${tempDir}/output/diff-${time}.ppk-patch"
+        },
+        "platform": {
+          "hasValue": true
+        },
+        "name": {
+          "hasValue": true
+        },
+        "description": {
+          "hasValue": true
+        },
+        "packageVersion": {
+          "hasValue": true
+        },
+        "metaInfo": {
+          "hasValue": true
+        },
+        "rollout": {
+          "hasValue": true
+        },
+        "dryRun": {
+          "default": false
+        }
+      }
     },
     "diff": {
       "description": "Create diff patch",

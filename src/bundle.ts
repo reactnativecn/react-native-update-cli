@@ -548,8 +548,18 @@ function basename(fn: string) {
   return m?.[1];
 }
 
-async function diffFromPPK(origin: string, next: string, output: string) {
+async function diffFromPPKInternal(origin: string, next: string, output: string, diffAlgorithm?: Diff) {
   fs.ensureDirSync(path.dirname(output));
+
+  const selectedDiff = diffAlgorithm || diff; // Use provided algorithm or global 'diff'
+
+  if (!selectedDiff && !bsdiff) {
+    throw new Error(
+      `Diff algorithm not specified and bsdiff is not available. Please install "node-bsdiff".`,
+    );
+  }
+  const currentDiffTool = selectedDiff || bsdiff; // Default to bsdiff if global 'diff' is not set
+
 
   const originEntries = {};
   const originMap = {};
@@ -620,7 +630,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
-          diff(originSource, newSource),
+          currentDiffTool(originSource, newSource),
           'index.bundlejs.patch',
         );
         //console.log('End diff');
@@ -630,7 +640,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
-          diff(originSource, newSource),
+          currentDiffTool(originSource, newSource),
           'bundle.harmony.js.patch',
         );
         //console.log('End diff');
@@ -900,9 +910,29 @@ function diffArgsCheck(args: string[], options: any, diffFn: string) {
   };
 }
 
+export async function diffFromPPK(origin: string, next: string, output: string, diffAlgorithm?: 'bsdiff' | 'hdiff') {
+  let selectedDiffTool: Diff;
+  if (diffAlgorithm === 'hdiff') {
+    if (!hdiff) throw new Error('hdiff is not available. Please install node-hdiffpatch.');
+    selectedDiffTool = hdiff;
+  } else { // Default to bsdiff
+    if (!bsdiff) throw new Error('bsdiff is not available. Please install node-bsdiff.');
+    selectedDiffTool = bsdiff;
+  }
+  // The global 'diff' variable is not used here to avoid side effects from other commands.
+  return diffFromPPKInternal(origin, next, output, selectedDiffTool);
+}
+
 export const commands = {
   bundle: async ({ options }) => {
     const platform = await getPlatform(options.platform);
+
+    // Ensure packageVersion is also translated or retrieved if available in options
+    const translatedOpts = translateOptions({
+      ...options, // Original options which might include packageVersion
+      tempDir,
+      platform,
+    });
 
     const {
       bundleName,
@@ -915,14 +945,14 @@ export const commands = {
       expo,
       rncli,
       disableHermes,
-      name,
-      description,
-      metaInfo,
-    } = translateOptions({
-      ...options,
-      tempDir,
-      platform,
-    });
+      name,            // For bundle naming and publish
+      description,     // For publish
+      metaInfo,        // For publish
+    } = translatedOpts;
+    
+    // packageVersion for publish should be taken from original options if translateOptions doesn't handle it for bundle
+    const packageVersion = options.packageVersion;
+
 
     checkLockFiles();
     addGitIgnore();
@@ -958,15 +988,20 @@ export const commands = {
 
     await pack(path.resolve(intermediaDir), realOutput);
 
-    if (name) {
+    if (name) { // If name is provided, publish automatically
+      const publishOptions: any = { // Type according to what versions.publish expects
+        platform,
+        name,
+        description,
+        metaInfo,
+      };
+      if (packageVersion) {
+        publishOptions.packageVersion = packageVersion;
+      }
+
       const versionName = await versionCommands.publish({
         args: [realOutput],
-        options: {
-          platform,
-          name,
-          description,
-          metaInfo,
-        },
+        options: publishOptions,
       });
 
       if (isSentry) {
@@ -978,14 +1013,17 @@ export const commands = {
           versionName,
         );
       }
-    } else if (!options['no-interactive']) {
+    } else if (!options['no-interactive']) { // If name is not provided, retain old prompt behavior
       const v = await question(t('uploadBundlePrompt'));
       if (v.toLowerCase() === 'y') {
+        const publishOptions: any = { platform };
+        if (packageVersion) { // Also consider packageVersion if prompting
+            publishOptions.packageVersion = packageVersion;
+        }
+        // name, description, metaInfo will be prompted by versionCommands.publish if not provided
         const versionName = await versionCommands.publish({
           args: [realOutput],
-          options: {
-            platform,
-          },
+          options: publishOptions,
         });
         if (isSentry) {
           await copyDebugidForSentry(
@@ -1006,15 +1044,16 @@ export const commands = {
 
   async diff({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(args, options, 'diff');
-
-    await diffFromPPK(origin, next, realOutput);
+    // diffArgsCheck sets the global 'diff' variable to bsdiff
+    // diffFromPPKInternal will use the global 'diff' if no algorithm is passed.
+    await diffFromPPKInternal(origin, next, realOutput); 
     console.log(`${realOutput} generated.`);
   },
 
   async hdiff({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(args, options, 'hdiff');
-
-    await diffFromPPK(origin, next, realOutput);
+    // diffArgsCheck sets the global 'diff' variable to hdiff
+    await diffFromPPKInternal(origin, next, realOutput);
     console.log(`${realOutput} generated.`);
   },
 
