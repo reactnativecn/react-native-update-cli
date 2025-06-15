@@ -20,6 +20,7 @@ const commands = {
   ...require('./app').commands,
   ...require('./package').commands,
   ...require('./versions').commands,
+  ...require('./release').commands,
   help: printUsage,
 };
 
