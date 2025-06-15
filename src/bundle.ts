@@ -149,6 +149,14 @@ async function runReactNativeBundleCommand({
   const bundleParams = await checkPlugins();
   const isSentry = bundleParams.sentry;
 
+  if (isSentry) {
+    if (platform === 'ios') {
+      process.env.SENTRY_PROPERTIES = 'ios/sentry.properties';
+    } else if (platform === 'android') {
+      process.env.SENTRY_PROPERTIES = 'android/sentry.properties';
+    }
+  }
+
   let bundleCommand = 'bundle';
   if (usingExpo) {
     bundleCommand = 'export:embed';
