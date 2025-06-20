@@ -10,7 +10,8 @@ import type { Package, Platform, Version } from 'types';
 import { satisfies } from 'compare-versions';
 import chalk from 'chalk';
 
-interface CommandOptions {
+interface VersionCommandOptions {
+  appId?: string;
   name?: string;
   description?: string;
   metaInfo?: string;
@@ -156,13 +157,13 @@ export const bindVersionToPackages = async ({
   console.log(t('operationComplete', { count: pkgs.length }));
 };
 
-export const commands = {
+export const versionCommands = {
   publish: async function ({
     args,
     options,
   }: {
     args: string[];
-    options: CommandOptions;
+    options: VersionCommandOptions;
   }) {
     const fn = args[0];
     const { name, description, metaInfo } = options;
@@ -191,26 +192,52 @@ export const commands = {
     saveToLocal(fn, `${appId}/ppk/${id}.ppk`);
     console.log(t('packageUploadSuccess', { id }));
 
-    const v = await question(t('updateNativePackageQuestion'));
-    if (v.toLowerCase() === 'y') {
-      await this.update({ args: [], options: { versionId: id, platform } });
+    const {
+      packageId,
+      packageVersion,
+      packageVersionRange,
+      minPackageVersion,
+      maxPackageVersion,
+      rollout,
+      dryRun,
+    } = options;
+
+    if (
+      packageId ||
+      packageVersion ||
+      packageVersionRange ||
+      minPackageVersion ||
+      maxPackageVersion
+    ) {
+      await this.update({
+        options: {
+          versionId: id,
+          platform,
+          packageId,
+          packageVersion,
+          packageVersionRange,
+          minPackageVersion,
+          maxPackageVersion,
+          rollout,
+          dryRun,
+        },
+      });
+    } else {
+      const q = await question(t('updateNativePackageQuestion'));
+      if (q.toLowerCase() === 'y') {
+        await this.update({ options: { versionId: id, platform } });
+      }
     }
     return versionName;
   },
-  versions: async ({ options }: { options: CommandOptions }) => {
+  versions: async ({ options }: { options: VersionCommandOptions }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
     await listVersions(appId);
   },
-  update: async ({
-    args,
-    options,
-  }: {
-    args: string[];
-    options: CommandOptions;
-  }) => {
+  update: async ({ options }: { options: VersionCommandOptions }) => {
     const platform = await getPlatform(options.platform);
-    const { appId } = await getSelectedApp(platform);
+    const appId = options.appId || (await getSelectedApp(platform)).appId;
     let versionId = options.versionId || (await chooseVersion(appId)).id;
     if (versionId === 'null') {
       versionId = undefined;
@@ -309,11 +336,9 @@ export const commands = {
     });
   },
   updateVersionInfo: async ({
-    args,
     options,
   }: {
-    args: string[];
-    options: CommandOptions;
+    options: VersionCommandOptions;
   }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
