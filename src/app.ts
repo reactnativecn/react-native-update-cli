@@ -66,7 +66,7 @@ export async function chooseApp(platform: Platform) {
   }
 }
 
-export const commands = {
+export const appCommands = {
   createApp: async function ({
     options,
   }: {

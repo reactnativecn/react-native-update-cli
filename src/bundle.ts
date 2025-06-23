@@ -908,7 +908,7 @@ function diffArgsCheck(args: string[], options: any, diffFn: string) {
   };
 }
 
-export const commands = {
+export const bundleCommands = {
   bundle: async ({ options }) => {
     const platform = await getPlatform(options.platform);
 

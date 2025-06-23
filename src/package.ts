@@ -52,7 +52,7 @@ export async function choosePackage(appId: string) {
   }
 }
 
-export const commands = {
+export const packageCommands = {
   uploadIpa: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
