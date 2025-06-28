@@ -57,6 +57,27 @@
         },
         "metaInfo": {
           "hasValue": true
+        },
+        "packageId": {
+          "hasValue": true
+        },
+        "packageVersion": {
+          "hasValue": true
+        },
+        "minPackageVersion": {
+          "hasValue": true
+        },
+        "maxPackageVersion": {
+          "hasValue": true
+        },
+        "packageVersionRange": {
+          "hasValue": true
+        },
+        "rollout": {
+          "hasValue": true
+        },
+        "dryRun": {
+          "default": false
         }
       }
     },
@@ -175,6 +196,27 @@
         "metaInfo": {
           "hasValue": true,
           "description": "Meta information for publishing"
+        },
+        "packageId": {
+          "hasValue": true
+        },
+        "packageVersion": {
+          "hasValue": true
+        },
+        "minPackageVersion": {
+          "hasValue": true
+        },
+        "maxPackageVersion": {
+          "hasValue": true
+        },
+        "packageVersionRange": {
+          "hasValue": true
+        },
+        "rollout": {
+          "hasValue": true
+        },
+        "dryRun": {
+          "default": false
         }
       }
     },

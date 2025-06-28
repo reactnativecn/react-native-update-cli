@@ -3,6 +3,11 @@
 import { loadSession } from './api';
 import { printVersionCommand } from './utils';
 import { t } from './utils/i18n';
+import { bundleCommands } from './bundle';
+import { versionCommands } from './versions';
+import { userCommands } from './user';
+import { appCommands } from './app';
+import { packageCommands } from './package';
 
 function printUsage() {
   // const commandName = args[0];
@@ -15,11 +20,11 @@ function printUsage() {
 }
 
 const commands = {
-  ...require('./user').commands,
-  ...require('./bundle').commands,
-  ...require('./app').commands,
-  ...require('./package').commands,
-  ...require('./versions').commands,
+  ...userCommands,
+  ...bundleCommands,
+  ...appCommands,
+  ...packageCommands,
+  ...versionCommands,
   help: printUsage,
 };
 

@@ -7,7 +7,7 @@ function md5(str: string) {
   return crypto.createHash('md5').update(str).digest('hex');
 }
 
-export const commands = {
+export const userCommands = {
   login: async ({ args }: { args: string[] }) => {
     const email = args[0] || (await question('email:'));
     const pwd = args[1] || (await question('password:', true));

@@ -19,7 +19,7 @@ import { t } from './utils/i18n';
 import { tempDir } from './utils/constants';
 import { checkLockFiles } from './utils/check-lockfile';
 import { addGitIgnore } from './utils/add-gitignore';
-import { commands as versionCommands } from './versions';
+import { versionCommands } from './versions';
 
 type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
 
@@ -918,7 +918,7 @@ function diffArgsCheck(args: string[], options: any, diffFn: string) {
   };
 }
 
-export const commands = {
+export const bundleCommands = {
   bundle: async ({ options }) => {
     const platform = await getPlatform(options.platform);
 
@@ -936,6 +936,13 @@ export const commands = {
       name,
       description,
       metaInfo,
+      packageId,
+      packageVersion,
+      minPackageVersion,
+      maxPackageVersion,
+      packageVersionRange,
+      rollout,
+      dryRun,
     } = translateOptions({
       ...options,
       tempDir,
@@ -984,6 +991,13 @@ export const commands = {
           name,
           description,
           metaInfo,
+          packageId,
+          packageVersion,
+          minPackageVersion,
+          maxPackageVersion,
+          packageVersionRange,
+          rollout,
+          dryRun: Boolean(dryRun),
         },
       });
 
