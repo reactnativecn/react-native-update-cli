@@ -286,11 +286,21 @@ async function copyHarmonyBundle(outputFolder: string) {
     } catch (error) {
       await fs.chmod(harmonyRawPath, 0o755);
     }
-    await fs.remove(path.join(harmonyRawPath, 'update.json'));
-    await fs.copy('update.json', path.join(harmonyRawPath, 'update.json'));
-
     await fs.ensureDir(outputFolder);
-    await fs.copy(harmonyRawPath, outputFolder);
+    const files = await fs.readdir(harmonyRawPath);
+    for (const file of files) {
+      if (file !== 'update.json' && file !== 'meta.json') {
+        const sourcePath = path.join(harmonyRawPath, file);
+        const destPath = path.join(outputFolder, file);
+        const stat = await fs.stat(sourcePath);
+        
+        if (stat.isFile()) {
+          await fs.copy(sourcePath, destPath);
+        } else if (stat.isDirectory()) {
+          await fs.copy(sourcePath, destPath);
+        }
+      }
+    }
   } catch (error: any) {
     console.error(t('copyHarmonyBundleError', { error }));
     throw new Error(t('copyFileFailed', { error: error.message }));
