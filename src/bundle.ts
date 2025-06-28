@@ -286,7 +286,10 @@ async function copyHarmonyBundle(outputFolder: string) {
     } catch (error) {
       await fs.chmod(harmonyRawPath, 0o755);
     }
+    await fs.remove(path.join(harmonyRawPath, 'update.json'));
+    await fs.copy('update.json', path.join(harmonyRawPath, 'update.json'));
     await fs.ensureDir(outputFolder);
+    
     const files = await fs.readdir(harmonyRawPath);
     for (const file of files) {
       if (file !== 'update.json' && file !== 'meta.json') {
