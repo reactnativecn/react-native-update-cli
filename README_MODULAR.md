@@ -199,9 +199,14 @@ const workflowResult = await moduleManager.executeWorkflow('my-workflow', {
 - `apps`: 列出所有应用
 - `selectApp`: 选择应用
 - `deleteApp`: 删除应用
+
+### Package模块 (`package`)
 - `uploadIpa`: 上传IPA文件
 - `uploadApk`: 上传APK文件
 - `uploadApp`: 上传APP文件
+- `parseApp`: 解析APP文件信息
+- `parseIpa`: 解析IPA文件信息
+- `parseApk`: 解析APK文件信息
 - `packages`: 列出包
 
 ### User模块 (`user`)
@@ -279,6 +284,25 @@ if (result.success) {
 }
 ```
 
+### 包管理示例
+
+```typescript
+// 上传并发布包
+const uploadResult = await moduleManager.executeWorkflow('upload-and-publish', {
+  args: ['./build/app.ipa'],
+  options: {
+    platform: 'ios',
+    versionName: 'v1.2.3'
+  }
+});
+
+// 分析包信息
+const analyzeResult = await moduleManager.executeWorkflow('analyze-package', {
+  args: ['./build/app.ipa'],
+  options: {}
+});
+```
+
 ### 自定义命令
 
 ```typescript
@@ -331,7 +355,12 @@ export NO_INTERACTIVE=true
 2. **类型安全**: 所有API都有完整的TypeScript类型定义
 3. **错误处理**: 所有操作都返回标准化的结果格式
 4. **资源清理**: 模块支持清理函数来释放资源
+5. **模块分离**: 功能按逻辑分离到不同模块中，便于维护和扩展
 
 ## 🤝 贡献
 
 欢迎提交Issue和Pull Request来改进这个项目！
+
+## 📄 许可证
+
+BSD-3-Clause 

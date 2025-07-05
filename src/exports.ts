@@ -26,6 +26,7 @@ export { bundleModule } from './modules/bundle-module';
 export { versionModule } from './modules/version-module';
 export { appModule } from './modules/app-module';
 export { userModule } from './modules/user-module';
+export { packageModule } from './modules/package-module';
 
 // 导出工具函数
 export { loadSession, getSession } from './api';

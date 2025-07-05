@@ -94,85 +94,6 @@ export const appModule: CLIModule = {
       options: {
         platform: { hasValue: true, description: 'Target platform' }
       }
-    },
-    {
-      name: 'uploadIpa',
-      description: 'Upload IPA file',
-      handler: async (context: CommandContext): Promise<CommandResult> => {
-        try {
-          console.log('Uploading IPA file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.uploadIpa
-          return {
-            success: true,
-            data: { message: 'IPA uploaded successfully' }
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Upload IPA failed'
-          };
-        }
-      }
-    },
-    {
-      name: 'uploadApk',
-      description: 'Upload APK file',
-      handler: async (context: CommandContext): Promise<CommandResult> => {
-        try {
-          console.log('Uploading APK file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.uploadApk
-          return {
-            success: true,
-            data: { message: 'APK uploaded successfully' }
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Upload APK failed'
-          };
-        }
-      }
-    },
-    {
-      name: 'uploadApp',
-      description: 'Upload APP file',
-      handler: async (context: CommandContext): Promise<CommandResult> => {
-        try {
-          console.log('Uploading APP file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.uploadApp
-          return {
-            success: true,
-            data: { message: 'APP uploaded successfully' }
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Upload APP failed'
-          };
-        }
-      }
-    },
-    {
-      name: 'packages',
-      description: 'List packages',
-      handler: async (context: CommandContext): Promise<CommandResult> => {
-        try {
-          console.log('Listing packages for platform:', context.options.platform);
-          // TODO: 调用实际的packageCommands.packages
-          return {
-            success: true,
-            data: { message: 'Packages listed successfully' }
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'List packages failed'
-          };
-        }
-      },
-      options: {
-        platform: { hasValue: true, description: 'Target platform' }
-      }
     }
   ],
 
@@ -197,6 +118,30 @@ export const appModule: CLIModule = {
             console.log('Selecting app in workflow');
             // TODO: 调用实际的appCommands.selectApp
             return { ...previousResult, appSelected: true };
+          }
+        }
+      ]
+    },
+    {
+      name: 'manage-apps',
+      description: 'Manage multiple apps',
+      steps: [
+        {
+          name: 'list-apps',
+          description: 'List all apps',
+          execute: async (context: CommandContext) => {
+            console.log('Listing all apps');
+            // TODO: 调用实际的appCommands.apps
+            return { appsListed: true };
+          }
+        },
+        {
+          name: 'select-target-app',
+          description: 'Select target app for operations',
+          execute: async (context: CommandContext, previousResult: any) => {
+            console.log('Selecting target app');
+            // TODO: 调用实际的appCommands.selectApp
+            return { ...previousResult, targetAppSelected: true };
           }
         }
       ]
