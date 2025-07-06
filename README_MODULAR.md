@@ -185,8 +185,14 @@ const workflowResult = await moduleManager.executeWorkflow('my-workflow', {
 ## 📋 内置模块
 
 ### Bundle模块 (`bundle`)
-- `bundle`: 打包JavaScript代码
-- `build`: 构建项目
+- `bundle`: 打包JavaScript代码并可选发布
+- `diff`: 生成两个PPK文件之间的差异
+- `hdiff`: 生成两个PPK文件之间的hdiff
+- `diffFromApk`: 从APK文件生成差异
+- `hdiffFromApk`: 从APK文件生成hdiff
+- `hdiffFromApp`: 从APP文件生成hdiff
+- `diffFromIpa`: 从IPA文件生成差异
+- `hdiffFromIpa`: 从IPA文件生成hdiff
 
 ### Version模块 (`version`)
 - `publish`: 发布新版本
@@ -313,6 +319,26 @@ const bundleResult = await moduleManager.executeCommand('custom-bundle', {
     platform: 'android',
     validate: true,
     optimize: true
+  }
+});
+
+// 生成差异文件
+const diffResult = await moduleManager.executeCommand('diff', {
+  args: [],
+  options: {
+    origin: './build/v1.0.0.ppk',
+    next: './build/v1.1.0.ppk',
+    output: './build/diff.patch'
+  }
+});
+
+// 从APK文件生成差异
+const apkDiffResult = await moduleManager.executeCommand('diffFromApk', {
+  args: [],
+  options: {
+    origin: './build/app-v1.0.0.apk',
+    next: './build/app-v1.1.0.apk',
+    output: './build/apk-diff.patch'
   }
 });
 ```

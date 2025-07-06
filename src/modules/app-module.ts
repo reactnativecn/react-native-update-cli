@@ -1,4 +1,5 @@
 import type { CLIModule, CommandDefinition, CustomWorkflow, CommandContext, CommandResult } from '../types';
+import { appCommands } from '../app';
 
 export const appModule: CLIModule = {
   name: 'app',
@@ -10,8 +11,9 @@ export const appModule: CLIModule = {
       description: 'Create a new app',
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
-          console.log('Creating app with options:', context.options);
-          // TODO: 调用实际的appCommands.createApp
+          const { name, downloadUrl, platform } = context.options;
+          console.log('Creating app with options:', { name, downloadUrl, platform });
+          await appCommands.createApp({ options: { name, downloadUrl, platform } });
           return {
             success: true,
             data: { message: 'App created successfully' }
@@ -35,7 +37,7 @@ export const appModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Listing apps for platform:', context.options.platform);
-          // TODO: 调用实际的appCommands.apps
+          await appCommands.apps({ options: { platform: context.options.platform } });
           return {
             success: true,
             data: { message: 'Apps listed successfully' }
@@ -57,7 +59,7 @@ export const appModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Selecting app with args:', context.args, 'options:', context.options);
-          // TODO: 调用实际的appCommands.selectApp
+          await appCommands.selectApp({ args: context.args, options: { platform: context.options.platform } });
           return {
             success: true,
             data: { message: 'App selected successfully' }
@@ -79,7 +81,7 @@ export const appModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Deleting app with args:', context.args, 'options:', context.options);
-          // TODO: 调用实际的appCommands.deleteApp
+          await appCommands.deleteApp({ args: context.args, options: { platform: context.options.platform } });
           return {
             success: true,
             data: { message: 'App deleted successfully' }

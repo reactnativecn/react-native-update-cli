@@ -1,4 +1,5 @@
 import type { CLIModule, CommandDefinition, CustomWorkflow, CommandContext, CommandResult } from '../types';
+import { userCommands } from '../user';
 
 export const userModule: CLIModule = {
   name: 'user',
@@ -11,7 +12,7 @@ export const userModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Logging in user');
-          // TODO: 调用实际的userCommands.login
+          await userCommands.login(context);
           return {
             success: true,
             data: { message: 'Login successful' }
@@ -30,7 +31,7 @@ export const userModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Logging out user');
-          // TODO: 调用实际的userCommands.logout
+          await userCommands.logout(context);
           return {
             success: true,
             data: { message: 'Logout successful' }
@@ -49,7 +50,7 @@ export const userModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Getting user information');
-          // TODO: 调用实际的userCommands.me
+          await userCommands.me();
           return {
             success: true,
             data: { message: 'User information retrieved successfully' }

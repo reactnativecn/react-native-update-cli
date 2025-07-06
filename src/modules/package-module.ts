@@ -1,4 +1,5 @@
 import type { CLIModule, CommandDefinition, CustomWorkflow, CommandContext, CommandResult } from '../types';
+import { packageCommands } from '../package';
 
 export const packageModule: CLIModule = {
   name: 'package',
@@ -11,7 +12,7 @@ export const packageModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Uploading IPA file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.uploadIpa
+          await packageCommands.uploadIpa(context);
           return {
             success: true,
             data: { message: 'IPA uploaded successfully' }
@@ -30,7 +31,7 @@ export const packageModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Uploading APK file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.uploadApk
+          await packageCommands.uploadApk(context);
           return {
             success: true,
             data: { message: 'APK uploaded successfully' }
@@ -49,7 +50,7 @@ export const packageModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Uploading APP file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.uploadApp
+          await packageCommands.uploadApp(context);
           return {
             success: true,
             data: { message: 'APP uploaded successfully' }
@@ -68,7 +69,7 @@ export const packageModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Parsing APP file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.parseApp
+          await packageCommands.parseApp(context);
           return {
             success: true,
             data: { message: 'APP file parsed successfully' }
@@ -87,7 +88,7 @@ export const packageModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Parsing IPA file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.parseIpa
+          await packageCommands.parseIpa(context);
           return {
             success: true,
             data: { message: 'IPA file parsed successfully' }
@@ -106,7 +107,7 @@ export const packageModule: CLIModule = {
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
           console.log('Parsing APK file:', context.args[0]);
-          // TODO: 调用实际的packageCommands.parseApk
+          await packageCommands.parseApk(context);
           return {
             success: true,
             data: { message: 'APK file parsed successfully' }
@@ -124,8 +125,11 @@ export const packageModule: CLIModule = {
       description: 'List packages',
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
+          if (!context.options.platform) {
+            throw new Error('Platform option is required');
+          }
           console.log('Listing packages for platform:', context.options.platform);
-          // TODO: 调用实际的packageCommands.packages
+          await packageCommands.packages({ options: { platform: context.options.platform } });
           return {
             success: true,
             data: { message: 'Packages listed successfully' }
@@ -155,7 +159,6 @@ export const packageModule: CLIModule = {
             const filePath = context.args[0];
             console.log('Validating package file:', filePath);
             
-            // 检查文件是否存在
             const fs = require('fs');
             if (!fs.existsSync(filePath)) {
               throw new Error(`Package file not found: ${filePath}`);
