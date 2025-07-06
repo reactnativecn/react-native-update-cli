@@ -185,8 +185,14 @@ const workflowResult = await moduleManager.executeWorkflow('my-workflow', {
 ## 📋 内置模块
 
 ### Bundle模块 (`bundle`)
-- `bundle`: 打包JavaScript代码
-- `build`: 构建项目
+- `bundle`: 打包JavaScript代码并可选发布
+- `diff`: 生成两个PPK文件之间的差异
+- `hdiff`: 生成两个PPK文件之间的hdiff
+- `diffFromApk`: 从APK文件生成差异
+- `hdiffFromApk`: 从APK文件生成hdiff
+- `hdiffFromApp`: 从APP文件生成hdiff
+- `diffFromIpa`: 从IPA文件生成差异
+- `hdiffFromIpa`: 从IPA文件生成hdiff
 
 ### Version模块 (`version`)
 - `publish`: 发布新版本
@@ -199,9 +205,14 @@ const workflowResult = await moduleManager.executeWorkflow('my-workflow', {
 - `apps`: 列出所有应用
 - `selectApp`: 选择应用
 - `deleteApp`: 删除应用
+
+### Package模块 (`package`)
 - `uploadIpa`: 上传IPA文件
 - `uploadApk`: 上传APK文件
 - `uploadApp`: 上传APP文件
+- `parseApp`: 解析APP文件信息
+- `parseIpa`: 解析IPA文件信息
+- `parseApk`: 解析APK文件信息
 - `packages`: 列出包
 
 ### User模块 (`user`)
@@ -279,6 +290,25 @@ if (result.success) {
 }
 ```
 
+### 包管理示例
+
+```typescript
+// 上传并发布包
+const uploadResult = await moduleManager.executeWorkflow('upload-and-publish', {
+  args: ['./build/app.ipa'],
+  options: {
+    platform: 'ios',
+    versionName: 'v1.2.3'
+  }
+});
+
+// 分析包信息
+const analyzeResult = await moduleManager.executeWorkflow('analyze-package', {
+  args: ['./build/app.ipa'],
+  options: {}
+});
+```
+
 ### 自定义命令
 
 ```typescript
@@ -289,6 +319,26 @@ const bundleResult = await moduleManager.executeCommand('custom-bundle', {
     platform: 'android',
     validate: true,
     optimize: true
+  }
+});
+
+// 生成差异文件
+const diffResult = await moduleManager.executeCommand('diff', {
+  args: [],
+  options: {
+    origin: './build/v1.0.0.ppk',
+    next: './build/v1.1.0.ppk',
+    output: './build/diff.patch'
+  }
+});
+
+// 从APK文件生成差异
+const apkDiffResult = await moduleManager.executeCommand('diffFromApk', {
+  args: [],
+  options: {
+    origin: './build/app-v1.0.0.apk',
+    next: './build/app-v1.1.0.apk',
+    output: './build/apk-diff.patch'
   }
 });
 ```
@@ -331,6 +381,7 @@ export NO_INTERACTIVE=true
 2. **类型安全**: 所有API都有完整的TypeScript类型定义
 3. **错误处理**: 所有操作都返回标准化的结果格式
 4. **资源清理**: 模块支持清理函数来释放资源
+5. **模块分离**: 功能按逻辑分离到不同模块中，便于维护和扩展
 
 ## 🤝 贡献
 
