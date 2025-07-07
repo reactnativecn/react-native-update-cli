@@ -94,32 +94,25 @@ export interface CustomWorkflow {
 }
 
 export interface CLIProvider {
-  // 核心功能
+  // 核心业务功能
   bundle: (options: BundleOptions) => Promise<CommandResult>;
   publish: (options: PublishOptions) => Promise<CommandResult>;
   upload: (options: UploadOptions) => Promise<CommandResult>;
   
-  // 应用管理
-  getSelectedApp: (platform?: Platform) => Promise<{ appId: string; platform: Platform }>;
-  listApps: (platform?: Platform) => Promise<CommandResult>;
+  // 应用管理（核心）
   createApp: (name: string, platform: Platform) => Promise<CommandResult>;
+  listApps: (platform?: Platform) => Promise<CommandResult>;
+  getSelectedApp: (platform?: Platform) => Promise<{ appId: string; platform: Platform }>;
   
-  // 版本管理
+  // 版本管理（核心）
   listVersions: (appId: string) => Promise<CommandResult>;
-  getVersion: (appId: string, versionId: string) => Promise<CommandResult>;
   updateVersion: (appId: string, versionId: string, updates: Partial<Version>) => Promise<CommandResult>;
   
-  // 包管理
-  listPackages: (appId: string, platform?: Platform) => Promise<CommandResult>;
-  getPackage: (appId: string, packageId: string) => Promise<CommandResult>;
-  
-  // 工具函数
+  // 工具函数（核心）
   getPlatform: (platform?: Platform) => Promise<Platform>;
   loadSession: () => Promise<Session>;
-  saveToLocal: (key: string, value: string) => void;
-  question: (prompt: string) => Promise<string>;
   
-  // 工作流
+  // 工作流管理
   registerWorkflow: (workflow: CustomWorkflow) => void;
   executeWorkflow: (workflowName: string, context: CommandContext) => Promise<CommandResult>;
 }

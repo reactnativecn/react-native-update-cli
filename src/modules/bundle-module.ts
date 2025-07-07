@@ -4,7 +4,7 @@ import { bundleCommands } from '../bundle';
 export const bundleModule: CLIModule = {
   name: 'bundle',
   version: '1.0.0',
-  
+
   commands: [
     {
       name: 'bundle',
@@ -244,18 +244,18 @@ export const bundleModule: CLIModule = {
           execute: async (context: CommandContext) => {
             const fs = require('fs');
             const { origin, next } = context.options;
-            
+
             if (!fs.existsSync(origin)) {
               throw new Error(`Original file not found: ${origin}`);
             }
             if (!fs.existsSync(next)) {
               throw new Error(`New file not found: ${next}`);
             }
-            
-            return { 
-              origin, 
-              next, 
-              validated: true 
+
+            return {
+              origin,
+              next,
+              validated: true
             };
           }
         },
@@ -265,7 +265,7 @@ export const bundleModule: CLIModule = {
           execute: async (context: CommandContext, previousResult: any) => {
             const { origin, next } = previousResult;
             const output = context.options.output || `${next}.diff`;
-            
+
             // 根据文件类型选择diff命令
             let diffCommand = 'diff';
             if (origin.endsWith('.apk') || next.endsWith('.apk')) {
@@ -275,13 +275,13 @@ export const bundleModule: CLIModule = {
             } else if (origin.endsWith('.app') || next.endsWith('.app')) {
               diffCommand = 'hdiffFromApp';
             }
-            
+
             // 调用相应的diff命令
             const diffContext = {
               args: [origin, next],
               options: { output }
             };
-            
+
             switch (diffCommand) {
               case 'diff':
                 await bundleCommands.diff(diffContext);
@@ -298,9 +298,9 @@ export const bundleModule: CLIModule = {
               default:
                 throw new Error(`Unsupported diff command: ${diffCommand}`);
             }
-            
-            return { 
-              ...previousResult, 
+
+            return {
+              ...previousResult,
               output,
               diffGenerated: true,
               diffCommand

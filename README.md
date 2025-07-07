@@ -351,9 +351,6 @@ const apkDiffResult = await moduleManager.executeCommand('diffFromApk', {
 # 设置API端点
 export PUSHY_REGISTRY=https://your-api-endpoint.com
 
-# 设置加速OSS
-export USE_ACC_OSS=true
-
 # 设置非交互模式
 export NO_INTERACTIVE=true
 ```
@@ -386,3 +383,238 @@ export NO_INTERACTIVE=true
 ## 🤝 贡献
 
 欢迎提交Issue和Pull Request来改进这个项目！
+
+## 🚀 Provider API 使用指南
+
+Provider提供了简洁的编程接口，适合在应用程序中集成React Native Update CLI功能。
+
+### 📋 核心API方法
+
+#### 核心业务功能
+```typescript
+// 打包应用
+await provider.bundle({
+  platform: 'ios',
+  dev: false,
+  sourcemap: true
+});
+
+// 发布版本
+await provider.publish({
+  name: 'v1.0.0',
+  description: 'Bug fixes',
+  rollout: 100
+});
+
+// 上传文件
+await provider.upload({
+  filePath: 'app.ipa',
+  platform: 'ios'
+});
+```
+
+#### 应用管理
+```typescript
+// 创建应用
+await provider.createApp('MyApp', 'ios');
+
+// 列出应用
+await provider.listApps('ios');
+
+// 获取当前应用
+const { appId, platform } = await provider.getSelectedApp('ios');
+```
+
+#### 版本管理
+```typescript
+// 列出版本
+await provider.listVersions('app123');
+
+// 更新版本
+await provider.updateVersion('app123', 'version456', {
+  name: 'v1.1.0',
+  description: 'New features'
+});
+```
+
+#### 工具函数
+```typescript
+// 获取平台
+const platform = await provider.getPlatform('ios');
+
+// 加载会话
+const session = await provider.loadSession();
+```
+
+### 🎯 使用场景
+
+#### 1. 自动化构建脚本
+```typescript
+import { moduleManager } from 'react-native-update-cli';
+
+async function buildAndPublish() {
+  const provider = moduleManager.getProvider();
+  
+  // 1. 打包
+  const bundleResult = await provider.bundle({
+    platform: 'ios',
+    dev: false,
+    sourcemap: true
+  });
+  
+  if (!bundleResult.success) {
+    throw new Error(`打包失败: ${bundleResult.error}`);
+  }
+  
+  // 2. 发布
+  const publishResult = await provider.publish({
+    name: 'v1.2.3',
+    description: 'Bug fixes and performance improvements',
+    rollout: 100
+  });
+  
+  if (!publishResult.success) {
+    throw new Error(`发布失败: ${publishResult.error}`);
+  }
+  
+  console.log('构建和发布完成！');
+}
+```
+
+#### 2. CI/CD集成
+```typescript
+async function ciBuild() {
+  const provider = moduleManager.getProvider();
+  
+  const result = await provider.bundle({
+    platform: process.env.PLATFORM as 'ios' | 'android',
+    dev: process.env.NODE_ENV !== 'production',
+    sourcemap: process.env.NODE_ENV === 'production'
+  });
+  
+  return result;
+}
+```
+
+#### 3. 应用管理服务
+```typescript
+class AppManagementService {
+  private provider = moduleManager.getProvider();
+  
+  async setupNewApp(name: string, platform: Platform) {
+    // 创建应用
+    const createResult = await this.provider.createApp(name, platform);
+    
+    if (createResult.success) {
+      // 获取应用信息
+      const { appId } = await this.provider.getSelectedApp(platform);
+      
+      // 列出版本
+      await this.provider.listVersions(appId);
+      
+      return { appId, success: true };
+    }
+    
+    return { success: false, error: createResult.error };
+  }
+}
+```
+
+### ⚠️ 注意事项
+
+1. **错误处理**: 所有Provider方法都返回`CommandResult`，需要检查`success`字段
+2. **类型安全**: Provider提供完整的TypeScript类型支持
+3. **会话管理**: 使用前确保已登录，可通过`loadSession()`检查
+4. **平台支持**: 支持`'ios' | 'android' | 'harmony'`三个平台
+
+### 🔧 高级功能
+
+#### 自定义工作流
+```typescript
+// 注册自定义工作流
+provider.registerWorkflow({
+  name: 'quick-release',
+  description: '快速发布流程',
+  steps: [
+    {
+      name: 'bundle',
+      execute: async () => {
+        return await provider.bundle({ platform: 'ios', dev: false });
+      }
+    },
+    {
+      name: 'publish',
+      execute: async (context, bundleResult) => {
+        if (!bundleResult.success) {
+          throw new Error('打包失败，无法发布');
+        }
+        return await provider.publish({ name: 'auto-release', rollout: 50 });
+      }
+    }
+  ]
+});
+
+// 执行工作流
+await provider.executeWorkflow('quick-release', { args: [], options: {} });
+```
+
+### 📚 完整示例
+
+```typescript
+import { moduleManager } from 'react-native-update-cli';
+
+class ReactNativeUpdateService {
+  private provider = moduleManager.getProvider();
+  
+  async initialize() {
+    // 加载会话
+    await this.provider.loadSession();
+  }
+  
+  async buildAndDeploy(platform: Platform, version: string) {
+    try {
+      // 1. 打包
+      const bundleResult = await this.provider.bundle({
+        platform,
+        dev: false,
+        sourcemap: true
+      });
+      
+      if (!bundleResult.success) {
+        throw new Error(`打包失败: ${bundleResult.error}`);
+      }
+      
+      // 2. 发布
+      const publishResult = await this.provider.publish({
+        name: version,
+        description: `Release ${version}`,
+        rollout: 100
+      });
+      
+      if (!publishResult.success) {
+        throw new Error(`发布失败: ${publishResult.error}`);
+      }
+      
+      return { success: true, data: publishResult.data };
+      
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+  
+  async getAppInfo(platform: Platform) {
+    const { appId } = await this.provider.getSelectedApp(platform);
+    const versions = await this.provider.listVersions(appId);
+    
+    return { appId, versions };
+  }
+}
+
+// 使用示例
+const service = new ReactNativeUpdateService();
+await service.initialize();
+await service.buildAndDeploy('ios', 'v1.0.0');
+```

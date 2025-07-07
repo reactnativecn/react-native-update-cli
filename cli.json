@@ -294,6 +294,24 @@
           "hasValue": true
         }
       }
+    },
+    "list": {
+      "description": "List all bundles",
+      "options": {
+        "output": {
+          "default": "${tempDir}/output/list",
+          "hasValue": true
+        }
+      }
+    },
+    "workflow": {
+      "description": "List all workflows",
+      "options": {
+        "output": {
+          "default": "${tempDir}/output/workflow",
+          "hasValue": true
+        }
+      }
     }
   },
   "globalOptions": {

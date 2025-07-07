@@ -35,9 +35,25 @@ export class CLIProviderImpl implements CLIProvider {
   // 核心功能实现
   async bundle(options: BundleOptions): Promise<CommandResult> {
     try {
-      // 这里需要调用现有的bundle逻辑
-      // 暂时返回成功，实际实现需要集成现有的bundle命令
-      console.log('Bundle operation would be executed with options:', options);
+      const context: CommandContext = {
+        args: [],
+        options: {
+          dev: options.dev || false,
+          platform: options.platform,
+          bundleName: options.bundleName || 'index.bundlejs',
+          entryFile: options.entryFile || 'index.js',
+          output: options.output || '${tempDir}/output/${platform}.${time}.ppk',
+          sourcemap: options.sourcemap || false,
+          taro: options.taro || false,
+          expo: options.expo || false,
+          rncli: options.rncli || false,
+          disableHermes: options.disableHermes || false,
+        }
+      };
+
+      // 调用实际的bundle命令
+      const { bundleCommands } = await import('./bundle');
+      await bundleCommands.bundle(context);
       
       return {
         success: true,
@@ -53,8 +69,26 @@ export class CLIProviderImpl implements CLIProvider {
 
   async publish(options: PublishOptions): Promise<CommandResult> {
     try {
-      // 这里需要调用现有的publish逻辑
-      console.log('Publish operation would be executed with options:', options);
+      // 将PublishOptions转换为CommandContext格式
+      const context: CommandContext = {
+        args: [],
+        options: {
+          name: options.name,
+          description: options.description,
+          metaInfo: options.metaInfo,
+          packageId: options.packageId,
+          packageVersion: options.packageVersion,
+          minPackageVersion: options.minPackageVersion,
+          maxPackageVersion: options.maxPackageVersion,
+          packageVersionRange: options.packageVersionRange,
+          rollout: options.rollout,
+          dryRun: options.dryRun || false,
+        }
+      };
+
+      // 调用实际的publish命令
+      const { versionCommands } = await import('./versions');
+      await versionCommands.publish(context);
       
       return {
         success: true,
@@ -73,7 +107,30 @@ export class CLIProviderImpl implements CLIProvider {
       const platform = await this.getPlatform(options.platform);
       const { appId } = await this.getSelectedApp(platform);
       
-      console.log('Upload operation would be executed:', { filePath: options.filePath, platform, appId });
+      // 根据文件类型选择上传命令
+      const filePath = options.filePath;
+      const fileType = filePath.split('.').pop()?.toLowerCase();
+      
+      const context: CommandContext = {
+        args: [filePath],
+        options: { platform, appId }
+      };
+
+      const { packageCommands } = await import('./package');
+      
+      switch (fileType) {
+        case 'ipa':
+          await packageCommands.uploadIpa(context);
+          break;
+        case 'apk':
+          await packageCommands.uploadApk(context);
+          break;
+        case 'app':
+          await packageCommands.uploadApp(context);
+          break;
+        default:
+          throw new Error(`Unsupported file type: ${fileType}`);
+      }
       
       return {
         success: true,
@@ -95,7 +152,9 @@ export class CLIProviderImpl implements CLIProvider {
 
   async listApps(platform?: Platform): Promise<CommandResult> {
     try {
-      console.log('List apps operation would be executed for platform:', platform);
+      const resolvedPlatform = await this.getPlatform(platform);
+      const { appCommands } = await import('./app');
+      await appCommands.apps({ options: { platform: resolvedPlatform } });
       
       return {
         success: true,
@@ -111,7 +170,14 @@ export class CLIProviderImpl implements CLIProvider {
 
   async createApp(name: string, platform: Platform): Promise<CommandResult> {
     try {
-      console.log('Create app operation would be executed:', { name, platform });
+      const { appCommands } = await import('./app');
+      await appCommands.createApp({ 
+        options: { 
+          name, 
+          platform,
+          downloadUrl: ''
+        } 
+      });
       
       return {
         success: true,
@@ -125,10 +191,16 @@ export class CLIProviderImpl implements CLIProvider {
     }
   }
 
-  // 版本管理
+  // 版本管理（核心）
   async listVersions(appId: string): Promise<CommandResult> {
     try {
-      console.log('List versions operation would be executed for appId:', appId);
+      const context: CommandContext = {
+        args: [],
+        options: { appId }
+      };
+
+      const { versionCommands } = await import('./versions');
+      await versionCommands.versions(context);
       
       return {
         success: true,
@@ -142,25 +214,18 @@ export class CLIProviderImpl implements CLIProvider {
     }
   }
 
-  async getVersion(appId: string, versionId: string): Promise<CommandResult> {
-    try {
-      console.log('Get version operation would be executed:', { appId, versionId });
-      
-      return {
-        success: true,
-        data: { message: 'Version retrieved successfully' }
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error getting version'
-      };
-    }
-  }
-
   async updateVersion(appId: string, versionId: string, updates: Partial<Version>): Promise<CommandResult> {
     try {
-      console.log('Update version operation would be executed:', { appId, versionId, updates });
+      const context: CommandContext = {
+        args: [versionId],
+        options: { 
+          appId,
+          ...updates
+        }
+      };
+
+      const { versionCommands } = await import('./versions');
+      await versionCommands.update(context);
       
       return {
         success: true,
@@ -174,40 +239,7 @@ export class CLIProviderImpl implements CLIProvider {
     }
   }
 
-  // 包管理
-  async listPackages(appId: string, platform?: Platform): Promise<CommandResult> {
-    try {
-      console.log('List packages operation would be executed:', { appId, platform });
-      
-      return {
-        success: true,
-        data: { message: 'Packages listed successfully' }
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error listing packages'
-      };
-    }
-  }
-
-  async getPackage(appId: string, packageId: string): Promise<CommandResult> {
-    try {
-      console.log('Get package operation would be executed:', { appId, packageId });
-      
-      return {
-        success: true,
-        data: { message: 'Package retrieved successfully' }
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error getting package'
-      };
-    }
-  }
-
-  // 工具函数
+  // 工具函数（核心）
   async getPlatform(platform?: Platform): Promise<Platform> {
     return getPlatform(platform);
   }
@@ -221,13 +253,7 @@ export class CLIProviderImpl implements CLIProvider {
     return this.session;
   }
 
-  saveToLocal(key: string, value: string): void {
-    saveToLocal(key, value);
-  }
 
-  async question(prompt: string): Promise<string> {
-    return question(prompt);
-  }
 
   // 工作流管理
   registerWorkflow(workflow: CustomWorkflow): void {
@@ -244,44 +270,29 @@ export class CLIProviderImpl implements CLIProvider {
     }
 
     try {
-      // 验证工作流
-      if (workflow.validate && !workflow.validate(context)) {
-        return {
-          success: false,
-          error: `Workflow '${workflowName}' validation failed`
-        };
-      }
-
-      let previousResult: any = undefined;
-      
-      // 执行每个步骤
+      let previousResult: any = null;
       for (const step of workflow.steps) {
-        // 检查步骤条件
         if (step.condition && !step.condition(context)) {
-          console.log(`Skipping step '${step.name}' due to condition not met`);
+          console.log(`Skipping step '${step.name}' due to condition`);
           continue;
         }
-
-        console.log(`Executing step: ${step.name}`);
+        
+        console.log(`Executing step '${step.name}'`);
         previousResult = await step.execute(context, previousResult);
       }
-
+      
       return {
         success: true,
-        data: { 
-          message: `Workflow '${workflowName}' completed successfully`,
-          result: previousResult
-        }
+        data: { message: `Workflow '${workflowName}' completed successfully`, result: previousResult }
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : `Error executing workflow '${workflowName}'`
+        error: error instanceof Error ? error.message : `Workflow '${workflowName}' failed`
       };
     }
   }
 
-  // 获取所有注册的工作流
   getRegisteredWorkflows(): string[] {
     return Array.from(this.workflows.keys());
   }

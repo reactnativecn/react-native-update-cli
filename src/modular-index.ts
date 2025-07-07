@@ -66,7 +66,6 @@ async function run() {
     // 加载会话
     await loadSession();
     context.session = require('./api').getSession();
-
     // 执行命令或工作流
     if (argv.command === 'help') {
       printUsage();
