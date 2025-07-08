@@ -1,5 +1,6 @@
-import type { CLIModule, CommandDefinition, CustomWorkflow, WorkflowStep, CommandContext, CommandResult } from '../types';
+import type { CLIModule, CommandContext, CommandResult } from '../types';
 import { bundleCommands } from '../bundle';
+import { versionCommands } from '../versions';
 
 export const bundleModule: CLIModule = {
   name: 'bundle',
@@ -11,6 +12,7 @@ export const bundleModule: CLIModule = {
       description: 'Bundle javascript code and optionally publish',
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
+          console.log('😁bundle', context);
           await bundleCommands.bundle(context);
           return {
             success: true,
@@ -71,29 +73,6 @@ export const bundleModule: CLIModule = {
       }
     },
     {
-      name: 'hdiff',
-      description: 'Generate hdiff between two PPK files',
-      handler: async (context: CommandContext): Promise<CommandResult> => {
-        try {
-          await bundleCommands.hdiff(context);
-          return {
-            success: true,
-            data: { message: 'HDiff generated successfully' }
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'HDiff generation failed'
-          };
-        }
-      },
-      options: {
-        origin: { hasValue: true, description: 'Original PPK file path' },
-        next: { hasValue: true, description: 'New PPK file path' },
-        output: { hasValue: true, description: 'Output hdiff file path' }
-      }
-    },
-    {
       name: 'diffFromApk',
       description: 'Generate diff from APK files',
       handler: async (context: CommandContext): Promise<CommandResult> => {
@@ -117,34 +96,11 @@ export const bundleModule: CLIModule = {
       }
     },
     {
-      name: 'hdiffFromApk',
-      description: 'Generate hdiff from APK files',
-      handler: async (context: CommandContext): Promise<CommandResult> => {
-        try {
-          await bundleCommands.hdiffFromApk(context);
-          return {
-            success: true,
-            data: { message: 'HDiff from APK generated successfully' }
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'HDiff from APK failed'
-          };
-        }
-      },
-      options: {
-        origin: { hasValue: true, description: 'Original APK file path' },
-        next: { hasValue: true, description: 'New APK file path' },
-        output: { hasValue: true, description: 'Output hdiff file path' }
-      }
-    },
-    {
-      name: 'hdiffFromApp',
+      name: 'diffFromApp',
       description: 'Generate hdiff from APP files',
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
-          await bundleCommands.hdiffFromApp(context);
+          await bundleCommands.diffFromApp(context);
           return {
             success: true,
             data: { message: 'HDiff from APP generated successfully' }
@@ -185,29 +141,6 @@ export const bundleModule: CLIModule = {
         output: { hasValue: true, description: 'Output diff file path' }
       }
     },
-    {
-      name: 'hdiffFromIpa',
-      description: 'Generate hdiff from IPA files',
-      handler: async (context: CommandContext): Promise<CommandResult> => {
-        try {
-          await bundleCommands.hdiffFromIpa(context);
-          return {
-            success: true,
-            data: { message: 'HDiff from IPA generated successfully' }
-          };
-        } catch (error) {
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : 'HDiff from IPA failed'
-          };
-        }
-      },
-      options: {
-        origin: { hasValue: true, description: 'Original IPA file path' },
-        next: { hasValue: true, description: 'New IPA file path' },
-        output: { hasValue: true, description: 'Output hdiff file path' }
-      }
-    }
   ],
 
   workflows: [
@@ -219,6 +152,7 @@ export const bundleModule: CLIModule = {
           name: 'bundle',
           description: 'Create JavaScript bundle',
           execute: async (context: CommandContext) => {
+            console.log('😁bundle-and-publish-bundle', context);
             const bundleResult = await bundleCommands.bundle(context);
             return { bundleFile: context.args[0] };
           }
@@ -227,9 +161,14 @@ export const bundleModule: CLIModule = {
           name: 'publish',
           description: 'Publish bundle to update server',
           execute: async (context: CommandContext, previousResult: any) => {
-            // 这里需要调用publish命令
-            console.log('Publishing bundle:', previousResult.bundleFile);
-            return { published: true, bundleFile: previousResult.bundleFile };
+            if (previousResult.bundleFile) {
+              context.options.bundleFile = previousResult.bundleFile;
+            }
+            await versionCommands.publish(context);
+            return {
+              success: true,
+              data: { message: 'publish successfully' }
+            };
           }
         }
       ]
@@ -266,7 +205,6 @@ export const bundleModule: CLIModule = {
             const { origin, next } = previousResult;
             const output = context.options.output || `${next}.diff`;
 
-            // 根据文件类型选择diff命令
             let diffCommand = 'diff';
             if (origin.endsWith('.apk') || next.endsWith('.apk')) {
               diffCommand = 'diffFromApk';
@@ -276,7 +214,6 @@ export const bundleModule: CLIModule = {
               diffCommand = 'hdiffFromApp';
             }
 
-            // 调用相应的diff命令
             const diffContext = {
               args: [origin, next],
               options: { output }

@@ -105,3 +105,7 @@ dist
 
 lib/
 .DS_Store
+
+# react-native-update
+.update
+.pushy

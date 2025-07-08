@@ -1085,6 +1085,21 @@ export const bundleCommands = {
     console.log(`${realOutput} generated.`);
   },
 
+  async diffFromApp({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck(
+      args,
+      options,
+      'diffFromApp',
+    );
+    await diffFromPackage(
+      origin,
+      next,
+      realOutput,
+      'resources/rawfile/bundle.harmony.js',
+    );
+    console.log(`${realOutput} generated.`);
+  },
+
   async hdiffFromApp({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(
       args,
