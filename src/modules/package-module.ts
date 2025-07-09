@@ -1,5 +1,6 @@
-import type { CLIModule, CommandDefinition, CustomWorkflow, CommandContext, CommandResult } from '../types';
+import type { CLIModule, CommandContext, CommandResult } from '../types';
 import { packageCommands } from '../package';
+import { versionCommands } from '../versions';
 
 export const packageModule: CLIModule = {
   name: 'package',
@@ -151,6 +152,19 @@ export const packageModule: CLIModule = {
     {
       name: 'upload-and-publish',
       description: 'Upload package and publish version',
+      options: {
+        name: { hasValue: true, description: 'Version name' },
+        description: { hasValue: true, description: 'Version description' },
+        metaInfo: { hasValue: true, description: 'Meta information' },
+        packageId: { hasValue: true, description: 'Package ID' },
+        packageVersion: { hasValue: true, description: 'Package version' },
+        minPackageVersion: { hasValue: true, description: 'Minimum package version' },
+        maxPackageVersion: { hasValue: true, description: 'Maximum package version' },
+        packageVersionRange: { hasValue: true, description: 'Package version range' },
+        rollout: { hasValue: true, description: 'Rollout percentage' },
+        dryRun: { default: false, description: 'Dry run mode' },
+        platform: { hasValue: true, description: 'Target platform' }
+      },
       steps: [
         {
           name: 'validate-package',
@@ -164,7 +178,6 @@ export const packageModule: CLIModule = {
               throw new Error(`Package file not found: ${filePath}`);
             }
             
-            // 检查文件类型
             if (!filePath.endsWith('.ipa') && !filePath.endsWith('.apk') && !filePath.endsWith('.app')) {
               throw new Error('Unsupported package format. Only .ipa, .apk, and .app files are supported.');
             }
@@ -182,23 +195,23 @@ export const packageModule: CLIModule = {
           execute: async (context: CommandContext, previousResult: any) => {
             console.log('Uploading package:', previousResult.filePath);
             
-            // 根据文件类型选择上传命令
-            let uploadCommand = '';
-            if (previousResult.fileType === 'ipa') {
-              uploadCommand = 'uploadIpa';
-            } else if (previousResult.fileType === 'apk') {
-              uploadCommand = 'uploadApk';
-            } else if (previousResult.fileType === 'app') {
-              uploadCommand = 'uploadApp';
-            }
+            const fileType = previousResult.fileType;
+            let uploadResult;
             
-            // TODO: 调用实际的上传命令
-            console.log(`Executing ${uploadCommand} command`);
+            if (fileType === 'ipa') {
+              uploadResult = await packageCommands.uploadIpa({ args: [previousResult.filePath] });
+            } else if (fileType === 'apk') {
+              uploadResult = await packageCommands.uploadApk({ args: [previousResult.filePath] });
+            } else if (fileType === 'app') {
+              uploadResult = await packageCommands.uploadApp({ args: [previousResult.filePath] });
+            } else {
+              throw new Error(`Unsupported file type: ${fileType}`);
+            }
             
             return { 
               ...previousResult, 
               uploaded: true,
-              uploadCommand
+              uploadResult
             };
           }
         },
@@ -208,17 +221,34 @@ export const packageModule: CLIModule = {
           execute: async (context: CommandContext, previousResult: any) => {
             console.log('Publishing new version');
             
-            // TODO: 调用实际的publish命令
+            const publishOptions = {
+              name: context.options.name,
+              description: context.options.description,
+              metaInfo: context.options.metaInfo,
+              packageId: context.options.packageId,
+              packageVersion: context.options.packageVersion,
+              minPackageVersion: context.options.minPackageVersion,
+              maxPackageVersion: context.options.maxPackageVersion,
+              packageVersionRange: context.options.packageVersionRange,
+              rollout: context.options.rollout,
+              dryRun: context.options.dryRun || false,
+              platform: context.options.platform
+            };
+            
+            const versionName = await versionCommands.publish({
+              args: context.args,
+              options: publishOptions
+            });
+            
             return { 
               ...previousResult, 
               published: true,
-              versionId: `v${Date.now()}`
+              versionName
             };
           }
         }
       ]
     },
-    
     {
       name: 'analyze-package',
       description: 'Analyze package file information',
@@ -229,47 +259,22 @@ export const packageModule: CLIModule = {
           execute: async (context: CommandContext) => {
             const filePath = context.args[0];
             console.log('Parsing package file:', filePath);
-            
-            // 根据文件类型选择解析命令
-            let parseCommand = '';
+          
+            let packageInfo;
             if (filePath.endsWith('.ipa')) {
-              parseCommand = 'parseIpa';
+              packageInfo = await packageCommands.parseIpa({ args: [filePath] });
             } else if (filePath.endsWith('.apk')) {
-              parseCommand = 'parseApk';
+              packageInfo = await packageCommands.parseApk({ args: [filePath] });
             } else if (filePath.endsWith('.app')) {
-              parseCommand = 'parseApp';
+              packageInfo = await packageCommands.parseApp({ args: [filePath] });
+            } else {
+              throw new Error('Unsupported package format. Only .ipa, .apk, and .app files are supported.');
             }
-            
-            // TODO: 调用实际的解析命令
-            console.log(`Executing ${parseCommand} command`);
             
             return { 
               filePath,
-              parseCommand,
-              analyzed: true
-            };
-          }
-        },
-        {
-          name: 'display-info',
-          description: 'Display package information',
-          execute: async (context: CommandContext, previousResult: any) => {
-            console.log('Displaying package information');
-            
-            // 模拟显示包信息
-            const packageInfo = {
-              fileName: previousResult.filePath.split('/').pop(),
-              fileType: previousResult.parseCommand.replace('parse', '').toLowerCase(),
-              size: '15.2 MB',
-              version: '1.0.0',
-              buildNumber: '1'
-            };
-            
-            console.log('Package Information:', packageInfo);
-            return { 
-              ...previousResult, 
               packageInfo,
-              displayed: true
+              analyzed: true
             };
           }
         }

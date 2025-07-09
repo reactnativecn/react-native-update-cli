@@ -91,6 +91,11 @@ export interface CustomWorkflow {
   description?: string;
   steps: WorkflowStep[];
   validate?: (context: CommandContext) => boolean;
+  options?: Record<string, {
+    hasValue?: boolean;
+    default?: any;
+    description?: string;
+  }>;
 }
 
 export interface CLIProvider {

@@ -12,7 +12,6 @@ export const bundleModule: CLIModule = {
       description: 'Bundle javascript code and optionally publish',
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
-          console.log('😁bundle', context);
           await bundleCommands.bundle(context);
           return {
             success: true,
@@ -152,7 +151,6 @@ export const bundleModule: CLIModule = {
           name: 'bundle',
           description: 'Create JavaScript bundle',
           execute: async (context: CommandContext) => {
-            console.log('😁bundle-and-publish-bundle', context);
             const bundleResult = await bundleCommands.bundle(context);
             return { bundleFile: context.args[0] };
           }
