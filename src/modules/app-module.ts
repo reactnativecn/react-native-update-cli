@@ -1,4 +1,4 @@
-import type { CLIModule, CommandDefinition, CustomWorkflow, CommandContext, CommandResult } from '../types';
+import type { CLIModule, CommandContext, CommandResult } from '../types';
 import { appCommands } from '../app';
 
 export const appModule: CLIModule = {

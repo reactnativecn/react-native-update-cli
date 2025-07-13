@@ -1,6 +1,5 @@
 import type { CLIModule, CommandContext, CommandResult } from '../types';
 import { bundleCommands } from '../bundle';
-import { versionCommands } from '../versions';
 
 export const bundleModule: CLIModule = {
   name: 'bundle',
@@ -12,7 +11,6 @@ export const bundleModule: CLIModule = {
       description: 'Bundle javascript code and optionally publish',
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
-          console.log('😁bundle', context);
           await bundleCommands.bundle(context);
           return {
             success: true,

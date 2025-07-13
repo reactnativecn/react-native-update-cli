@@ -10,7 +10,6 @@ export { appModule } from './app-module';
 export { userModule } from './user-module';
 export { packageModule } from './package-module';
 
-// 导出所有内置模块的数组，方便批量注册
 export const builtinModules = [
   bundleModule,
   versionModule,

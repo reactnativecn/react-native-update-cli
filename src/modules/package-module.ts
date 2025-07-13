@@ -1,6 +1,5 @@
 import type { CLIModule, CommandContext, CommandResult } from '../types';
 import { packageCommands } from '../package';
-import { versionCommands } from '../versions';
 
 export const packageModule: CLIModule = {
   name: 'package',

@@ -42,20 +42,15 @@ function printUsage() {
 async function run() {
   await printVersionCommand();
   
-  // 检查版本参数
   if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
     process.exit();
   }
-
-  // 注册内置模块
   registerBuiltinModules();
 
-  // 解析命令行参数
   const argv = require('cli-arguments').parse(require('../cli.json'));
   global.NO_INTERACTIVE = argv.options['no-interactive'];
   global.USE_ACC_OSS = argv.options.acc;
 
-  // 创建命令上下文
   const context: CommandContext = {
     args: argv.args || [],
     options: argv.options || {},

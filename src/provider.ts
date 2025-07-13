@@ -1,7 +1,5 @@
 import { loadSession, getSession } from './api';
 import { getPlatform, getSelectedApp } from './app';
-import { question, saveToLocal } from './utils';
-import { t } from './utils/i18n';
 import type { 
   CLIProvider, 
   CommandContext, 
@@ -32,7 +30,6 @@ export class CLIProviderImpl implements CLIProvider {
     }
   }
 
-  // 核心功能实现
   async bundle(options: BundleOptions): Promise<CommandResult> {
     try {
       const context: CommandContext = {
@@ -51,7 +48,6 @@ export class CLIProviderImpl implements CLIProvider {
         }
       };
 
-      // 调用实际的bundle命令
       const { bundleCommands } = await import('./bundle');
       await bundleCommands.bundle(context);
       
@@ -69,7 +65,6 @@ export class CLIProviderImpl implements CLIProvider {
 
   async publish(options: PublishOptions): Promise<CommandResult> {
     try {
-      // 将PublishOptions转换为CommandContext格式
       const context: CommandContext = {
         args: [],
         options: {
@@ -86,7 +81,6 @@ export class CLIProviderImpl implements CLIProvider {
         }
       };
 
-      // 调用实际的publish命令
       const { versionCommands } = await import('./versions');
       await versionCommands.publish(context);
       
@@ -107,7 +101,6 @@ export class CLIProviderImpl implements CLIProvider {
       const platform = await this.getPlatform(options.platform);
       const { appId } = await this.getSelectedApp(platform);
       
-      // 根据文件类型选择上传命令
       const filePath = options.filePath;
       const fileType = filePath.split('.').pop()?.toLowerCase();
       
@@ -144,7 +137,6 @@ export class CLIProviderImpl implements CLIProvider {
     }
   }
 
-  // 应用管理
   async getSelectedApp(platform?: Platform): Promise<{ appId: string; platform: Platform }> {
     const resolvedPlatform = await this.getPlatform(platform);
     return getSelectedApp(resolvedPlatform);
@@ -191,7 +183,7 @@ export class CLIProviderImpl implements CLIProvider {
     }
   }
 
-  // 版本管理（核心）
+
   async listVersions(appId: string): Promise<CommandResult> {
     try {
       const context: CommandContext = {
@@ -239,7 +231,6 @@ export class CLIProviderImpl implements CLIProvider {
     }
   }
 
-  // 工具函数（核心）
   async getPlatform(platform?: Platform): Promise<Platform> {
     return getPlatform(platform);
   }
@@ -254,8 +245,6 @@ export class CLIProviderImpl implements CLIProvider {
   }
 
 
-
-  // 工作流管理
   registerWorkflow(workflow: CustomWorkflow): void {
     this.workflows.set(workflow.name, workflow);
   }

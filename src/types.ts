@@ -21,7 +21,6 @@ export interface Version {
   packages?: Package[];
 }
 
-// 新增：模块化CLI相关类型
 export interface CommandContext {
   args: string[];
   options: Record<string, any>;
@@ -99,25 +98,20 @@ export interface CustomWorkflow {
 }
 
 export interface CLIProvider {
-  // 核心业务功能
   bundle: (options: BundleOptions) => Promise<CommandResult>;
   publish: (options: PublishOptions) => Promise<CommandResult>;
   upload: (options: UploadOptions) => Promise<CommandResult>;
   
-  // 应用管理（核心）
   createApp: (name: string, platform: Platform) => Promise<CommandResult>;
   listApps: (platform?: Platform) => Promise<CommandResult>;
   getSelectedApp: (platform?: Platform) => Promise<{ appId: string; platform: Platform }>;
   
-  // 版本管理（核心）
   listVersions: (appId: string) => Promise<CommandResult>;
   updateVersion: (appId: string, versionId: string, updates: Partial<Version>) => Promise<CommandResult>;
   
-  // 工具函数（核心）
   getPlatform: (platform?: Platform) => Promise<Platform>;
   loadSession: () => Promise<Session>;
   
-  // 工作流管理
   registerWorkflow: (workflow: CustomWorkflow) => void;
   executeWorkflow: (workflowName: string, context: CommandContext) => Promise<CommandResult>;
 }

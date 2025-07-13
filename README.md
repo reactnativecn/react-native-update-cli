@@ -27,6 +27,9 @@ npx pushy-modular help
 # 列出所有可用命令和工作流
 npx pushy-modular list
 
+# 执行内置的工作流
+npx pushy-modular workflow setup-app
+
 # 执行自定义工作流
 npx pushy-modular workflow production-release --environment=production --confirm
 ```
