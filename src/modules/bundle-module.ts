@@ -12,6 +12,7 @@ export const bundleModule: CLIModule = {
       description: 'Bundle javascript code and optionally publish',
       handler: async (context: CommandContext): Promise<CommandResult> => {
         try {
+          console.log('😁bundle', context);
           await bundleCommands.bundle(context);
           return {
             success: true,
@@ -142,107 +143,5 @@ export const bundleModule: CLIModule = {
     },
   ],
 
-  workflows: [
-    {
-      name: 'bundle-and-publish',
-      description: 'Bundle code and publish to update server',
-      steps: [
-        {
-          name: 'bundle',
-          description: 'Create JavaScript bundle',
-          execute: async (context: CommandContext) => {
-            const bundleResult = await bundleCommands.bundle(context);
-            return { bundleFile: context.args[0] };
-          }
-        },
-        {
-          name: 'publish',
-          description: 'Publish bundle to update server',
-          execute: async (context: CommandContext, previousResult: any) => {
-            if (previousResult.bundleFile) {
-              context.options.bundleFile = previousResult.bundleFile;
-            }
-            await versionCommands.publish(context);
-            return {
-              success: true,
-              data: { message: 'publish successfully' }
-            };
-          }
-        }
-      ]
-    },
-    {
-      name: 'generate-diff',
-      description: 'Generate diff between two versions',
-      steps: [
-        {
-          name: 'validate-files',
-          description: 'Validate input files',
-          execute: async (context: CommandContext) => {
-            const fs = require('fs');
-            const { origin, next } = context.options;
-
-            if (!fs.existsSync(origin)) {
-              throw new Error(`Original file not found: ${origin}`);
-            }
-            if (!fs.existsSync(next)) {
-              throw new Error(`New file not found: ${next}`);
-            }
-
-            return {
-              origin,
-              next,
-              validated: true
-            };
-          }
-        },
-        {
-          name: 'generate-diff',
-          description: 'Generate diff file',
-          execute: async (context: CommandContext, previousResult: any) => {
-            const { origin, next } = previousResult;
-            const output = context.options.output || `${next}.diff`;
-
-            let diffCommand = 'diff';
-            if (origin.endsWith('.apk') || next.endsWith('.apk')) {
-              diffCommand = 'diffFromApk';
-            } else if (origin.endsWith('.ipa') || next.endsWith('.ipa')) {
-              diffCommand = 'diffFromIpa';
-            } else if (origin.endsWith('.app') || next.endsWith('.app')) {
-              diffCommand = 'hdiffFromApp';
-            }
-
-            const diffContext = {
-              args: [origin, next],
-              options: { output }
-            };
-
-            switch (diffCommand) {
-              case 'diff':
-                await bundleCommands.diff(diffContext);
-                break;
-              case 'diffFromApk':
-                await bundleCommands.diffFromApk(diffContext);
-                break;
-              case 'diffFromIpa':
-                await bundleCommands.diffFromIpa(diffContext);
-                break;
-              case 'hdiffFromApp':
-                await bundleCommands.hdiffFromApp(diffContext);
-                break;
-              default:
-                throw new Error(`Unsupported diff command: ${diffCommand}`);
-            }
-
-            return {
-              ...previousResult,
-              output,
-              diffGenerated: true,
-              diffCommand
-            };
-          }
-        }
-      ]
-    }
-  ]
+  workflows: []
 }; 

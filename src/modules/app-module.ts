@@ -109,7 +109,14 @@ export const appModule: CLIModule = {
           description: 'Create the app',
           execute: async (context: CommandContext) => {
             console.log('Creating app in workflow');
-            // TODO: 调用实际的appCommands.createApp
+            const { name, downloadUrl, platform } = context.options;
+            await appCommands.createApp({ 
+              options: { 
+                name: name || '', 
+                downloadUrl: downloadUrl || '', 
+                platform: platform || '' 
+              } 
+            });
             return { appCreated: true };
           }
         },
@@ -118,7 +125,11 @@ export const appModule: CLIModule = {
           description: 'Select the created app',
           execute: async (context: CommandContext, previousResult: any) => {
             console.log('Selecting app in workflow');
-            // TODO: 调用实际的appCommands.selectApp
+            const { platform } = context.options;
+            await appCommands.selectApp({ 
+              args: [], 
+              options: { platform: platform || '' } 
+            });
             return { ...previousResult, appSelected: true };
           }
         }
@@ -133,7 +144,10 @@ export const appModule: CLIModule = {
           description: 'List all apps',
           execute: async (context: CommandContext) => {
             console.log('Listing all apps');
-            // TODO: 调用实际的appCommands.apps
+            const { platform } = context.options;
+            await appCommands.apps({ 
+              options: { platform: platform || '' } 
+            });
             return { appsListed: true };
           }
         },
@@ -142,7 +156,11 @@ export const appModule: CLIModule = {
           description: 'Select target app for operations',
           execute: async (context: CommandContext, previousResult: any) => {
             console.log('Selecting target app');
-            // TODO: 调用实际的appCommands.selectApp
+            const { platform } = context.options;
+            await appCommands.selectApp({ 
+              args: [], 
+              options: { platform: platform || '' } 
+            });
             return { ...previousResult, targetAppSelected: true };
           }
         }

@@ -148,7 +148,7 @@
       "description": "Bundle javascript code only and optionally publish.",
       "options": {
         "dev": {
-          "default": "false",
+          "default": "true",
           "hasValue": true
         },
         "platform": {
@@ -307,9 +307,76 @@
     "workflow": {
       "description": "List all workflows",
       "options": {
-        "output": {
-          "default": "${tempDir}/output/workflow",
+        "dev": {
+          "default": "true",
           "hasValue": true
+        },
+        "platform": {
+          "hasValue": true
+        },
+        "bundleName": {
+          "default": "index.bundlejs",
+          "hasValue": true
+        },
+        "entryFile": {
+          "default": "index.js",
+          "hasValue": true
+        },
+        "intermediaDir": {
+          "default": "${tempDir}/intermedia/${platform}",
+          "hasValue": true
+        },
+        "output": {
+          "default": "${tempDir}/output/${platform}.${time}.ppk",
+          "hasValue": true
+        },
+        "sourcemap": {
+          "default": false
+        },
+        "taro": {
+          "default": false
+        },
+        "expo": {
+          "default": false
+        },
+        "rncli": {
+          "default": false
+        },
+        "disableHermes": {
+          "default": false
+        },
+        "name": {
+          "hasValue": true,
+          "description": "Version name for publishing"
+        },
+        "description": {
+          "hasValue": true,
+          "description": "Version description for publishing"
+        },
+        "metaInfo": {
+          "hasValue": true,
+          "description": "Meta information for publishing"
+        },
+        "packageId": {
+          "hasValue": true
+        },
+        "packageVersion": {
+          "hasValue": true
+        },
+        "minPackageVersion": {
+          "hasValue": true
+        },
+        "maxPackageVersion": {
+          "hasValue": true
+        },
+        "packageVersionRange": {
+          "hasValue": true
+        },
+        "rollout": {
+          "hasValue": true
+        },
+        "dryRun": {
+          "default": false
         }
       }
     }

@@ -7,7 +7,6 @@ import { moduleManager } from './module-manager';
 import { builtinModules } from './modules';
 import type { CommandContext } from './types';
 
-// 注册内置模块
 function registerBuiltinModules() {
   for (const module of builtinModules) {
     try {
@@ -63,10 +62,8 @@ async function run() {
   };
 
   try {
-    // 加载会话
     await loadSession();
     context.session = require('./api').getSession();
-    // 执行命令或工作流
     if (argv.command === 'help') {
       printUsage();
     } else if (argv.command === 'list') {
@@ -77,7 +74,6 @@ async function run() {
         console.error('Workflow name is required');
         process.exit(1);
       }
-      
       const result = await moduleManager.executeWorkflow(workflowName, context);
       if (!result.success) {
         console.error('Workflow execution failed:', result.error);
@@ -85,7 +81,6 @@ async function run() {
       }
       console.log('Workflow completed successfully:', result.data);
     } else {
-      // 执行普通命令
       const result = await moduleManager.executeCommand(argv.command, context);
       if (!result.success) {
         console.error('Command execution failed:', result.error);
@@ -103,12 +98,10 @@ async function run() {
   }
 }
 
-// 导出模块管理器，供外部使用
 export { moduleManager };
 export { CLIProviderImpl } from './provider';
 export type { CLIProvider, CLIModule, CommandDefinition, CustomWorkflow, WorkflowStep } from './types';
 
-// 如果直接运行此文件，则执行CLI
 if (require.main === module) {
   run();
 } 
