@@ -31,7 +31,7 @@ npx pushy-modular list
 npx pushy-modular workflow setup-app
 
 # 执行自定义工作流
-npx pushy-modular workflow production-release --environment=production --confirm
+npx pushy-modular workflow custom-publish
 ```
 
 ### 编程方式使用
@@ -262,54 +262,6 @@ interface CLIProvider {
   registerWorkflow(workflow: CustomWorkflow): void;
   executeWorkflow(workflowName: string, context: CommandContext): Promise<CommandResult>;
 }
-```
-
-## 📝 示例
-
-### 完整的发布流程
-
-```typescript
-import { moduleManager } from 'react-native-update-cli';
-
-// 注册自定义模块
-moduleManager.registerModule(customPublishModule);
-
-// 执行生产发布工作流
-const result = await moduleManager.executeWorkflow('production-release', {
-  args: [],
-  options: {
-    environment: 'production',
-    confirm: true,
-    versionName: 'v1.2.3',
-    versionDescription: 'Bug fixes and improvements',
-    platform: 'ios'
-  }
-});
-
-if (result.success) {
-  console.log('Production release completed:', result.data);
-} else {
-  console.error('Production release failed:', result.error);
-}
-```
-
-### 包管理示例
-
-```typescript
-// 上传并发布包
-const uploadResult = await moduleManager.executeWorkflow('upload-and-publish', {
-  args: ['./build/app.ipa'],
-  options: {
-    platform: 'ios',
-    versionName: 'v1.2.3'
-  }
-});
-
-// 分析包信息
-const analyzeResult = await moduleManager.executeWorkflow('analyze-package', {
-  args: ['./build/app.ipa'],
-  options: {}
-});
 ```
 
 ### 自定义命令

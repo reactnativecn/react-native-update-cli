@@ -26,7 +26,6 @@ export class CLIProviderImpl implements CLIProvider {
       await loadSession();
       this.session = getSession();
     } catch (error) {
-      // Session might not be loaded yet, that's okay
     }
   }
 
