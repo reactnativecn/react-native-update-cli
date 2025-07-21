@@ -1,115 +1,117 @@
-# 自定义模块和工作流示例
+# Custom Modules and Workflows Examples
 
-这个目录包含了 React Native Update CLI 自定义模块和工作流的完整示例，演示如何扩展 CLI 的功能。
+[中文文档](./README.zh-CN.md) | [Chinese Documentation](./README.zh-CN.md)
 
-## 📁 目录结构
+This directory contains complete examples of React Native Update CLI custom modules and workflows, demonstrating how to extend the CLI functionality.
+
+## 📁 Directory Structure
 
 ```
 example/
-├── modules/                    # 自定义模块示例
-│   ├── custom-deploy-module.ts # 自定义部署模块
-│   └── analytics-module.ts     # 分析统计模块
-├── workflows/                  # 自定义工作流示例
-│   └── custom-workflows.ts     # 复杂工作流集合
-├── scripts/                    # 执行脚本示例
-│   ├── register-modules.ts     # 模块注册和执行
-│   ├── provider-api-example.ts # Provider API 使用示例
-│   └── workflow-demo.ts        # 工作流演示脚本
-└── README.md                   # 本文档
+├── modules/                    # Custom module examples
+│   ├── custom-deploy-module.ts # Custom deployment module
+│   └── analytics-module.ts     # Analytics module
+├── workflows/                  # Custom workflow examples
+│   └── custom-workflows.ts     # Complex workflow collection
+├── scripts/                    # Execution script examples
+│   ├── register-modules.ts     # Module registration and execution
+│   ├── provider-api-example.ts # Provider API usage examples
+│   └── workflow-demo.ts        # Workflow demonstration script
+└── README.md                   # This documentation
 ```
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1. 运行模块注册和执行示例
+### 1. Run Module Registration and Execution Examples
 
 ```bash
-# 编译TypeScript (如果需要)
+# Compile TypeScript (if needed)
 npm run build
 
-# 运行模块示例
+# Run module examples
 npx ts-node example/scripts/register-modules.ts
 ```
 
-### 2. 运行Provider API示例
+### 2. Run Provider API Examples
 
 ```bash
 npx ts-node example/scripts/provider-api-example.ts
 ```
 
-### 3. 运行工作流演示
+### 3. Run Workflow Demonstrations
 
 ```bash
-# 运行所有工作流演示
+# Run all workflow demonstrations
 npx ts-node example/scripts/workflow-demo.ts
 
-# 交互式执行特定工作流
+# Interactive execution of specific workflows
 npx ts-node example/scripts/workflow-demo.ts interactive canary-deployment --version 1.0.0 --initialRollout 5
 
-# 多环境部署工作流
+# Multi-environment deployment workflow
 npx ts-node example/scripts/workflow-demo.ts interactive multi-env-deploy --version 1.0.0
 
-# 回滚工作流
+# Rollback workflow
 npx ts-node example/scripts/workflow-demo.ts interactive rollback-workflow --targetVersion 0.9.5
 ```
 
-## 📦 自定义模块示例
+## 📦 Custom Module Examples
 
-### 1. 自定义部署模块 (`custom-deploy-module.ts`)
+### 1. Custom Deployment Module (`custom-deploy-module.ts`)
 
-这个模块演示了如何创建一个完整的部署管理模块，包含：
+This module demonstrates how to create a complete deployment management module, including:
 
-#### 命令：
-- `deploy-dev`: 部署到开发环境
-- `deploy-prod`: 部署到生产环境  
-- `rollback`: 回滚到指定版本
+#### Commands:
+- `deploy-dev`: Deploy to development environment
+- `deploy-prod`: Deploy to production environment  
+- `rollback`: Rollback to specified version
 
-#### 工作流：
-- `full-deploy`: 完整部署流程（开发 → 测试 → 生产）
-- `hotfix-deploy`: 热修复快速部署流程
+#### Workflows:
+- `full-deploy`: Complete deployment process (development → testing → production)
+- `hotfix-deploy`: Quick hotfix deployment process
 
-#### 使用示例：
+#### Usage Example:
 ```typescript
 import { moduleManager } from 'react-native-update-cli';
 import { customDeployModule } from './modules/custom-deploy-module';
 
-// 注册模块
+// Register module
 moduleManager.registerModule(customDeployModule);
 
-// 执行开发部署
+// Execute development deployment
 await moduleManager.executeCommand('deploy-dev', {
   args: [],
   options: { platform: 'ios', force: true }
 });
 
-// 执行完整部署工作流
+// Execute complete deployment workflow
 await moduleManager.executeWorkflow('full-deploy', {
   args: [],
   options: { version: '1.2.3' }
 });
 ```
 
-### 2. 分析统计模块 (`analytics-module.ts`)
+### 2. Analytics Module (`analytics-module.ts`)
 
-演示如何创建分析和统计功能：
+Demonstrates how to create analytics and statistics functionality:
 
-#### 命令：
-- `track-deployment`: 记录部署统计信息
-- `deployment-report`: 生成部署报告
+#### Commands:
+- `track-deployment`: Record deployment statistics
+- `deployment-report`: Generate deployment reports
 
-#### 工作流：
-- `deploy-with-analytics`: 带统计的部署流程
+#### Workflows:
+- `deploy-with-analytics`: Deployment process with analytics
 
-## 🔄 自定义工作流示例
+## 🔄 Custom Workflow Examples
 
-### 1. 灰度发布工作流 (`canary-deployment`)
+### 1. Canary Deployment Workflow (`canary-deployment`)
 
-实现完整的灰度发布流程：
+Implements a complete canary deployment process:
 
-- ✅ 准备灰度发布环境
-- ✅ 初始小范围部署
-- ✅ 监控关键指标
-- ✅ 基于指标自动扩大发布范围
-- ✅ 最终验证
+- ✅ Prepare canary deployment environment
+- ✅ Initial small-scale deployment
+- ✅ Monitor key metrics
+- ✅ Automatically expand deployment based on metrics
+- ✅ Final validation
 
 ```typescript
 await moduleManager.executeWorkflow('canary-deployment', {
@@ -122,16 +124,16 @@ await moduleManager.executeWorkflow('canary-deployment', {
 });
 ```
 
-### 2. 多环境发布工作流 (`multi-env-deploy`)
+### 2. Multi-Environment Deployment Workflow (`multi-env-deploy`)
 
-实现标准的多环境发布流程：
+Implements a standard multi-environment deployment process:
 
-- ✅ 部署到开发环境
-- ✅ 运行集成测试
-- ✅ 部署到预发布环境
-- ✅ 运行端到端测试
-- ✅ 部署到生产环境
-- ✅ 部署后验证
+- ✅ Deploy to development environment
+- ✅ Run integration tests
+- ✅ Deploy to staging environment
+- ✅ Run end-to-end tests
+- ✅ Deploy to production environment
+- ✅ Post-deployment validation
 
 ```typescript
 await moduleManager.executeWorkflow('multi-env-deploy', {
@@ -144,15 +146,15 @@ await moduleManager.executeWorkflow('multi-env-deploy', {
 });
 ```
 
-### 3. 回滚工作流 (`rollback-workflow`)
+### 3. Rollback Workflow (`rollback-workflow`)
 
-安全的应用回滚流程：
+Safe application rollback process:
 
-- ✅ 验证目标版本
-- ✅ 备份当前状态
-- ✅ 执行回滚操作
-- ✅ 验证回滚结果
-- ✅ 通知相关人员
+- ✅ Validate target version
+- ✅ Backup current state
+- ✅ Execute rollback operation
+- ✅ Verify rollback results
+- ✅ Notify relevant personnel
 
 ```typescript
 await moduleManager.executeWorkflow('rollback-workflow', {
@@ -164,70 +166,70 @@ await moduleManager.executeWorkflow('rollback-workflow', {
 });
 ```
 
-## 🛠️ Provider API 使用示例
+## 🛠️ Provider API Usage Examples
 
-Provider API 提供了编程式接口，适合在应用程序中集成：
+Provider API provides programmatic interfaces suitable for integration in applications:
 
-### 基本使用
+### Basic Usage
 
 ```typescript
 import { moduleManager } from 'react-native-update-cli';
 
 const provider = moduleManager.getProvider();
 
-// 打包应用
+// Bundle application
 const bundleResult = await provider.bundle({
   platform: 'ios',
   dev: false,
   sourcemap: true
 });
 
-// 发布版本
+// Publish version
 const publishResult = await provider.publish({
   name: 'v1.0.0',
   description: 'Bug fixes',
   rollout: 100
 });
 
-// 上传文件
+// Upload file
 const uploadResult = await provider.upload({
   filePath: 'app.ipa',
   platform: 'ios'
 });
 ```
 
-### 应用管理
+### Application Management
 
 ```typescript
-// 创建应用
+// Create application
 await provider.createApp('MyApp', 'ios');
 
-// 获取当前应用
+// Get current application
 const { appId, platform } = await provider.getSelectedApp('ios');
 
-// 列出版本
+// List versions
 const versions = await provider.listVersions(appId);
 
-// 更新版本
+// Update version
 await provider.updateVersion(appId, versionId, {
   name: 'v1.1.0',
   description: 'New features'
 });
 ```
 
-### 自动化服务类
+### Automation Service Class
 
 ```typescript
 class DeploymentService {
   private provider = moduleManager.getProvider();
   
   async buildAndPublish(platform: Platform, version: string) {
-    // 1. 打包
+    // 1. Bundle
     const bundleResult = await this.provider.bundle({
       platform, dev: false, sourcemap: true
     });
     
-    // 2. 发布
+    // 2. Publish
     const publishResult = await this.provider.publish({
       name: version, rollout: 100
     });
@@ -237,9 +239,9 @@ class DeploymentService {
 }
 ```
 
-## 🎯 高级特性
+## 🎯 Advanced Features
 
-### 1. 工作流验证
+### 1. Workflow Validation
 
 ```typescript
 const workflow: CustomWorkflow = {
@@ -247,7 +249,7 @@ const workflow: CustomWorkflow = {
   steps: [...],
   validate: (context) => {
     if (!context.options.version) {
-      console.error('必须指定版本号');
+      console.error('Version number must be specified');
       return false;
     }
     return true;
@@ -255,7 +257,7 @@ const workflow: CustomWorkflow = {
 };
 ```
 
-### 2. 条件执行
+### 2. Conditional Execution
 
 ```typescript
 const step: WorkflowStep = {
@@ -267,67 +269,67 @@ const step: WorkflowStep = {
 };
 ```
 
-### 3. 错误处理
+### 3. Error Handling
 
 ```typescript
 try {
   const result = await moduleManager.executeCommand('deploy-prod', {
     args: [],
-    options: {} // 缺少必需参数
+    options: {} // Missing required parameters
   });
 } catch (error) {
-  console.error('执行失败:', error.message);
+  console.error('Execution failed:', error.message);
 }
 ```
 
-### 4. 自定义工作流注册
+### 4. Custom Workflow Registration
 
 ```typescript
 const provider = moduleManager.getProvider();
 
 provider.registerWorkflow({
   name: 'custom-workflow',
-  description: '自定义工作流',
+  description: 'Custom workflow',
   steps: [
     {
       name: 'step1',
       execute: async (context, previousResult) => {
-        // 执行逻辑
+        // Execution logic
         return { step1: 'completed' };
       }
     }
   ]
 });
 
-// 执行工作流
+// Execute workflow
 await provider.executeWorkflow('custom-workflow', {
   args: [],
   options: {}
 });
 ```
 
-## 📝 最佳实践
+## 📝 Best Practices
 
-### 1. 模块设计
+### 1. Module Design
 
-- **单一职责**: 每个模块专注于特定功能领域
-- **清晰命名**: 使用描述性的命令和选项名称
-- **完整文档**: 为所有命令和选项提供描述
-- **错误处理**: 提供清晰的错误信息和恢复建议
+- **Single Responsibility**: Each module focuses on specific functional domains
+- **Clear Naming**: Use descriptive command and option names
+- **Complete Documentation**: Provide descriptions for all commands and options
+- **Error Handling**: Provide clear error messages and recovery suggestions
 
-### 2. 工作流设计
+### 2. Workflow Design
 
-- **原子操作**: 每个步骤应该是原子的，可独立执行
-- **状态传递**: 合理使用 previousResult 传递状态
-- **错误恢复**: 考虑失败时的清理和恢复机制
-- **进度反馈**: 提供清晰的进度信息给用户
+- **Atomic Operations**: Each step should be atomic and independently executable
+- **State Passing**: Properly use previousResult to pass state
+- **Error Recovery**: Consider cleanup and recovery mechanisms for failures
+- **Progress Feedback**: Provide clear progress information to users
 
-### 3. 开发建议
+### 3. Development Recommendations
 
-- **类型安全**: 充分利用 TypeScript 类型系统
-- **测试覆盖**: 为自定义模块编写测试
-- **文档维护**: 保持示例和文档的同步更新
-- **版本管理**: 为模块设置合适的版本号
+- **Type Safety**: Make full use of the TypeScript type system
+- **Test Coverage**: Write tests for custom modules
+- **Documentation Maintenance**: Keep examples and documentation synchronized
+- **Version Management**: Set appropriate version numbers for modules
 
 ## 🐛 故障排除
 
@@ -344,31 +346,31 @@ await provider.executeWorkflow('custom-workflow', {
    };
    ```
 
-2. **命令执行失败**
+2. **Command Execution Failed**
    ```typescript
-   // 检查命令名称和参数
+   // Check command name and parameters
    await moduleManager.executeCommand('correct-command-name', {
      args: [],
      options: { requiredParam: 'value' }
    });
    ```
 
-3. **工作流验证失败**
+3. **Workflow Validation Failed**
    ```typescript
-   // 确保提供所有必需的选项
+   // Ensure all required options are provided
    await moduleManager.executeWorkflow('workflow-name', {
      args: [],
-     options: { version: '1.0.0' } // 必需参数
+     options: { version: '1.0.0' } // Required parameter
    });
    ```
 
-## 📖 相关文档
+## 📖 Related Documentation
 
-- [主项目 README](../README.md)
-- [模块化架构文档](../docs/architecture.md)
-- [API 参考文档](../docs/api-reference.md)
-- [贡献指南](../CONTRIBUTING.md)
+- [Main Project README](../README.md)
+- [Modular Architecture Documentation](../docs/architecture.md)
+- [API Reference Documentation](../docs/api-reference.md)
+- [Contributing Guide](../CONTRIBUTING.md)
 
-## 🤝 贡献
+## 🤝 Contributing
 
-欢迎提交更多示例和改进建议！请查看主项目的贡献指南。
+Welcome to submit more examples and improvement suggestions! Please check the main project's contributing guide.
