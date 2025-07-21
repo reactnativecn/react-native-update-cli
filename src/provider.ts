@@ -1,16 +1,16 @@
-import { loadSession, getSession } from './api';
+import { getSession, loadSession } from './api';
 import { getPlatform, getSelectedApp } from './app';
-import type { 
-  CLIProvider, 
-  CommandContext, 
-  CommandResult, 
-  BundleOptions, 
-  PublishOptions, 
-  UploadOptions,
+import type {
+  BundleOptions,
+  CLIProvider,
+  CommandContext,
+  CommandResult,
   CustomWorkflow,
   Platform,
+  PublishOptions,
   Session,
-  Version
+  UploadOptions,
+  Version,
 } from './types';
 
 export class CLIProviderImpl implements CLIProvider {
@@ -25,8 +25,7 @@ export class CLIProviderImpl implements CLIProvider {
     try {
       await loadSession();
       this.session = getSession();
-    } catch (error) {
-    }
+    } catch (error) {}
   }
 
   async bundle(options: BundleOptions): Promise<CommandResult> {
@@ -44,20 +43,23 @@ export class CLIProviderImpl implements CLIProvider {
           expo: options.expo || false,
           rncli: options.rncli || false,
           disableHermes: options.disableHermes || false,
-        }
+        },
       };
 
       const { bundleCommands } = await import('./bundle');
       await bundleCommands.bundle(context);
-      
+
       return {
         success: true,
-        data: { message: 'Bundle created successfully' }
+        data: { message: 'Bundle created successfully' },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error during bundling'
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error during bundling',
       };
     }
   }
@@ -77,20 +79,23 @@ export class CLIProviderImpl implements CLIProvider {
           packageVersionRange: options.packageVersionRange,
           rollout: options.rollout,
           dryRun: options.dryRun || false,
-        }
+        },
       };
 
       const { versionCommands } = await import('./versions');
       await versionCommands.publish(context);
-      
+
       return {
         success: true,
-        data: { message: 'Version published successfully' }
+        data: { message: 'Version published successfully' },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error during publishing'
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error during publishing',
       };
     }
   }
@@ -99,17 +104,17 @@ export class CLIProviderImpl implements CLIProvider {
     try {
       const platform = await this.getPlatform(options.platform);
       const { appId } = await this.getSelectedApp(platform);
-      
+
       const filePath = options.filePath;
       const fileType = filePath.split('.').pop()?.toLowerCase();
-      
+
       const context: CommandContext = {
         args: [filePath],
-        options: { platform, appId }
+        options: { platform, appId },
       };
 
       const { packageCommands } = await import('./package');
-      
+
       switch (fileType) {
         case 'ipa':
           await packageCommands.uploadIpa(context);
@@ -123,20 +128,25 @@ export class CLIProviderImpl implements CLIProvider {
         default:
           throw new Error(`Unsupported file type: ${fileType}`);
       }
-      
+
       return {
         success: true,
-        data: { message: 'File uploaded successfully' }
+        data: { message: 'File uploaded successfully' },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error during upload'
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error during upload',
       };
     }
   }
 
-  async getSelectedApp(platform?: Platform): Promise<{ appId: string; platform: Platform }> {
+  async getSelectedApp(
+    platform?: Platform,
+  ): Promise<{ appId: string; platform: Platform }> {
     const resolvedPlatform = await this.getPlatform(platform);
     return getSelectedApp(resolvedPlatform);
   }
@@ -146,15 +156,16 @@ export class CLIProviderImpl implements CLIProvider {
       const resolvedPlatform = await this.getPlatform(platform);
       const { appCommands } = await import('./app');
       await appCommands.apps({ options: { platform: resolvedPlatform } });
-      
+
       return {
         success: true,
-        data: { message: 'Apps listed successfully' }
+        data: { message: 'Apps listed successfully' },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error listing apps'
+        error:
+          error instanceof Error ? error.message : 'Unknown error listing apps',
       };
     }
   }
@@ -162,70 +173,80 @@ export class CLIProviderImpl implements CLIProvider {
   async createApp(name: string, platform: Platform): Promise<CommandResult> {
     try {
       const { appCommands } = await import('./app');
-      await appCommands.createApp({ 
-        options: { 
-          name, 
+      await appCommands.createApp({
+        options: {
+          name,
           platform,
-          downloadUrl: ''
-        } 
+          downloadUrl: '',
+        },
       });
-      
+
       return {
         success: true,
-        data: { message: 'App created successfully' }
+        data: { message: 'App created successfully' },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error creating app'
+        error:
+          error instanceof Error ? error.message : 'Unknown error creating app',
       };
     }
   }
-
 
   async listVersions(appId: string): Promise<CommandResult> {
     try {
       const context: CommandContext = {
         args: [],
-        options: { appId }
+        options: { appId },
       };
 
       const { versionCommands } = await import('./versions');
       await versionCommands.versions(context);
-      
+
       return {
         success: true,
-        data: { message: 'Versions listed successfully' }
+        data: { message: 'Versions listed successfully' },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error listing versions'
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error listing versions',
       };
     }
   }
 
-  async updateVersion(appId: string, versionId: string, updates: Partial<Version>): Promise<CommandResult> {
+  async updateVersion(
+    appId: string,
+    versionId: string,
+    updates: Partial<Version>,
+  ): Promise<CommandResult> {
     try {
       const context: CommandContext = {
         args: [versionId],
-        options: { 
+        options: {
           appId,
-          ...updates
-        }
+          ...updates,
+        },
       };
 
       const { versionCommands } = await import('./versions');
       await versionCommands.update(context);
-      
+
       return {
         success: true,
-        data: { message: 'Version updated successfully' }
+        data: { message: 'Version updated successfully' },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error updating version'
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error updating version',
       };
     }
   }
@@ -243,17 +264,19 @@ export class CLIProviderImpl implements CLIProvider {
     return this.session;
   }
 
-
   registerWorkflow(workflow: CustomWorkflow): void {
     this.workflows.set(workflow.name, workflow);
   }
 
-  async executeWorkflow(workflowName: string, context: CommandContext): Promise<CommandResult> {
+  async executeWorkflow(
+    workflowName: string,
+    context: CommandContext,
+  ): Promise<CommandResult> {
     const workflow = this.workflows.get(workflowName);
     if (!workflow) {
       return {
         success: false,
-        error: `Workflow '${workflowName}' not found`
+        error: `Workflow '${workflowName}' not found`,
       };
     }
 
@@ -264,19 +287,25 @@ export class CLIProviderImpl implements CLIProvider {
           console.log(`Skipping step '${step.name}' due to condition`);
           continue;
         }
-        
+
         console.log(`Executing step '${step.name}'`);
         previousResult = await step.execute(context, previousResult);
       }
-      
+
       return {
         success: true,
-        data: { message: `Workflow '${workflowName}' completed successfully`, result: previousResult }
+        data: {
+          message: `Workflow '${workflowName}' completed successfully`,
+          result: previousResult,
+        },
       };
     } catch (error) {
       return {
         success: false,
-        error: error instanceof Error ? error.message : `Workflow '${workflowName}' failed`
+        error:
+          error instanceof Error
+            ? error.message
+            : `Workflow '${workflowName}' failed`,
       };
     }
   }
@@ -284,4 +313,29 @@ export class CLIProviderImpl implements CLIProvider {
   getRegisteredWorkflows(): string[] {
     return Array.from(this.workflows.keys());
   }
-} 
+
+  async listPackages(appId?: string): Promise<CommandResult> {
+    try {
+      const context: CommandContext = {
+        args: [],
+        options: appId ? { appId } : {},
+      };
+
+      const { listPackage } = await import('./package');
+      const result = await listPackage(appId || '');
+
+      return {
+        success: true,
+        data: result,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error listing packages',
+      };
+    }
+  }
+}

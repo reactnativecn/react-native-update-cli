@@ -15,7 +15,7 @@ export type {
   Platform,
   Session,
   Version,
-  Package
+  Package,
 } from './types';
 
 export { builtinModules } from './modules';
@@ -27,4 +27,4 @@ export { packageModule } from './modules/package-module';
 
 export { loadSession, getSession } from './api';
 export { getPlatform, getSelectedApp } from './app';
-export { question, saveToLocal } from './utils'; 
+export { question, saveToLocal } from './utils';

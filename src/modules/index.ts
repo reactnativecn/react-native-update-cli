@@ -1,8 +1,8 @@
-import { bundleModule } from './bundle-module';
-import { versionModule } from './version-module';
 import { appModule } from './app-module';
-import { userModule } from './user-module';
+import { bundleModule } from './bundle-module';
 import { packageModule } from './package-module';
+import { userModule } from './user-module';
+import { versionModule } from './version-module';
 
 export { bundleModule } from './bundle-module';
 export { versionModule } from './version-module';
@@ -15,5 +15,5 @@ export const builtinModules = [
   versionModule,
   appModule,
   userModule,
-  packageModule
-]; 
+  packageModule,
+];

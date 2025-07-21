@@ -1,19 +1,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import type {
-  RequestOptions as HttpRequestOptions,
   Agent,
+  RequestOptions as HttpRequestOptions,
   IncomingMessage,
 } from 'http';
 import type { RequestOptions as HttpsRequestOptions } from 'https';
-import { join, dirname, resolve as pathResolve, parse } from 'path';
-import { npm, yarn } from 'global-dirs';
 import { homedir } from 'os';
+import { dirname, join, parse, resolve as pathResolve } from 'path';
 import { URL } from 'url';
+import { npm, yarn } from 'global-dirs';
 
-import getRegistryUrl from 'registry-auth-token/registry-url';
 import registryAuthToken from 'registry-auth-token';
-import maxSatisfying from 'semver/ranges/max-satisfying';
+import getRegistryUrl from 'registry-auth-token/registry-url';
 import gt from 'semver/functions/gt';
+import maxSatisfying from 'semver/ranges/max-satisfying';
 
 interface RegistryVersions {
   /**
@@ -132,9 +132,10 @@ interface LatestVersion {
    * If `registryUrl` is not supplied, the default from `.npmrc` is used or a fallback to the `npm registry url` instead.
    * @returns {Promise<LatestVersionPackage[]>}
    */
-  (item: PackageJson, options?: LatestVersionOptions): Promise<
-    LatestVersionPackage[]
-  >;
+  (
+    item: PackageJson,
+    options?: LatestVersionOptions,
+  ): Promise<LatestVersionPackage[]>;
 
   /**
    * Get latest version of a single package.
@@ -161,9 +162,10 @@ interface LatestVersion {
    * If `registryUrl` is not supplied, the default from `.npmrc` is used or a fallback to the npm registry url instead.
    * @returns {Promise<LatestVersionPackage[]>}
    */
-  (items: Package[], options?: LatestVersionOptions): Promise<
-    LatestVersionPackage[]
-  >; // eslint-disable-line @typescript-eslint/unified-signatures
+  (
+    items: Package[],
+    options?: LatestVersionOptions,
+  ): Promise<LatestVersionPackage[]>; // eslint-disable-line @typescript-eslint/unified-signatures
 }
 type PackageRange = `${'@' | ''}${string}@${string}`;
 type Package = PackageRange | string; // eslint-disable-line @typescript-eslint/no-redundant-type-constituents
@@ -225,7 +227,7 @@ const downloadMetadata = (
     };
     const authInfo = registryAuthToken(pkgUrl.toString(), { recursive: true });
     if (authInfo && requestOptions.headers) {
-      requestOptions.headers.authorization = `${authInfo.type} ${authInfo.token}`;
+      (requestOptions.headers as any).authorization = `${authInfo.type} ${authInfo.token}`;
     }
     if (options?.requestOptions) {
       requestOptions = { ...requestOptions, ...options.requestOptions };
@@ -362,11 +364,9 @@ const getInstalledVersion = (
         ?.version as string;
     } else if (location === 'globalYarn') {
       // Make sure package is globally installed by Yarn
-      const yarnGlobalPkg = require(pathResolve(
-        yarn.packages,
-        '..',
-        'package.json',
-      ));
+      const yarnGlobalPkg = require(
+        pathResolve(yarn.packages, '..', 'package.json'),
+      );
       if (!yarnGlobalPkg?.dependencies?.[pkgName]) {
         return undefined;
       }

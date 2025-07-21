@@ -1,8 +1,8 @@
-import { question } from './utils';
-import { post, get, replaceSession, saveSession, closeSession } from './api';
 import crypto from 'crypto';
+import type { CommandContext } from 'types';
+import { closeSession, get, post, replaceSession, saveSession } from './api';
+import { question } from './utils';
 import { t } from './utils/i18n';
-import { CommandContext } from 'types';
 
 function md5(str: string) {
   return crypto.createHash('md5').update(str).digest('hex');

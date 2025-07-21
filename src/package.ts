@@ -4,11 +4,11 @@ import { t } from './utils/i18n';
 
 import { getPlatform, getSelectedApp } from './app';
 
-import { getApkInfo, getIpaInfo, getAppInfo } from './utils';
 import Table from 'tty-table';
+import type { Platform } from './types';
+import { getApkInfo, getAppInfo, getIpaInfo } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import type { Platform } from 'types';
 
 export async function listPackage(appId: string) {
   const allPkgs = await getAllPackages(appId);
@@ -22,7 +22,11 @@ export async function listPackage(appId: string) {
     const { version } = pkg;
     let versionInfo = '';
     if (version) {
-      versionInfo = t('boundTo', { name: version.name, id: version.id });
+      const versionObj = version as any;
+      versionInfo = t('boundTo', { 
+        name: versionObj.name || version, 
+        id: versionObj.id || version 
+      });
     }
     let output = pkg.name;
     if (pkg.status === 'paused') {
@@ -45,7 +49,7 @@ export async function choosePackage(appId: string) {
 
   while (true) {
     const id = await question(t('enterNativePackageId'));
-    const app = list.find((v) => v.id === Number(id));
+    const app = list.find((v) => v.id.toString() === id);
     if (app) {
       return app;
     }
@@ -58,12 +62,13 @@ export const packageCommands = {
     if (!fn || !fn.endsWith('.ipa')) {
       throw new Error(t('usageUploadIpa'));
     }
+    const ipaInfo = await getIpaInfo(fn);
     const {
       versionName,
       buildTime,
-      appId: appIdInPkg,
-      appKey: appKeyInPkg,
-    } = await getIpaInfo(fn);
+    } = ipaInfo;
+    const appIdInPkg = (ipaInfo as any).appId;
+    const appKeyInPkg = (ipaInfo as any).appKey;
     const { appId, appKey } = await getSelectedApp('ios');
 
     if (appIdInPkg && appIdInPkg != appId) {
@@ -84,19 +89,22 @@ export const packageCommands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.ipa`);
-    console.log(t('ipaUploadSuccess', { id, version: versionName, buildTime }));
+    console.log(
+      t('ipaUploadSuccess', { id, version: versionName, buildTime }),
+    );
   },
   uploadApk: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
       throw new Error(t('usageUploadApk'));
     }
+    const apkInfo = await getApkInfo(fn);
     const {
       versionName,
       buildTime,
-      appId: appIdInPkg,
-      appKey: appKeyInPkg,
-    } = await getApkInfo(fn);
+    } = apkInfo;
+    const appIdInPkg = (apkInfo as any).appId;
+    const appKeyInPkg = (apkInfo as any).appKey;
     const { appId, appKey } = await getSelectedApp('android');
 
     if (appIdInPkg && appIdInPkg != appId) {
@@ -117,19 +125,22 @@ export const packageCommands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.apk`);
-    console.log(t('apkUploadSuccess', { id, version: versionName, buildTime }));
+    console.log(
+      t('apkUploadSuccess', { id, version: versionName, buildTime }),
+    );
   },
   uploadApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.app')) {
       throw new Error(t('usageUploadApp'));
     }
+    const appInfo = await getAppInfo(fn);
     const {
       versionName,
       buildTime,
-      appId: appIdInPkg,
-      appKey: appKeyInPkg,
-    } = await getAppInfo(fn);
+    } = appInfo;
+    const appIdInPkg = (appInfo as any).appId;
+    const appKeyInPkg = (appInfo as any).appKey;
     const { appId, appKey } = await getSelectedApp('harmony');
 
     if (appIdInPkg && appIdInPkg != appId) {
@@ -150,7 +161,9 @@ export const packageCommands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.app`);
-    console.log(t('appUploadSuccess', { id, version: versionName, buildTime }));
+    console.log(
+      t('appUploadSuccess', { id, version: versionName, buildTime }),
+    );
   },
   parseApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];

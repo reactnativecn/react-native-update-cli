@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
 import { loadSession } from './api';
+import { appCommands } from './app';
+import { bundleCommands } from './bundle';
+import { packageCommands } from './package';
+import { userCommands } from './user';
 import { printVersionCommand } from './utils';
 import { t } from './utils/i18n';
-import { bundleCommands } from './bundle';
 import { versionCommands } from './versions';
-import { userCommands } from './user';
-import { appCommands } from './app';
-import { packageCommands } from './package';
 
 function printUsage() {
   console.log(

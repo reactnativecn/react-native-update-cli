@@ -1,10 +1,10 @@
-import type { CLIModule, CommandContext, CommandResult } from '../types';
 import { packageCommands } from '../package';
+import type { CLIModule, CommandContext, CommandResult } from '../types';
 
 export const packageModule: CLIModule = {
   name: 'package',
   version: '1.0.0',
-  
+
   commands: [
     {
       name: 'uploadIpa',
@@ -15,15 +15,15 @@ export const packageModule: CLIModule = {
           await packageCommands.uploadIpa(context);
           return {
             success: true,
-            data: { message: 'IPA uploaded successfully' }
+            data: { message: 'IPA uploaded successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Upload IPA failed'
+            error: error instanceof Error ? error.message : 'Upload IPA failed',
           };
         }
-      }
+      },
     },
     {
       name: 'uploadApk',
@@ -34,15 +34,15 @@ export const packageModule: CLIModule = {
           await packageCommands.uploadApk(context);
           return {
             success: true,
-            data: { message: 'APK uploaded successfully' }
+            data: { message: 'APK uploaded successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Upload APK failed'
+            error: error instanceof Error ? error.message : 'Upload APK failed',
           };
         }
-      }
+      },
     },
     {
       name: 'uploadApp',
@@ -53,15 +53,15 @@ export const packageModule: CLIModule = {
           await packageCommands.uploadApp(context);
           return {
             success: true,
-            data: { message: 'APP uploaded successfully' }
+            data: { message: 'APP uploaded successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Upload APP failed'
+            error: error instanceof Error ? error.message : 'Upload APP failed',
           };
         }
-      }
+      },
     },
     {
       name: 'parseApp',
@@ -72,15 +72,15 @@ export const packageModule: CLIModule = {
           await packageCommands.parseApp(context);
           return {
             success: true,
-            data: { message: 'APP file parsed successfully' }
+            data: { message: 'APP file parsed successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Parse APP failed'
+            error: error instanceof Error ? error.message : 'Parse APP failed',
           };
         }
-      }
+      },
     },
     {
       name: 'parseIpa',
@@ -91,15 +91,15 @@ export const packageModule: CLIModule = {
           await packageCommands.parseIpa(context);
           return {
             success: true,
-            data: { message: 'IPA file parsed successfully' }
+            data: { message: 'IPA file parsed successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Parse IPA failed'
+            error: error instanceof Error ? error.message : 'Parse IPA failed',
           };
         }
-      }
+      },
     },
     {
       name: 'parseApk',
@@ -110,15 +110,15 @@ export const packageModule: CLIModule = {
           await packageCommands.parseApk(context);
           return {
             success: true,
-            data: { message: 'APK file parsed successfully' }
+            data: { message: 'APK file parsed successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Parse APK failed'
+            error: error instanceof Error ? error.message : 'Parse APK failed',
           };
         }
-      }
+      },
     },
     {
       name: 'packages',
@@ -128,24 +128,30 @@ export const packageModule: CLIModule = {
           if (!context.options.platform) {
             throw new Error('Platform option is required');
           }
-          console.log('Listing packages for platform:', context.options.platform);
-          await packageCommands.packages({ options: { platform: context.options.platform } });
+          console.log(
+            'Listing packages for platform:',
+            context.options.platform,
+          );
+          await packageCommands.packages({
+            options: { platform: context.options.platform },
+          });
           return {
             success: true,
-            data: { message: 'Packages listed successfully' }
+            data: { message: 'Packages listed successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'List packages failed'
+            error:
+              error instanceof Error ? error.message : 'List packages failed',
           };
         }
       },
       options: {
-        platform: { hasValue: true, description: 'Target platform' }
-      }
-    }
+        platform: { hasValue: true, description: 'Target platform' },
+      },
+    },
   ],
 
-  workflows: []
-}; 
+  workflows: [],
+};

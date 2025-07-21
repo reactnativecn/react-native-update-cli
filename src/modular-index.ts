@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { loadSession } from './api';
-import { printVersionCommand } from './utils';
-import { t } from './utils/i18n';
 import { moduleManager } from './module-manager';
 import { builtinModules } from './modules';
 import type { CommandContext } from './types';
+import { printVersionCommand } from './utils';
+import { t } from './utils/i18n';
 
 function registerBuiltinModules() {
   for (const module of builtinModules) {
@@ -21,27 +21,33 @@ function printUsage() {
   console.log('React Native Update CLI - Modular Version');
   console.log('');
   console.log('Available commands:');
-  
+
   const commands = moduleManager.getRegisteredCommands();
   for (const command of commands) {
-    console.log(`  ${command.name}: ${command.description || 'No description'}`);
+    console.log(
+      `  ${command.name}: ${command.description || 'No description'}`,
+    );
   }
-  
+
   console.log('');
   console.log('Available workflows:');
   const workflows = moduleManager.getRegisteredWorkflows();
   for (const workflow of workflows) {
-    console.log(`  ${workflow.name}: ${workflow.description || 'No description'}`);
+    console.log(
+      `  ${workflow.name}: ${workflow.description || 'No description'}`,
+    );
   }
-  
+
   console.log('');
-  console.log('Visit `https://github.com/reactnativecn/react-native-update` for document.');
+  console.log(
+    'Visit `https://github.com/reactnativecn/react-native-update` for document.',
+  );
   process.exit(1);
 }
 
 async function run() {
   await printVersionCommand();
-  
+
   if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
     process.exit();
   }
@@ -95,8 +101,14 @@ async function run() {
 
 export { moduleManager };
 export { CLIProviderImpl } from './provider';
-export type { CLIProvider, CLIModule, CommandDefinition, CustomWorkflow, WorkflowStep } from './types';
+export type {
+  CLIProvider,
+  CLIModule,
+  CommandDefinition,
+  CustomWorkflow,
+  WorkflowStep,
+} from './types';
 
 if (require.main === module) {
   run();
-} 
+}

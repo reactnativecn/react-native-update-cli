@@ -1,12 +1,9 @@
-import type { CLIModule, CommandDefinition, CustomWorkflow, CommandContext, CommandResult } from '../types';
+import type { CLIModule, CommandContext, CommandResult } from '../types';
 import { versionCommands } from '../versions';
-import { bundleCommands } from '../bundle';
-import { getPlatform, getSelectedApp } from '../app';
 
 export const versionModule: CLIModule = {
   name: 'version',
   version: '1.0.0',
-  
   commands: [
     {
       name: 'publish',
@@ -16,12 +13,12 @@ export const versionModule: CLIModule = {
           await versionCommands.publish(context);
           return {
             success: true,
-            data: { message: 'Version published successfully' }
+            data: { message: 'Version published successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Publish failed'
+            error: error instanceof Error ? error.message : 'Publish failed',
           };
         }
       },
@@ -31,12 +28,21 @@ export const versionModule: CLIModule = {
         metaInfo: { hasValue: true, description: 'Meta information' },
         packageId: { hasValue: true, description: 'Package ID' },
         packageVersion: { hasValue: true, description: 'Package version' },
-        minPackageVersion: { hasValue: true, description: 'Minimum package version' },
-        maxPackageVersion: { hasValue: true, description: 'Maximum package version' },
-        packageVersionRange: { hasValue: true, description: 'Package version range' },
+        minPackageVersion: {
+          hasValue: true,
+          description: 'Minimum package version',
+        },
+        maxPackageVersion: {
+          hasValue: true,
+          description: 'Maximum package version',
+        },
+        packageVersionRange: {
+          hasValue: true,
+          description: 'Package version range',
+        },
         rollout: { hasValue: true, description: 'Rollout percentage' },
-        dryRun: { default: false, description: 'Dry run mode' }
-      }
+        dryRun: { default: false, description: 'Dry run mode' },
+      },
     },
     {
       name: 'versions',
@@ -46,18 +52,19 @@ export const versionModule: CLIModule = {
           await versionCommands.versions(context);
           return {
             success: true,
-            data: { message: 'Versions listed successfully' }
+            data: { message: 'Versions listed successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'List versions failed'
+            error:
+              error instanceof Error ? error.message : 'List versions failed',
           };
         }
       },
       options: {
-        platform: { hasValue: true, description: 'Target platform' }
-      }
+        platform: { hasValue: true, description: 'Target platform' },
+      },
     },
     {
       name: 'update',
@@ -67,12 +74,13 @@ export const versionModule: CLIModule = {
           await versionCommands.update(context);
           return {
             success: true,
-            data: { message: 'Version updated successfully' }
+            data: { message: 'Version updated successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Update version failed'
+            error:
+              error instanceof Error ? error.message : 'Update version failed',
           };
         }
       },
@@ -81,12 +89,21 @@ export const versionModule: CLIModule = {
         versionId: { hasValue: true, description: 'Version ID' },
         packageId: { hasValue: true, description: 'Package ID' },
         packageVersion: { hasValue: true, description: 'Package version' },
-        minPackageVersion: { hasValue: true, description: 'Minimum package version' },
-        maxPackageVersion: { hasValue: true, description: 'Maximum package version' },
-        packageVersionRange: { hasValue: true, description: 'Package version range' },
+        minPackageVersion: {
+          hasValue: true,
+          description: 'Minimum package version',
+        },
+        maxPackageVersion: {
+          hasValue: true,
+          description: 'Maximum package version',
+        },
+        packageVersionRange: {
+          hasValue: true,
+          description: 'Package version range',
+        },
         rollout: { hasValue: true, description: 'Rollout percentage' },
-        dryRun: { default: false, description: 'Dry run mode' }
-      }
+        dryRun: { default: false, description: 'Dry run mode' },
+      },
     },
     {
       name: 'updateVersionInfo',
@@ -96,12 +113,15 @@ export const versionModule: CLIModule = {
           await versionCommands.updateVersionInfo(context);
           return {
             success: true,
-            data: { message: 'Version info updated successfully' }
+            data: { message: 'Version info updated successfully' },
           };
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Update version info failed'
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Update version info failed',
           };
         }
       },
@@ -110,10 +130,9 @@ export const versionModule: CLIModule = {
         versionId: { hasValue: true, description: 'Version ID' },
         name: { hasValue: true, description: 'Version name' },
         description: { hasValue: true, description: 'Version description' },
-        metaInfo: { hasValue: true, description: 'Meta information' }
-      }
-    }
+        metaInfo: { hasValue: true, description: 'Meta information' },
+      },
+    },
   ],
-
-  workflows: []
-}; 
+  workflows: [],
+};

@@ -12,6 +12,12 @@ export type Platform = 'ios' | 'android' | 'harmony';
 export interface Package {
   id: string;
   name: string;
+  version?: string;
+  status?: string;
+  appId?: string;
+  appKey?: string;
+  versionName?: any;
+  buildTime?: any;
 }
 
 export interface Version {
@@ -39,11 +45,14 @@ export interface CommandDefinition {
   name: string;
   description?: string;
   handler: (context: CommandContext) => Promise<CommandResult>;
-  options?: Record<string, {
-    hasValue?: boolean;
-    default?: any;
-    description?: string;
-  }>;
+  options?: Record<
+    string,
+    {
+      hasValue?: boolean;
+      default?: any;
+      description?: string;
+    }
+  >;
 }
 
 export interface BundleOptions {
@@ -90,30 +99,42 @@ export interface CustomWorkflow {
   description?: string;
   steps: WorkflowStep[];
   validate?: (context: CommandContext) => boolean;
-  options?: Record<string, {
-    hasValue?: boolean;
-    default?: any;
-    description?: string;
-  }>;
+  options?: Record<
+    string,
+    {
+      hasValue?: boolean;
+      default?: any;
+      description?: string;
+    }
+  >;
 }
 
 export interface CLIProvider {
   bundle: (options: BundleOptions) => Promise<CommandResult>;
   publish: (options: PublishOptions) => Promise<CommandResult>;
   upload: (options: UploadOptions) => Promise<CommandResult>;
-  
+
   createApp: (name: string, platform: Platform) => Promise<CommandResult>;
   listApps: (platform?: Platform) => Promise<CommandResult>;
-  getSelectedApp: (platform?: Platform) => Promise<{ appId: string; platform: Platform }>;
-  
+  getSelectedApp: (
+    platform?: Platform,
+  ) => Promise<{ appId: string; platform: Platform }>;
+
   listVersions: (appId: string) => Promise<CommandResult>;
-  updateVersion: (appId: string, versionId: string, updates: Partial<Version>) => Promise<CommandResult>;
-  
+  updateVersion: (
+    appId: string,
+    versionId: string,
+    updates: Partial<Version>,
+  ) => Promise<CommandResult>;
+
   getPlatform: (platform?: Platform) => Promise<Platform>;
   loadSession: () => Promise<Session>;
-  
+
   registerWorkflow: (workflow: CustomWorkflow) => void;
-  executeWorkflow: (workflowName: string, context: CommandContext) => Promise<CommandResult>;
+  executeWorkflow: (
+    workflowName: string,
+    context: CommandContext,
+  ) => Promise<CommandResult>;
 }
 
 export interface CLIModule {

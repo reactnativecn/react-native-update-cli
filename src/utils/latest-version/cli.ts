@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'fs';
+import { dirname } from 'path';
 import {
   blue,
   bold,
@@ -12,16 +14,14 @@ import {
   underline,
   yellow,
 } from '@colors/colors/safe';
-import { existsSync, readFileSync } from 'fs';
-import { dirname } from 'path';
+import semverDiff from 'semver/functions/diff';
+import semverMajor from 'semver/functions/major';
 import latestVersion, {
   type Package,
   type PackageJson,
   type LatestVersionPackage,
   type LatestVersionOptions,
 } from '.';
-import semverMajor from 'semver/functions/major';
-import semverDiff from 'semver/functions/diff';
 
 interface TableColumn {
   label: string;

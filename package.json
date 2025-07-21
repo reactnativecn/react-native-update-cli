@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "1.46.2",
+  "version": "1.46.4",
   "description": "command line tool for react-native-update (remote updates for react native)",
   "main": "index.js",
   "bin": {
@@ -8,11 +8,7 @@
     "cresc": "lib/index.js",
     "pushy-modular": "lib/modular-index.js"
   },
-  "files": [
-    "lib",
-    "src",
-    "cli.json"
-  ],
+  "files": ["lib", "src", "cli.json"],
   "scripts": {
     "build": "swc src -d lib --strip-leading-paths",
     "prepublishOnly": "npm run build && chmod +x lib/index.js",
@@ -22,13 +18,7 @@
     "type": "git",
     "url": "git+https://github.com/reactnativecn/react-native-pushy-cli.git"
   },
-  "keywords": [
-    "react-native",
-    "ios",
-    "android",
-    "harmony",
-    "update"
-  ],
+  "keywords": ["react-native", "ios", "android", "harmony", "update"],
   "author": "reactnativecn",
   "license": "BSD-3-Clause",
   "bugs": {
@@ -82,8 +72,5 @@
     "@types/yazl": "^2.4.6",
     "typescript": "^5.8.3"
   },
-  "trustedDependencies": [
-    "@biomejs/biome",
-    "@swc/core"
-  ]
+  "trustedDependencies": ["@biomejs/biome", "@swc/core"]
 }

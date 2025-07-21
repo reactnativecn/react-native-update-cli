@@ -1,6 +1,6 @@
 const Unzip = require('isomorphic-unzip');
 const { isBrowser, decodeNullUnicode } = require('./utils');
-import { enumZipEntries, readEntry } from '../../bundle';
+const { enumZipEntries, readEntry } = require('../../bundle');
 
 class Zip {
   constructor(file) {

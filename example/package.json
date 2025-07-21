@@ -1,0 +1,41 @@
+{
+  "name": "react-native-update-cli-examples",
+  "version": "1.0.0",
+  "description": "React Native Update CLI 自定义模块和工作流示例",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit --skipLibCheck",
+    "register-modules": "ts-node scripts/register-modules.ts",
+    "provider-demo": "ts-node scripts/provider-api-example.ts",
+    "workflow-demo": "ts-node scripts/workflow-demo.ts",
+    "workflow-interactive": "ts-node scripts/workflow-demo.ts interactive",
+    "enhanced-workflow-demo": "ts-node scripts/enhanced-workflow-demo.ts",
+    "enhanced-workflow-interactive": "ts-node scripts/enhanced-workflow-demo.ts interactive",
+    "demo:all": "npm run register-modules && npm run provider-demo && npm run workflow-demo && npm run enhanced-workflow-demo",
+    "demo:canary": "npm run workflow-interactive canary-deployment -- --version 1.0.0 --initialRollout 5",
+    "demo:multi-env": "npm run workflow-interactive multi-env-deploy -- --version 1.0.0",
+    "demo:rollback": "npm run workflow-interactive rollback-workflow -- --targetVersion 0.9.5",
+    "demo:app-init": "npm run enhanced-workflow-interactive app-initialization -- --name MyApp --platform ios",
+    "demo:smart-bundle": "npm run enhanced-workflow-interactive intelligent-bundle -- --platform android --optimize true",
+    "demo:version-release": "npm run enhanced-workflow-interactive version-release-management -- --name v1.0.0 --platform ios --dryRun true"
+  },
+  "dependencies": {
+    "react-native-update-cli": "file:../"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "react-native",
+    "update",
+    "cli",
+    "module",
+    "workflow",
+    "example",
+    "custom"
+  ],
+  "author": "reactnativecn",
+  "license": "BSD-3-Clause"
+}

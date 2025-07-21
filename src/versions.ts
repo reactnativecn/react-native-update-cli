@@ -2,13 +2,13 @@ import { get, getAllPackages, post, put, uploadFile } from './api';
 import { question, saveToLocal } from './utils';
 import { t } from './utils/i18n';
 
+import chalk from 'chalk';
+import { satisfies } from 'compare-versions';
+import type { Package, Platform, Version } from './types';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import type { Package, Platform, Version } from 'types';
-import { satisfies } from 'compare-versions';
-import chalk from 'chalk';
 
 interface VersionCommandOptions {
   appId?: string;
