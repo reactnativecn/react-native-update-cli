@@ -5,8 +5,7 @@
   "main": "index.js",
   "bin": {
     "pushy": "lib/index.js",
-    "cresc": "lib/index.js",
-    "pushy-modular": "lib/modular-index.js"
+    "cresc": "lib/index.js"
   },
   "files": ["lib", "src", "cli.json"],
   "scripts": {

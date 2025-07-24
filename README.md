@@ -1,16 +1,17 @@
-# React Native Update CLI - Modular Version
+# React Native Update CLI
 
 [中文文档](./README.zh-CN.md) | [Chinese Documentation](./README.zh-CN.md)
 
-This is a refactored React Native Update CLI that supports modular architecture and custom publishing workflows.
+A unified React Native Update CLI that supports both traditional commands and modular architecture with custom publishing workflows.
 
-## 🚀 New Features
+## 🚀 Features
 
+- **Unified CLI**: Single `pushy` command for all functionality
+- **Backward Compatibility**: All existing commands work as before
 - **Modular Architecture**: Split CLI functionality into independent modules
 - **Custom Workflows**: Support for creating custom publishing workflows
 - **Extensibility**: Users can import and register custom modules
 - **Type Safety**: Complete TypeScript type support
-- **Backward Compatibility**: Maintains compatibility with existing CLI
 
 ## 📦 Installation
 
@@ -23,17 +24,17 @@ npm install react-native-update-cli
 ### Basic Usage
 
 ```bash
-# Use modular CLI
-npx pushy-modular help
+# Use unified CLI
+npx pushy help
 
 # List all available commands and workflows
-npx pushy-modular list
+npx pushy list
 
 # Execute built-in workflow
-npx pushy-modular workflow setup-app
+npx pushy workflow setup-app
 
 # Execute custom workflow
-npx pushy-modular workflow custom-publish
+npx pushy workflow custom-publish
 ```
 
 ### Programmatic Usage
