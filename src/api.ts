@@ -1,18 +1,18 @@
-import fetch from 'node-fetch';
 import fs from 'fs';
-import util from 'util';
 import path from 'path';
-import ProgressBar from 'progress';
-import packageJson from '../package.json';
-import tcpp from 'tcp-ping';
+import util from 'util';
 import filesizeParser from 'filesize-parser';
+import FormData from 'form-data';
+import fetch from 'node-fetch';
+import ProgressBar from 'progress';
+import tcpp from 'tcp-ping';
+import packageJson from '../package.json';
+import type { Package, Session } from './types';
 import {
-  pricingPageUrl,
   credentialFile,
   defaultEndpoint,
+  pricingPageUrl,
 } from './utils/constants';
-import type { Session, Package } from 'types';
-import FormData from 'form-data';
 import { t } from './utils/i18n';
 
 const tcpPing = util.promisify(tcpp.ping);

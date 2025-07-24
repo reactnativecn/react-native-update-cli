@@ -1,6 +1,7 @@
-import { question } from './utils';
-import { post, get, replaceSession, saveSession, closeSession } from './api';
 import crypto from 'crypto';
+import type { CommandContext } from 'types';
+import { closeSession, get, post, replaceSession, saveSession } from './api';
+import { question } from './utils';
 import { t } from './utils/i18n';
 
 function md5(str: string) {
@@ -19,7 +20,7 @@ export const userCommands = {
     await saveSession();
     console.log(t('welcomeMessage', { name: info.name }));
   },
-  logout: async () => {
+  logout: async (context: CommandContext) => {
     await closeSession();
     console.log(t('loggedOut'));
   },

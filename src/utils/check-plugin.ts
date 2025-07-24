@@ -1,5 +1,5 @@
-import { plugins } from './plugin-config';
 import { t } from './i18n';
+import { plugins } from './plugin-config';
 
 interface BundleParams {
   sentry: boolean;
@@ -21,7 +21,9 @@ export async function checkPlugins(): Promise<BundleParams> {
         console.log(t('pluginDetected', { name: plugin.name }));
       }
     } catch (err) {
-      console.warn(t('pluginDetectionError', { name: plugin.name, error: err }));
+      console.warn(
+        t('pluginDetectionError', { name: plugin.name, error: err }),
+      );
     }
   }
 

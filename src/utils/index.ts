@@ -1,11 +1,11 @@
-import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import pkg from '../../package.json';
-import AppInfoParser from './app-info-parser';
-import { satisfies } from 'compare-versions';
 import chalk from 'chalk';
+import { satisfies } from 'compare-versions';
+import fs from 'fs-extra';
+import pkg from '../../package.json';
 import latestVersion from '../utils/latest-version';
+import AppInfoParser from './app-info-parser';
 import { checkPlugins } from './check-plugin';
 
 import { read } from 'read';
@@ -88,16 +88,14 @@ export async function getAppInfo(fn: string) {
       }),
     );
   }
-  const updateJsonFile = await appInfoParser.parser.getEntryFromHarmonyApp(
-    /rawfile\/update.json/,
-  );
+  const updateJsonFile =
+    await appInfoParser.parser.getEntryFromHarmonyApp(/rawfile\/update.json/);
   let appCredential = {};
   if (updateJsonFile) {
     appCredential = JSON.parse(updateJsonFile.toString()).harmony;
   }
-  const metaJsonFile = await appInfoParser.parser.getEntryFromHarmonyApp(
-    /rawfile\/meta.json/,
-  );
+  const metaJsonFile =
+    await appInfoParser.parser.getEntryFromHarmonyApp(/rawfile\/meta.json/);
   let metaData: Record<string, any> = {};
   if (metaJsonFile) {
     metaData = JSON.parse(metaJsonFile.toString());

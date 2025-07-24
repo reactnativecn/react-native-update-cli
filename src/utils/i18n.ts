@@ -34,4 +34,6 @@ declare module 'i18next' {
   }
 }
 
-export const t = i18next.t;
+export function t(key: string, options?: any): string {
+  return i18next.t(key as any, options);
+}

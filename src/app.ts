@@ -1,8 +1,8 @@
-import { question } from './utils';
 import fs from 'fs';
 import Table from 'tty-table';
+import { question } from './utils';
 
-import { post, get, doDelete } from './api';
+import { doDelete, get, post } from './api';
 import type { Platform } from './types';
 import { t } from './utils/i18n';
 

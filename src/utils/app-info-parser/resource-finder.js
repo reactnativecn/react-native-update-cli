@@ -4,7 +4,7 @@
  * Decode binary file `resources.arsc` from a .apk file to a JavaScript Object.
  */
 
-var ByteBuffer = require("bytebuffer");
+var ByteBuffer = require('bytebuffer');
 
 var DEBUG = false;
 
@@ -39,13 +39,13 @@ function ResourceFinder() {
  * @param len length
  * @returns {Buffer}
  */
-ResourceFinder.readBytes = function(bb, len) {
+ResourceFinder.readBytes = (bb, len) => {
   var uint8Array = new Uint8Array(len);
   for (var i = 0; i < len; i++) {
     uint8Array[i] = bb.readUint8();
   }
 
-  return ByteBuffer.wrap(uint8Array, "binary", true);
+  return ByteBuffer.wrap(uint8Array, 'binary', true);
 };
 
 //
@@ -54,8 +54,8 @@ ResourceFinder.readBytes = function(bb, len) {
  * @param {ByteBuffer} bb
  * @return {Map<String, Set<String>>}
  */
-ResourceFinder.prototype.processResourceTable = function(resourceBuffer) {
-  const bb = ByteBuffer.wrap(resourceBuffer, "binary", true);
+ResourceFinder.prototype.processResourceTable = function (resourceBuffer) {
+  const bb = ByteBuffer.wrap(resourceBuffer, 'binary', true);
 
   // Resource table structure
   var type = bb.readShort(),
@@ -65,10 +65,10 @@ ResourceFinder.prototype.processResourceTable = function(resourceBuffer) {
     buffer,
     bb2;
   if (type != RES_TABLE_TYPE) {
-    throw new Error("No RES_TABLE_TYPE found!");
+    throw new Error('No RES_TABLE_TYPE found!');
   }
   if (size != bb.limit) {
-    throw new Error("The buffer size not matches to the resource table size.");
+    throw new Error('The buffer size not matches to the resource table size.');
   }
   bb.offset = headerSize;
 
@@ -90,14 +90,14 @@ ResourceFinder.prototype.processResourceTable = function(resourceBuffer) {
       if (realStringPoolCount == 0) {
         // Only the first string pool is processed.
         if (DEBUG) {
-          console.log("Processing the string pool ...");
+          console.log('Processing the string pool ...');
         }
 
         buffer = new ByteBuffer(s);
         bb.offset = pos;
         bb.prependTo(buffer);
 
-        bb2 = ByteBuffer.wrap(buffer, "binary", true);
+        bb2 = ByteBuffer.wrap(buffer, 'binary', true);
 
         bb2.LE();
         this.valueStringPool = this.processStringPool(bb2);
@@ -106,30 +106,30 @@ ResourceFinder.prototype.processResourceTable = function(resourceBuffer) {
     } else if (t == RES_TABLE_PACKAGE_TYPE) {
       // Process the package
       if (DEBUG) {
-        console.log("Processing the package " + realPackageCount + " ...");
+        console.log('Processing the package ' + realPackageCount + ' ...');
       }
 
       buffer = new ByteBuffer(s);
       bb.offset = pos;
       bb.prependTo(buffer);
 
-      bb2 = ByteBuffer.wrap(buffer, "binary", true);
+      bb2 = ByteBuffer.wrap(buffer, 'binary', true);
       bb2.LE();
       this.processPackage(bb2);
 
       realPackageCount++;
     } else {
-      throw new Error("Unsupported type");
+      throw new Error('Unsupported type');
     }
     bb.offset = pos + s;
     if (!bb.remaining()) break;
   }
 
   if (realStringPoolCount != 1) {
-    throw new Error("More than 1 string pool found!");
+    throw new Error('More than 1 string pool found!');
   }
   if (realPackageCount != packageCount) {
-    throw new Error("Real package count not equals the declared count.");
+    throw new Error('Real package count not equals the declared count.');
   }
 
   return this.responseMap;
@@ -139,7 +139,7 @@ ResourceFinder.prototype.processResourceTable = function(resourceBuffer) {
  *
  * @param {ByteBuffer} bb
  */
-ResourceFinder.prototype.processPackage = function(bb) {
+ResourceFinder.prototype.processPackage = function (bb) {
   // Package structure
   var type = bb.readShort(),
     headerSize = bb.readShort(),
@@ -159,12 +159,12 @@ ResourceFinder.prototype.processPackage = function(bb) {
 
   if (typeStrings != headerSize) {
     throw new Error(
-      "TypeStrings must immediately following the package structure header."
+      'TypeStrings must immediately following the package structure header.',
     );
   }
 
   if (DEBUG) {
-    console.log("Type strings:");
+    console.log('Type strings:');
   }
 
   var lastPosition = bb.offset;
@@ -175,7 +175,7 @@ ResourceFinder.prototype.processPackage = function(bb) {
 
   // Key strings
   if (DEBUG) {
-    console.log("Key strings:");
+    console.log('Key strings:');
   }
 
   bb.offset = keyStrings;
@@ -237,7 +237,7 @@ ResourceFinder.prototype.processPackage = function(bb) {
  *
  * @param {ByteBuffer} bb
  */
-ResourceFinder.prototype.processType = function(bb) {
+ResourceFinder.prototype.processType = function (bb) {
   var type = bb.readShort(),
     headerSize = bb.readShort(),
     size = bb.readInt(),
@@ -255,7 +255,7 @@ ResourceFinder.prototype.processType = function(bb) {
   bb.offset = headerSize;
 
   if (headerSize + entryCount * 4 != entriesStart) {
-    throw new Error("HeaderSize, entryCount and entriesStart are not valid.");
+    throw new Error('HeaderSize, entryCount and entriesStart are not valid.');
   }
 
   // Start to get entry indices
@@ -279,11 +279,11 @@ ResourceFinder.prototype.processType = function(bb) {
       value_dataType,
       value_data;
     try {
-      entry_size = bb.readShort()
-      entry_flag = bb.readShort()
-      entry_key = bb.readInt()
+      entry_size = bb.readShort();
+      entry_flag = bb.readShort();
+      entry_key = bb.readInt();
     } catch (e) {
-      break
+      break;
     }
 
     // Get the value (simple) or map (complex)
@@ -303,11 +303,11 @@ ResourceFinder.prototype.processType = function(bb) {
 
       if (DEBUG) {
         console.log(
-          "Entry 0x" + idStr + ", key: " + keyStr + ", simple value type: "
+          'Entry 0x' + idStr + ', key: ' + keyStr + ', simple value type: ',
         );
       }
 
-      var key = parseInt(idStr, 16);
+      var key = Number.parseInt(idStr, 16);
 
       var entryArr = this.entryMap[key];
       if (entryArr == null) {
@@ -321,20 +321,20 @@ ResourceFinder.prototype.processType = function(bb) {
         data = this.valueStringPool[value_data];
 
         if (DEBUG) {
-          console.log(", data: " + this.valueStringPool[value_data] + "");
+          console.log(', data: ' + this.valueStringPool[value_data] + '');
         }
       } else if (value_dataType == TYPE_REFERENCE) {
         var hexIndex = Number(value_data).toString(16);
 
         refKeys[idStr] = value_data;
       } else {
-        data = "" + value_data;
+        data = '' + value_data;
         if (DEBUG) {
-          console.log(", data: " + value_data + "");
+          console.log(', data: ' + value_data + '');
         }
       }
 
-      this.putIntoMap("@" + idStr, data);
+      this.putIntoMap('@' + idStr, data);
     } else {
       // Complex case
       var entry_parent = bb.readInt();
@@ -350,26 +350,22 @@ ResourceFinder.prototype.processType = function(bb) {
 
       if (DEBUG) {
         console.log(
-          "Entry 0x" +
+          'Entry 0x' +
             Number(resource_id).toString(16) +
-            ", key: " +
+            ', key: ' +
             this.keyStringPool[entry_key] +
-            ", complex value, not printed."
+            ', complex value, not printed.',
         );
       }
     }
   }
 
   for (var refK in refKeys) {
-    var values = this.responseMap[
-      "@" +
-        Number(refKeys[refK])
-          .toString(16)
-          .toUpperCase()
-    ];
+    var values =
+      this.responseMap['@' + Number(refKeys[refK]).toString(16).toUpperCase()];
     if (values != null && Object.keys(values).length < 1000) {
       for (var value in values) {
-        this.putIntoMap("@" + refK, values[value]);
+        this.putIntoMap('@' + refK, values[value]);
       }
     }
   }
@@ -380,7 +376,7 @@ ResourceFinder.prototype.processType = function(bb) {
  * @param {ByteBuffer} bb
  * @return {Array}
  */
-ResourceFinder.prototype.processStringPool = function(bb) {
+ResourceFinder.prototype.processStringPool = (bb) => {
   // String pool structure
   //
   var type = bb.readShort(),
@@ -407,7 +403,7 @@ ResourceFinder.prototype.processStringPool = function(bb) {
     var pos = stringsStart + offsets[i];
     bb.offset = pos;
 
-    strings[i] = "";
+    strings[i] = '';
 
     if (isUTF_8) {
       u16len = bb.readUint8();
@@ -424,15 +420,15 @@ ResourceFinder.prototype.processStringPool = function(bb) {
       if (u8len > 0) {
         buffer = ResourceFinder.readBytes(bb, u8len);
         try {
-          strings[i] = ByteBuffer.wrap(buffer, "utf8", true).toString("utf8");
+          strings[i] = ByteBuffer.wrap(buffer, 'utf8', true).toString('utf8');
         } catch (e) {
           if (DEBUG) {
             console.error(e);
-            console.log("Error when turning buffer to utf-8 string.");
+            console.log('Error when turning buffer to utf-8 string.');
           }
         }
       } else {
-        strings[i] = "";
+        strings[i] = '';
       }
     } else {
       u16len = bb.readUint16();
@@ -445,18 +441,18 @@ ResourceFinder.prototype.processStringPool = function(bb) {
         var len = u16len * 2;
         buffer = ResourceFinder.readBytes(bb, len);
         try {
-          strings[i] = ByteBuffer.wrap(buffer, "utf8", true).toString("utf8");
+          strings[i] = ByteBuffer.wrap(buffer, 'utf8', true).toString('utf8');
         } catch (e) {
           if (DEBUG) {
             console.error(e);
-            console.log("Error when turning buffer to utf-8 string.");
+            console.log('Error when turning buffer to utf-8 string.');
           }
         }
       }
     }
 
     if (DEBUG) {
-      console.log("Parsed value: {0}", strings[i]);
+      console.log('Parsed value: {0}', strings[i]);
     }
   }
 
@@ -467,7 +463,7 @@ ResourceFinder.prototype.processStringPool = function(bb) {
  *
  * @param {ByteBuffer} bb
  */
-ResourceFinder.prototype.processTypeSpec = function(bb) {
+ResourceFinder.prototype.processTypeSpec = function (bb) {
   var type = bb.readShort(),
     headerSize = bb.readShort(),
     size = bb.readInt(),
@@ -477,7 +473,7 @@ ResourceFinder.prototype.processTypeSpec = function(bb) {
     entryCount = bb.readInt();
 
   if (DEBUG) {
-    console.log("Processing type spec " + this.typeStringPool[id - 1] + "...");
+    console.log('Processing type spec ' + this.typeStringPool[id - 1] + '...');
   }
 
   var flags = new Array(entryCount);
@@ -487,12 +483,12 @@ ResourceFinder.prototype.processTypeSpec = function(bb) {
   }
 };
 
-ResourceFinder.prototype.putIntoMap = function(resId, value) {
+ResourceFinder.prototype.putIntoMap = function (resId, value) {
   if (this.responseMap[resId.toUpperCase()] == null) {
-    this.responseMap[resId.toUpperCase()] = []
+    this.responseMap[resId.toUpperCase()] = [];
   }
-  if(value){
-    this.responseMap[resId.toUpperCase()].push(value)
+  if (value) {
+    this.responseMap[resId.toUpperCase()].push(value);
   }
 };
 

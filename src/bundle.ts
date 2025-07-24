@@ -1,24 +1,24 @@
+import { spawn, spawnSync } from 'child_process';
 import path from 'path';
-import { translateOptions } from './utils';
+import { satisfies } from 'compare-versions';
 import * as fs from 'fs-extra';
-import { ZipFile as YazlZipFile } from 'yazl';
 import {
   type Entry,
-  open as openZipFile,
   type ZipFile as YauzlZipFile,
+  open as openZipFile,
 } from 'yauzl';
-import { question, checkPlugins } from './utils';
+import { ZipFile as YazlZipFile } from 'yazl';
 import { getPlatform } from './app';
-import { spawn, spawnSync } from 'child_process';
-import { satisfies } from 'compare-versions';
+import { translateOptions } from './utils';
+import { checkPlugins, question } from './utils';
 const g2js = require('gradle-to-js/lib/parser');
 import os from 'os';
 const properties = require('properties');
+import { addGitIgnore } from './utils/add-gitignore';
+import { checkLockFiles } from './utils/check-lockfile';
+import { tempDir } from './utils/constants';
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
-import { tempDir } from './utils/constants';
-import { checkLockFiles } from './utils/check-lockfile';
-import { addGitIgnore } from './utils/add-gitignore';
 import { versionCommands } from './versions';
 
 type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
@@ -289,14 +289,14 @@ async function copyHarmonyBundle(outputFolder: string) {
     await fs.remove(path.join(harmonyRawPath, 'update.json'));
     await fs.copy('update.json', path.join(harmonyRawPath, 'update.json'));
     await fs.ensureDir(outputFolder);
-    
+
     const files = await fs.readdir(harmonyRawPath);
     for (const file of files) {
       if (file !== 'update.json' && file !== 'meta.json') {
         const sourcePath = path.join(harmonyRawPath, file);
         const destPath = path.join(outputFolder, file);
         const stat = await fs.stat(sourcePath);
-        
+
         if (stat.isFile()) {
           await fs.copy(sourcePath, destPath);
         } else if (stat.isDirectory()) {
@@ -534,7 +534,7 @@ async function pack(dir: string, output: string) {
 
     zipfile.outputStream.on('error', (err: any) => reject(err));
     zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
-      resolve();
+      resolve(void 0);
     });
     zipfile.end();
   });
@@ -548,17 +548,14 @@ export function readEntry(
   const buffers: Buffer[] = [];
   return new Promise((resolve, reject) => {
     zipFile.openReadStream(entry, (err, stream) => {
-      stream.pipe({
-        write(chunk: Buffer) {
-          buffers.push(chunk);
-        },
-        end() {
-          resolve(Buffer.concat(buffers));
-        },
-        prependListener() {},
-        on() {},
-        once() {},
-        emit() {},
+      stream.on('data', (chunk: Buffer) => {
+        buffers.push(chunk);
+      });
+      stream.on('end', () => {
+        resolve(Buffer.concat(buffers));
+      });
+      stream.on('error', (err) => {
+        reject(err);
       });
     });
   });
@@ -608,7 +605,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       throw err;
     });
     zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
-      resolve();
+      resolve(void 0);
     });
   });
 
@@ -685,7 +682,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
           zipfile.addReadStream(readStream, entry.fileName);
           readStream.on('end', () => {
             //console.log('add finished');
-            resolve();
+            resolve(void 0);
           });
         });
       });
@@ -758,7 +755,7 @@ async function diffFromPackage(
       throw err;
     });
     zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
-      resolve();
+      resolve(void 0);
     });
   });
 
@@ -806,7 +803,7 @@ async function diffFromPackage(
           zipfile.addReadStream(readStream, entry.fileName);
           readStream.on('end', () => {
             //console.log('add finished');
-            resolve();
+            resolve(void 0);
           });
         });
       });
@@ -858,7 +855,7 @@ export async function enumZipEntries(
                   if (err) return rej(err);
                   const writeStream = fs.createWriteStream(tempZipPath);
                   readStream.pipe(writeStream);
-                  writeStream.on('finish', res);
+                  writeStream.on('finish', () => res(void 0));
                   writeStream.on('error', rej);
                 });
               });
@@ -976,11 +973,11 @@ export const bundleCommands = {
       outputFolder: intermediaDir,
       platform,
       sourcemapOutput: sourcemap || sourcemapPlugin ? sourcemapOutput : '',
-      disableHermes,
+      disableHermes: !!disableHermes,
       cli: {
-        taro,
-        expo,
-        rncli,
+        taro: !!taro,
+        expo: !!expo,
+        rncli: !!rncli,
       },
     });
 
@@ -1081,6 +1078,21 @@ export const bundleCommands = {
       next,
       realOutput,
       'assets/index.android.bundle',
+    );
+    console.log(`${realOutput} generated.`);
+  },
+
+  async diffFromApp({ args, options }) {
+    const { origin, next, realOutput } = diffArgsCheck(
+      args,
+      options,
+      'diffFromApp',
+    );
+    await diffFromPackage(
+      origin,
+      next,
+      realOutput,
+      'resources/rawfile/bundle.harmony.js',
     );
     console.log(`${realOutput} generated.`);
   },

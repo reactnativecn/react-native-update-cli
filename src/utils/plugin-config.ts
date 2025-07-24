@@ -27,6 +27,6 @@ export const plugins: PluginConfig[] = [
           return false;
         }
       }
-    }
-  }
+    },
+  },
 ];
