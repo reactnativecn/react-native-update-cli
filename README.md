@@ -49,14 +49,14 @@ const provider = moduleManager.getProvider();
 const bundleResult = await provider.bundle({
   platform: 'ios',
   dev: false,
-  sourcemap: true
+  sourcemap: true,
 });
 
 // Publish version
 const publishResult = await provider.publish({
   name: 'v1.2.3',
   description: 'Bug fixes and improvements',
-  rollout: 100
+  rollout: 100,
 });
 ```
 
@@ -65,12 +65,16 @@ const publishResult = await provider.publish({
 ### 1. Define Module
 
 ```typescript
-import type { CLIModule, CommandDefinition, CustomWorkflow } from 'react-native-update-cli';
+import type {
+  CLIModule,
+  CommandDefinition,
+  CustomWorkflow,
+} from 'react-native-update-cli';
 
 export const myCustomModule: CLIModule = {
   name: 'my-custom',
   version: '1.0.0',
-  
+
   commands: [
     {
       name: 'custom-command',
@@ -79,15 +83,15 @@ export const myCustomModule: CLIModule = {
         console.log('Executing custom command...');
         return {
           success: true,
-          data: { message: 'Custom command executed' }
+          data: { message: 'Custom command executed' },
         };
       },
       options: {
-        param: { hasValue: true, description: 'Custom parameter' }
-      }
-    }
+        param: { hasValue: true, description: 'Custom parameter' },
+      },
+    },
   ],
-  
+
   workflows: [
     {
       name: 'my-workflow',
@@ -99,7 +103,7 @@ export const myCustomModule: CLIModule = {
           execute: async (context, previousResult) => {
             console.log('Executing step 1...');
             return { step1Completed: true };
-          }
+          },
         },
         {
           name: 'step2',
@@ -107,19 +111,19 @@ export const myCustomModule: CLIModule = {
           execute: async (context, previousResult) => {
             console.log('Executing step 2...');
             return { ...previousResult, step2Completed: true };
-          }
-        }
-      ]
-    }
+          },
+        },
+      ],
+    },
   ],
-  
+
   init: (provider) => {
     console.log('Custom module initialized');
   },
-  
+
   cleanup: () => {
     console.log('Custom module cleanup');
-  }
+  },
 };
 ```
 
@@ -135,13 +139,13 @@ moduleManager.registerModule(myCustomModule);
 // Execute custom command
 const result = await moduleManager.executeCommand('custom-command', {
   args: [],
-  options: { param: 'value' }
+  options: { param: 'value' },
 });
 
 // Execute custom workflow
 const workflowResult = await moduleManager.executeWorkflow('my-workflow', {
   args: [],
-  options: {}
+  options: {},
 });
 ```
 
@@ -191,6 +195,7 @@ Each workflow step contains:
 ## 📋 Built-in Modules
 
 ### Bundle Module (`bundle`)
+
 - `bundle`: Bundle JavaScript code and optionally publish
 - `diff`: Generate differences between two PPK files
 - `hdiff`: Generate hdiff between two PPK files
@@ -201,27 +206,31 @@ Each workflow step contains:
 - `hdiffFromIpa`: Generate hdiff from IPA files
 
 ### Version Module (`version`)
+
 - `publish`: Publish new version
 - `versions`: List all versions
 - `update`: Update version information
 - `updateVersionInfo`: Update version metadata
 
 ### App Module (`app`)
+
 - `createApp`: Create new application
 - `apps`: List all applications
 - `selectApp`: Select application
 - `deleteApp`: Delete application
 
 ### Package Module (`package`)
-- `uploadIpa`: Upload IPA files
-- `uploadApk`: Upload APK files
-- `uploadApp`: Upload APP files
+
+- `uploadIpa`: Upload IPA files (supports `--version` to override extracted version)
+- `uploadApk`: Upload APK files (supports `--version` to override extracted version)
+- `uploadApp`: Upload APP files (supports `--version` to override extracted version)
 - `parseApp`: Parse APP file information
 - `parseIpa`: Parse IPA file information
 - `parseApk`: Parse APK file information
 - `packages`: List packages
 
 ### User Module (`user`)
+
 - `login`: Login
 - `logout`: Logout
 - `me`: Show user information
@@ -234,36 +243,45 @@ Each workflow step contains:
 interface CLIProvider {
   // Bundle
   bundle(options: BundleOptions): Promise<CommandResult>;
-  
+
   // Publish
   publish(options: PublishOptions): Promise<CommandResult>;
-  
+
   // Upload
   upload(options: UploadOptions): Promise<CommandResult>;
-  
+
   // Application management
-  getSelectedApp(platform?: Platform): Promise<{ appId: string; platform: Platform }>;
+  getSelectedApp(
+    platform?: Platform,
+  ): Promise<{ appId: string; platform: Platform }>;
   listApps(platform?: Platform): Promise<CommandResult>;
   createApp(name: string, platform: Platform): Promise<CommandResult>;
-  
+
   // Version management
   listVersions(appId: string): Promise<CommandResult>;
   getVersion(appId: string, versionId: string): Promise<CommandResult>;
-  updateVersion(appId: string, versionId: string, updates: Partial<Version>): Promise<CommandResult>;
-  
+  updateVersion(
+    appId: string,
+    versionId: string,
+    updates: Partial<Version>,
+  ): Promise<CommandResult>;
+
   // Package management
   listPackages(appId: string, platform?: Platform): Promise<CommandResult>;
   getPackage(appId: string, packageId: string): Promise<CommandResult>;
-  
+
   // Utility functions
   getPlatform(platform?: Platform): Promise<Platform>;
   loadSession(): Promise<Session>;
   saveToLocal(key: string, value: string): void;
   question(prompt: string): Promise<string>;
-  
+
   // Workflows
   registerWorkflow(workflow: CustomWorkflow): void;
-  executeWorkflow(workflowName: string, context: CommandContext): Promise<CommandResult>;
+  executeWorkflow(
+    workflowName: string,
+    context: CommandContext,
+  ): Promise<CommandResult>;
 }
 ```
 
@@ -276,8 +294,8 @@ const bundleResult = await moduleManager.executeCommand('custom-bundle', {
   options: {
     platform: 'android',
     validate: true,
-    optimize: true
-  }
+    optimize: true,
+  },
 });
 
 // Generate diff file
@@ -286,8 +304,8 @@ const diffResult = await moduleManager.executeCommand('diff', {
   options: {
     origin: './build/v1.0.0.ppk',
     next: './build/v1.1.0.ppk',
-    output: './build/diff.patch'
-  }
+    output: './build/diff.patch',
+  },
 });
 
 // Generate diff from APK files
@@ -296,8 +314,8 @@ const apkDiffResult = await moduleManager.executeCommand('diffFromApk', {
   options: {
     origin: './build/app-v1.0.0.apk',
     next: './build/app-v1.1.0.apk',
-    output: './build/apk-diff.patch'
-  }
+    output: './build/apk-diff.patch',
+  },
 });
 ```
 
@@ -349,29 +367,31 @@ Provider provides a concise programming interface suitable for integrating React
 ### 📋 Core API Methods
 
 #### Core Business Functions
+
 ```typescript
 // Bundle application
 await provider.bundle({
   platform: 'ios',
   dev: false,
-  sourcemap: true
+  sourcemap: true,
 });
 
 // Publish version
 await provider.publish({
   name: 'v1.0.0',
   description: 'Bug fixes',
-  rollout: 100
+  rollout: 100,
 });
 
 // Upload file
 await provider.upload({
   filePath: 'app.ipa',
-  platform: 'ios'
+  platform: 'ios',
 });
 ```
 
 #### Application Management
+
 ```typescript
 // Create application
 await provider.createApp('MyApp', 'ios');
@@ -384,6 +404,7 @@ const { appId, platform } = await provider.getSelectedApp('ios');
 ```
 
 #### Version Management
+
 ```typescript
 // List versions
 await provider.listVersions('app123');
@@ -391,11 +412,12 @@ await provider.listVersions('app123');
 // Update version
 await provider.updateVersion('app123', 'version456', {
   name: 'v1.1.0',
-  description: 'New features'
+  description: 'New features',
 });
 ```
 
 #### Utility Functions
+
 ```typescript
 // Get platform
 const platform = await provider.getPlatform('ios');
@@ -407,72 +429,75 @@ const session = await provider.loadSession();
 ### 🎯 Use Cases
 
 #### 1. Automated Build Scripts
+
 ```typescript
 import { moduleManager } from 'react-native-update-cli';
 
 async function buildAndPublish() {
   const provider = moduleManager.getProvider();
-  
+
   // 1. Bundle
   const bundleResult = await provider.bundle({
     platform: 'ios',
     dev: false,
-    sourcemap: true
+    sourcemap: true,
   });
-  
+
   if (!bundleResult.success) {
     throw new Error(`Bundle failed: ${bundleResult.error}`);
   }
-  
+
   // 2. Publish
   const publishResult = await provider.publish({
     name: 'v1.2.3',
     description: 'Bug fixes and performance improvements',
-    rollout: 100
+    rollout: 100,
   });
-  
+
   if (!publishResult.success) {
     throw new Error(`Publish failed: ${publishResult.error}`);
   }
-  
+
   console.log('Build and publish completed!');
 }
 ```
 
 #### 2. CI/CD Integration
+
 ```typescript
 async function ciBuild() {
   const provider = moduleManager.getProvider();
-  
+
   const result = await provider.bundle({
     platform: process.env.PLATFORM as 'ios' | 'android',
     dev: process.env.NODE_ENV !== 'production',
-    sourcemap: process.env.NODE_ENV === 'production'
+    sourcemap: process.env.NODE_ENV === 'production',
   });
-  
+
   return result;
 }
 ```
 
 #### 3. Application Management Service
+
 ```typescript
 class AppManagementService {
   private provider = moduleManager.getProvider();
-  
+
   async setupNewApp(name: string, platform: Platform) {
     // Create application
     const createResult = await this.provider.createApp(name, platform);
-    
+
     if (createResult.success) {
       // Get application information
       const { appId } = await this.provider.getSelectedApp(platform);
-      
+
       // List versions
       await this.provider.listVersions(appId);
-      
+
       return { appId, success: true };
     }
-    
+
     return { success: false, error: createResult.error };
   }
 }
@@ -488,6 +513,7 @@ class AppManagementService {
 ### 🔧 Advanced Features
 
 #### Custom Workflows
+
 ```typescript
 // Register custom workflow
 provider.registerWorkflow({
@@ -498,7 +524,7 @@ provider.registerWorkflow({
       name: 'bundle',
       execute: async () => {
         return await provider.bundle({ platform: 'ios', dev: false });
-      }
+      },
     },
     {
       name: 'publish',
@@ -507,9 +533,9 @@ provider.registerWorkflow({
           throw new Error('Bundle failed, cannot publish');
         }
         return await provider.publish({ name: 'auto-release', rollout: 50 });
-      }
-    }
-  ]
+      },
+    },
+  ],
 });
 
 // Execute workflow
@@ -523,50 +549,49 @@ import { moduleManager } from 'react-native-update-cli';
 
 class ReactNativeUpdateService {
   private provider = moduleManager.getProvider();
-  
+
   async initialize() {
     // Load session
     await this.provider.loadSession();
   }
-  
+
   async buildAndDeploy(platform: Platform, version: string) {
     try {
       // 1. Bundle
       const bundleResult = await this.provider.bundle({
         platform,
         dev: false,
-        sourcemap: true
+        sourcemap: true,
       });
-      
+
       if (!bundleResult.success) {
         throw new Error(`Bundle failed: ${bundleResult.error}`);
       }
-      
+
       // 2. Publish
       const publishResult = await this.provider.publish({
         name: version,
         description: `Release ${version}`,
-        rollout: 100
+        rollout: 100,
       });
-      
+
       if (!publishResult.success) {
         throw new Error(`Publish failed: ${publishResult.error}`);
       }
-      
+
       return { success: true, data: publishResult.data };
-      
     } catch (error) {
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
-  
+
   async getAppInfo(platform: Platform) {
     const { appId } = await this.provider.getSelectedApp(platform);
     const versions = await this.provider.listVersions(appId);
-    
+
     return { appId, versions };
   }
 }

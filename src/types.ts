@@ -85,6 +85,7 @@ export interface UploadOptions {
   platform?: Platform;
   filePath: string;
   appId?: string;
+  version?: string;
 }
 
 export interface WorkflowStep {

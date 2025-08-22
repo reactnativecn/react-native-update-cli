@@ -123,4 +123,5 @@ export default {
   updateNativePackageQuestion: '是否现在将此热更应用到原生包上？(Y/N)',
   unnamed: '(未命名)',
   dryRun: '以下是 dry-run 模拟运行结果，不会实际执行任何操作：',
+  usingCustomVersion: '使用自定义版本：{{version}}',
 };

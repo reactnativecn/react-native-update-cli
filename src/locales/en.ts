@@ -130,4 +130,5 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   updateNativePackageQuestion: 'Bind to native package now?(Y/N)',
   unnamed: '(Unnamed)',
   dryRun: 'Below is the dry-run result, no actual operation will be performed:',
+  usingCustomVersion: 'Using custom version: {{version}}',
 };

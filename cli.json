@@ -31,9 +31,27 @@
         }
       }
     },
-    "uploadIpa": {},
-    "uploadApk": {},
-    "uploadApp": {},
+    "uploadIpa": {
+      "options": {
+        "version": {
+          "hasValue": true
+        }
+      }
+    },
+    "uploadApk": {
+      "options": {
+        "version": {
+          "hasValue": true
+        }
+      }
+    },
+    "uploadApp": {
+      "options": {
+        "version": {
+          "hasValue": true
+        }
+      }
+    },
     "parseApp": {},
     "parseIpa": {},
     "parseApk": {},

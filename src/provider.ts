@@ -110,7 +110,7 @@ export class CLIProviderImpl implements CLIProvider {
 
       const context: CommandContext = {
         args: [filePath],
-        options: { platform, appId },
+        options: { platform, appId, version: options.version },
       };
 
       const { packageCommands } = await import('./package');

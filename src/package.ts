@@ -23,9 +23,9 @@ export async function listPackage(appId: string) {
     let versionInfo = '';
     if (version) {
       const versionObj = version as any;
-      versionInfo = t('boundTo', { 
-        name: versionObj.name || version, 
-        id: versionObj.id || version 
+      versionInfo = t('boundTo', {
+        name: versionObj.name || version,
+        id: versionObj.id || version,
       });
     }
     let output = pkg.name;
@@ -57,16 +57,19 @@ export async function choosePackage(appId: string) {
 }
 
 export const packageCommands = {
-  uploadIpa: async ({ args }: { args: string[] }) => {
+  uploadIpa: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: Record<string, any>;
+  }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.ipa')) {
       throw new Error(t('usageUploadIpa'));
     }
     const ipaInfo = await getIpaInfo(fn);
-    const {
-      versionName,
-      buildTime,
-    } = ipaInfo;
+    const { versionName: extractedVersionName, buildTime } = ipaInfo;
     const appIdInPkg = (ipaInfo as any).appId;
     const appKeyInPkg = (ipaInfo as any).appKey;
     const { appId, appKey } = await getSelectedApp('ios');
@@ -79,6 +82,12 @@ export const packageCommands = {
       throw new Error(t('appKeyMismatchIpa', { appKeyInPkg, appKey }));
     }
 
+    // Use custom version if provided, otherwise use extracted version
+    const versionName = options.version || extractedVersionName;
+    if (options.version) {
+      console.log(t('usingCustomVersion', { version: versionName }));
+    }
+
     const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/package/create`, {
@@ -89,20 +98,21 @@ export const packageCommands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.ipa`);
-    console.log(
-      t('ipaUploadSuccess', { id, version: versionName, buildTime }),
-    );
+    console.log(t('ipaUploadSuccess', { id, version: versionName, buildTime }));
   },
-  uploadApk: async ({ args }: { args: string[] }) => {
+  uploadApk: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: Record<string, any>;
+  }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.apk')) {
       throw new Error(t('usageUploadApk'));
     }
     const apkInfo = await getApkInfo(fn);
-    const {
-      versionName,
-      buildTime,
-    } = apkInfo;
+    const { versionName: extractedVersionName, buildTime } = apkInfo;
     const appIdInPkg = (apkInfo as any).appId;
     const appKeyInPkg = (apkInfo as any).appKey;
     const { appId, appKey } = await getSelectedApp('android');
@@ -115,6 +125,12 @@ export const packageCommands = {
       throw new Error(t('appKeyMismatchApk', { appKeyInPkg, appKey }));
     }
 
+    // Use custom version if provided, otherwise use extracted version
+    const versionName = options.version || extractedVersionName;
+    if (options.version) {
+      console.log(t('usingCustomVersion', { version: versionName }));
+    }
+
     const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/package/create`, {
@@ -125,20 +141,21 @@ export const packageCommands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.apk`);
-    console.log(
-      t('apkUploadSuccess', { id, version: versionName, buildTime }),
-    );
+    console.log(t('apkUploadSuccess', { id, version: versionName, buildTime }));
   },
-  uploadApp: async ({ args }: { args: string[] }) => {
+  uploadApp: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: Record<string, any>;
+  }) => {
     const fn = args[0];
     if (!fn || !fn.endsWith('.app')) {
       throw new Error(t('usageUploadApp'));
     }
     const appInfo = await getAppInfo(fn);
-    const {
-      versionName,
-      buildTime,
-    } = appInfo;
+    const { versionName: extractedVersionName, buildTime } = appInfo;
     const appIdInPkg = (appInfo as any).appId;
     const appKeyInPkg = (appInfo as any).appKey;
     const { appId, appKey } = await getSelectedApp('harmony');
@@ -151,6 +168,12 @@ export const packageCommands = {
       throw new Error(t('appKeyMismatchApp', { appKeyInPkg, appKey }));
     }
 
+    // Use custom version if provided, otherwise use extracted version
+    const versionName = options.version || extractedVersionName;
+    if (options.version) {
+      console.log(t('usingCustomVersion', { version: versionName }));
+    }
+
     const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/package/create`, {
@@ -161,9 +184,7 @@ export const packageCommands = {
       commit: await getCommitInfo(),
     });
     saveToLocal(fn, `${appId}/package/${id}.app`);
-    console.log(
-      t('appUploadSuccess', { id, version: versionName, buildTime }),
-    );
+    console.log(t('appUploadSuccess', { id, version: versionName, buildTime }));
   },
   parseApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
