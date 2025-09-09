@@ -62,6 +62,13 @@
         }
       }
     },
+    "deletePackage": {
+      "options": {
+        "appId": {
+          "hasValue": true
+        }
+      }
+    },
     "publish": {
       "options": {
         "platform": {

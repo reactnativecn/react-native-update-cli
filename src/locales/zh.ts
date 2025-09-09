@@ -124,4 +124,9 @@ export default {
   unnamed: '(未命名)',
   dryRun: '以下是 dry-run 模拟运行结果，不会实际执行任何操作：',
   usingCustomVersion: '使用自定义版本：{{version}}',
+  confirmDeletePackage: '确认删除原生包 {{packageId}}? 此操作不可撤销 (Y/N):',
+  deletePackageSuccess: '原生包 {{packageId}} 删除成功',
+  deletePackageError: '删除原生包 {{packageId}} 失败: {{error}}',
+  usageDeletePackage:
+    '使用方法: pushy deletePackage [packageId] --appId [appId]',
 };

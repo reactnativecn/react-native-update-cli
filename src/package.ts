@@ -1,4 +1,4 @@
-import { get, getAllPackages, post, uploadFile } from './api';
+import { get, getAllPackages, post, uploadFile, doDelete } from './api';
 import { question, saveToLocal } from './utils';
 import { t } from './utils/i18n';
 
@@ -211,5 +211,48 @@ export const packageCommands = {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);
+  },
+  deletePackage: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: { appId?: string };
+  }) => {
+    let packageId = args[0];
+    let { appId } = options;
+
+    if (!appId) {
+      const platform = await getPlatform();
+      appId = (await getSelectedApp(platform)).appId as string;
+    }
+
+    // If no packageId provided as argument, let user choose from list
+    if (!packageId) {
+      const selectedPackage = await choosePackage(appId);
+      packageId = selectedPackage.id;
+    }
+
+    // Confirm deletion
+    // const confirmDelete = await question(
+    //   t('confirmDeletePackage', { packageId }),
+    // );
+
+    // if (
+    //   confirmDelete.toLowerCase() !== 'y' &&
+    //   confirmDelete.toLowerCase() !== 'yes'
+    // ) {
+    //   console.log(t('cancelled'));
+    //   return;
+    // }
+
+    try {
+      await doDelete(`/app/${appId}/package/${packageId}`);
+      console.log(t('deletePackageSuccess', { packageId }));
+    } catch (error: any) {
+      throw new Error(
+        t('deletePackageError', { packageId, error: error.message }),
+      );
+    }
   },
 };
