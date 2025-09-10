@@ -39,9 +39,9 @@ export class ModuleManager {
       module.init(this.provider);
     }
 
-    console.log(
-      `Module '${module.name}' (v${module.version}) registered successfully`,
-    );
+    // console.log(
+    //   `Module '${module.name}' (v${module.version}) registered successfully`,
+    // );
   }
 
   unregisterModule(moduleName: string): void {
