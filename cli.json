@@ -66,6 +66,12 @@
       "options": {
         "appId": {
           "hasValue": true
+        },
+        "packageVersion": {
+          "hasValue": true
+        },
+        "packageId": {
+          "hasValue": true
         }
       }
     },

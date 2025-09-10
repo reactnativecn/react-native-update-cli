@@ -217,10 +217,9 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: { appId?: string };
+    options: { appId?: string, packageId?: string, packageVersion?: string };
   }) => {
-    let packageId = args[0];
-    let { appId } = options;
+    let { appId, packageId, packageVersion } = options;
 
     if (!appId) {
       const platform = await getPlatform();
@@ -229,7 +228,14 @@ export const packageCommands = {
 
     // If no packageId provided as argument, let user choose from list
     if (!packageId) {
-      const selectedPackage = await choosePackage(appId);
+      const allPkgs = await getAllPackages(appId);
+      if (!allPkgs) {
+        throw new Error(t('noPackagesFound', { appId }));
+      }
+      const selectedPackage = allPkgs.find((pkg) => pkg.version === packageVersion);
+      if (!selectedPackage) {
+        throw new Error(t('packageNotFound', { packageVersion }));
+      }
       packageId = selectedPackage.id;
     }
 
