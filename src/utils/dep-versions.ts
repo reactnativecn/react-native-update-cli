@@ -1,4 +1,9 @@
-const currentPackage = require(`${process.cwd()}/package.json`);
+let currentPackage = null;
+try {
+  currentPackage = require(`${process.cwd()}/package.json`);
+} catch (e) {
+  // console.warn('No package.json file were found');
+}
 
 const _depVersions: Record<string, string> = {};
 
@@ -24,12 +29,9 @@ if (currentPackage) {
 
 export const depVersions = Object.keys(_depVersions)
   .sort() // Sort the keys alphabetically
-  .reduce(
-    (obj, key) => {
-      obj[key] = _depVersions[key]; // Rebuild the object with sorted keys
-      return obj;
-    },
-    {} as Record<string, string>,
-  );
+  .reduce((obj, key) => {
+    obj[key] = _depVersions[key]; // Rebuild the object with sorted keys
+    return obj;
+  }, {} as Record<string, string>);
 
 // console.log({ depVersions });

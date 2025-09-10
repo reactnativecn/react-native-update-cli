@@ -1,6 +1,6 @@
 {
   "name": "react-native-update-cli",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "command line tool for react-native-update (remote updates for react native)",
   "main": "index.js",
   "bin": {
