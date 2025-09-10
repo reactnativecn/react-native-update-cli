@@ -232,7 +232,7 @@ export const packageCommands = {
       if (!allPkgs) {
         throw new Error(t('noPackagesFound', { appId }));
       }
-      const selectedPackage = allPkgs.find((pkg) => pkg.version === packageVersion);
+      const selectedPackage = allPkgs.find((pkg) => pkg.name === packageVersion);
       if (!selectedPackage) {
         throw new Error(t('packageNotFound', { packageVersion }));
       }
