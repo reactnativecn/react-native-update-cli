@@ -10,6 +10,6 @@ export const pricingPageUrl = IS_CRESC
   ? 'https://cresc.dev/pricing'
   : 'https://pushy.reactnative.cn/pricing.html';
 
-export const defaultEndpoint = IS_CRESC
-  ? 'https://api.cresc.dev'
-  : 'https://update.reactnative.cn/api';
+export const defaultEndpoints = IS_CRESC
+  ? ['https://api.cresc.dev', 'https://api.cresc.app']
+  : ['https://update.reactnative.cn/api', 'https://update.react-native.cn/api'];

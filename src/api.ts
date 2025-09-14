@@ -10,18 +10,16 @@ import packageJson from '../package.json';
 import type { Package, Session } from './types';
 import {
   credentialFile,
-  defaultEndpoint,
   pricingPageUrl,
 } from './utils/constants';
 import { t } from './utils/i18n';
+import { getBaseUrl } from 'utils/http-helper';
 
 const tcpPing = util.promisify(tcpp.ping);
 
 let session: Session | undefined;
 let savedSession: Session | undefined;
 
-const host =
-  process.env.PUSHY_REGISTRY || process.env.RNU_API || defaultEndpoint;
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 
@@ -64,7 +62,9 @@ export const closeSession = () => {
 };
 
 async function query(url: string, options: fetch.RequestInit) {
-  const resp = await fetch(url, options);
+  const baseUrl = await getBaseUrl;
+  const fullUrl = `${baseUrl}${url}`;
+  const resp = await fetch(fullUrl, options);
   const text = await resp.text();
   let json: any;
   try {
@@ -83,7 +83,7 @@ async function query(url: string, options: fetch.RequestInit) {
 
 function queryWithoutBody(method: string) {
   return (api: string) =>
-    query(host + api, {
+    query(api, {
       method,
       headers: {
         'User-Agent': userAgent,
@@ -94,7 +94,7 @@ function queryWithoutBody(method: string) {
 
 function queryWithBody(method: string) {
   return (api: string, body?: Record<string, any>) =>
-    query(host + api, {
+    query(api, {
       method,
       headers: {
         'User-Agent': userAgent,
@@ -116,6 +116,7 @@ export async function uploadFile(fn: string, key?: string) {
   });
   let realUrl = url;
   if (backupUrl) {
+    // @ts-ignore
     if (global.USE_ACC_OSS) {
       realUrl = backupUrl;
     } else {
