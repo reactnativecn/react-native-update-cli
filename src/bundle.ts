@@ -668,6 +668,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
           addEntry(base);
         }
         copies[entry.fileName] = originMap[entry.crc32];
+        copies[entry.crc32] = entry.fileName;
         return;
       }
 
@@ -792,6 +793,7 @@ async function diffFromPackage(
       // If moved from other place
       if (originMap[entry.crc32]) {
         copies[entry.fileName] = originMap[entry.crc32];
+        copies[entry.crc32] = entry.fileName;
         return;
       }
 
