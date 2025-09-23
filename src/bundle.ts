@@ -597,6 +597,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
   }
 
   const copies = {};
+  const copiesv2 = {};
 
   const zipfile = new YazlZipFile();
 
@@ -668,6 +669,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
           addEntry(base);
         }
         copies[entry.fileName] = originMap[entry.crc32];
+        copiesv2[entry.crc32] = entry.fileName;
         return;
       }
 
@@ -700,7 +702,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
 
   //console.log({copies, deletes});
   zipfile.addBuffer(
-    Buffer.from(JSON.stringify({ copies, deletes })),
+    Buffer.from(JSON.stringify({ copies, copiesv2, deletes })),
     '__diff.json',
   );
   zipfile.end();
@@ -747,6 +749,7 @@ async function diffFromPackage(
   }
 
   const copies = {};
+  const copiesv2 = {};
 
   const zipfile = new YazlZipFile();
 
@@ -792,6 +795,7 @@ async function diffFromPackage(
       // If moved from other place
       if (originMap[entry.crc32]) {
         copies[entry.fileName] = originMap[entry.crc32];
+        copiesv2[entry.crc32] = entry.fileName;
         return;
       }
 
@@ -810,7 +814,7 @@ async function diffFromPackage(
     }
   });
 
-  zipfile.addBuffer(Buffer.from(JSON.stringify({ copies })), '__diff.json');
+  zipfile.addBuffer(Buffer.from(JSON.stringify({ copies, copiesv2 })), '__diff.json');
   zipfile.end();
   await writePromise;
 }
