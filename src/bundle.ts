@@ -270,20 +270,47 @@ async function copyHarmonyBundle(outputFolder: string) {
     await fs.copy('update.json', path.join(harmonyRawPath, 'update.json'));
     await fs.ensureDir(outputFolder);
 
-    const files = await fs.readdir(harmonyRawPath);
-    for (const file of files) {
-      if (file !== 'update.json' && file !== 'meta.json') {
-        const sourcePath = path.join(harmonyRawPath, file);
-        const destPath = path.join(outputFolder, file);
-        const stat = await fs.stat(sourcePath);
+    // Recursively copy files with special handling for assets directory
+    async function copyFilesRecursively(
+      srcDir: string,
+      destDir: string,
+      relativePath = '',
+    ) {
+      const fullSrcPath = path.join(srcDir, relativePath);
+      const items = await fs.readdir(fullSrcPath);
+
+      for (const item of items) {
+        const itemRelativePath = path.join(relativePath, item);
+        const itemSrcPath = path.join(srcDir, itemRelativePath);
+
+        // Skip update.json and meta.json at root level
+        if (!relativePath && (item === 'update.json' || item === 'meta.json')) {
+          continue;
+        }
+
+        const stat = await fs.stat(itemSrcPath);
 
         if (stat.isFile()) {
-          await fs.copy(sourcePath, destPath);
+          // Special handling: remove 'assets/' prefix to move files up one level
+          let itemDestPath = itemRelativePath;
+          if (
+            itemDestPath.startsWith('assets/') ||
+            itemDestPath.startsWith('assets\\')
+          ) {
+            itemDestPath = itemDestPath.replace(/^assets[\\/]/, '');
+          }
+
+          const fullDestPath = path.join(destDir, itemDestPath);
+          await fs.ensureDir(path.dirname(fullDestPath));
+          await fs.copy(itemSrcPath, fullDestPath);
         } else if (stat.isDirectory()) {
-          await fs.copy(sourcePath, destPath);
+          // Recursively process subdirectories
+          await copyFilesRecursively(srcDir, destDir, itemRelativePath);
         }
       }
     }
+
+    await copyFilesRecursively(harmonyRawPath, outputFolder);
   } catch (error: any) {
     console.error(t('copyHarmonyBundleError', { error }));
     throw new Error(t('copyFileFailed', { error: error.message }));
