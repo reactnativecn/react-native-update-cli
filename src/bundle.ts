@@ -75,15 +75,12 @@ async function runReactNativeBundleCommand({
   const envArgs = process.env.PUSHY_ENV_ARGS;
 
   if (envArgs) {
-    Array.prototype.push.apply(
-      reactNativeBundleArgs,
-      envArgs.trim().split(/\s+/),
-    );
+    reactNativeBundleArgs.push(...envArgs.trim().split(/\s+/));
   }
 
   fs.emptyDirSync(outputFolder);
 
-  let cliPath: string | undefined;
+  let cliPath = '';
   let usingExpo = false;
 
   const getExpoCli = () => {
@@ -104,7 +101,7 @@ async function runReactNativeBundleCommand({
       if (satisfies(expoCliVersion, '>= 0.10.17')) {
         usingExpo = true;
       } else {
-        cliPath = undefined;
+        cliPath = '';
       }
     } catch (e) {}
   };
@@ -166,49 +163,34 @@ async function runReactNativeBundleCommand({
     bundleCommand = 'build';
   }
 
-  if (platform === 'harmony') {
-    Array.prototype.push.apply(reactNativeBundleArgs, [
-      cliPath,
-      bundleCommand,
-      '--dev',
-      dev,
-      '--entry-file',
-      entryFile,
-    ]);
-
-    if (sourcemapOutput) {
-      reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
-    }
-
-    if (config) {
-      reactNativeBundleArgs.push('--config', config);
-    }
-  } else {
-    Array.prototype.push.apply(reactNativeBundleArgs, [
-      cliPath,
-      bundleCommand,
-      '--assets-dest',
+  reactNativeBundleArgs.push(
+    cliPath,
+    bundleCommand,
+    '--assets-dest',
+    outputFolder,
+    '--bundle-output',
+    path.join(
       outputFolder,
-      '--bundle-output',
-      path.join(outputFolder, bundleName),
-      '--platform',
-      platform,
-      '--reset-cache',
-    ]);
+      platform === 'harmony' ? 'bundle.harmony.js' : bundleName,
+    ),
+  );
 
-    if (cli.taro) {
-      reactNativeBundleArgs.push(...['--type', 'rn']);
-    } else {
-      reactNativeBundleArgs.push(...['--dev', dev, '--entry-file', entryFile]);
-    }
+  if (platform !== 'harmony') {
+    reactNativeBundleArgs.push('--platform', platform, '--reset-cache');
+  }
 
-    if (sourcemapOutput) {
-      reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
-    }
+  if (cli.taro) {
+    reactNativeBundleArgs.push('--type', 'rn');
+  } else {
+    reactNativeBundleArgs.push('--dev', dev, '--entry-file', entryFile);
+  }
 
-    if (config) {
-      reactNativeBundleArgs.push('--config', config);
-    }
+  if (sourcemapOutput) {
+    reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
+  }
+
+  if (config) {
+    reactNativeBundleArgs.push('--config', config);
   }
 
   const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
@@ -814,7 +796,10 @@ async function diffFromPackage(
     }
   });
 
-  zipfile.addBuffer(Buffer.from(JSON.stringify({ copies, copiesv2 })), '__diff.json');
+  zipfile.addBuffer(
+    Buffer.from(JSON.stringify({ copies, copiesv2 })),
+    '__diff.json',
+  );
   zipfile.end();
   await writePromise;
 }
