@@ -163,20 +163,18 @@ async function runReactNativeBundleCommand({
     bundleCommand = 'build';
   }
 
-  reactNativeBundleArgs.push(
-    cliPath,
-    bundleCommand,
-    '--assets-dest',
-    outputFolder,
-    '--bundle-output',
-    path.join(
-      outputFolder,
-      platform === 'harmony' ? 'bundle.harmony.js' : bundleName,
-    ),
-  );
+  reactNativeBundleArgs.push(cliPath, bundleCommand);
 
   if (platform !== 'harmony') {
-    reactNativeBundleArgs.push('--platform', platform, '--reset-cache');
+    reactNativeBundleArgs.push(
+      '--platform',
+      platform,
+      '--assets-dest',
+      outputFolder,
+      '--bundle-output',
+      path.join(outputFolder, bundleName),
+      '--reset-cache',
+    );
   }
 
   if (cli.taro) {
