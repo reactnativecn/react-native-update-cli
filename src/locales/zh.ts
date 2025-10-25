@@ -129,4 +129,10 @@ export default {
   deletePackageError: '删除原生包 {{packageId}} 失败: {{error}}',
   usageDeletePackage:
     '使用方法: pushy deletePackage [packageId] --appId [appId]',
+  bundleFileNotFound: '未找到 bundle 文件！请使用默认的 bundle 文件名和路径。',
+  diffPackageGenerated: '{{- output}} 已生成。',
+  nodeBsdiffRequired:
+    '此功能需要 "node-bsdiff"。请运行 "{{scriptName}} install node-bsdiff" 来安装',
+  nodeHdiffpatchRequired:
+    '此功能需要 "node-hdiffpatch"。请运行 "{{scriptName}} install node-hdiffpatch" 来安装',
 };

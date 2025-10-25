@@ -299,15 +299,6 @@
         }
       }
     },
-    "hdiffFromPPK": {
-      "description": "Create hdiff patch from a Prepare package(.ppk)",
-      "options": {
-        "output": {
-          "default": "${tempDir}/output/hdiff-${time}.ppk-patch",
-          "hasValue": true
-        }
-      }
-    },
     "hdiffFromApp": {
       "description": "Create hdiff patch from a Harmony package(.app)",
       "options": {
@@ -343,6 +334,10 @@
           "hasValue": true
         }
       }
+    },
+    "install": {
+      "description": "Install optional dependencies to the CLI",
+      "options": {}
     }
   },
   "globalOptions": {

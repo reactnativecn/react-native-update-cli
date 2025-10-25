@@ -3,6 +3,7 @@
 import { loadSession } from './api';
 import { appCommands } from './app';
 import { bundleCommands } from './bundle';
+import { installCommands } from './install';
 import { moduleManager } from './module-manager';
 import { builtinModules } from './modules';
 import { packageCommands } from './package';
@@ -26,15 +27,16 @@ function printUsage() {
   console.log('React Native Update CLI');
   console.log('');
   console.log('Traditional commands:');
-  
+
   const legacyCommands = {
     ...userCommands,
     ...bundleCommands,
     ...appCommands,
     ...packageCommands,
     ...versionCommands,
+    ...installCommands,
   };
-  
+
   for (const [name, handler] of Object.entries(legacyCommands)) {
     console.log(`  ${name}: Legacy command`);
   }
@@ -62,7 +64,7 @@ function printUsage() {
   console.log('  list: List all available commands and workflows');
   console.log('  workflow <name>: Execute a specific workflow');
   console.log('  help: Show this help message');
-  
+
   console.log('');
   console.log(
     'Visit `https://github.com/reactnativecn/react-native-update` for document.',
@@ -76,6 +78,7 @@ const legacyCommands = {
   ...appCommands,
   ...packageCommands,
   ...versionCommands,
+  ...installCommands,
   help: printUsage,
 };
 
@@ -118,7 +121,7 @@ async function run() {
         process.exit(1);
       }
       console.log('Workflow completed successfully:', result.data);
-    } 
+    }
     // Try legacy commands first for backward compatibility
     else if (legacyCommands[argv.command]) {
       await legacyCommands[argv.command](argv);

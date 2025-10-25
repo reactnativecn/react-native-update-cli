@@ -16,7 +16,7 @@ import os from 'os';
 const properties = require('properties');
 import { addGitIgnore } from './utils/add-gitignore';
 import { checkLockFiles } from './utils/check-lockfile';
-import { tempDir } from './utils/constants';
+import { scriptName, tempDir } from './utils/constants';
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
 import { versionCommands } from './versions';
@@ -548,9 +548,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
   });
 
   if (!originSource) {
-    throw new Error(
-      'Bundle file not found! Please use default bundle file name and path.',
-    );
+    throw new Error(t('bundleFileNotFound'));
   }
 
   const copies = {};
@@ -700,9 +698,7 @@ async function diffFromPackage(
   });
 
   if (!originSource) {
-    throw new Error(
-      'Bundle file not found! Please use default bundle file name and path.',
-    );
+    throw new Error(t('bundleFileNotFound'));
   }
 
   const copies = {};
@@ -856,24 +852,21 @@ function diffArgsCheck(args: string[], options: any, diffFn: string) {
 
   if (diffFn.startsWith('hdiff')) {
     if (!hdiff) {
-      console.error(
-        `This function needs "node-hdiffpatch". 
-        Please run "npm i node-hdiffpatch" to install`,
-      );
+      console.error(t('nodeHdiffpatchRequired', { scriptName }));
       process.exit(1);
     }
     diff = hdiff;
   } else {
     if (!bsdiff) {
-      console.error(
-        `This function needs "node-bsdiff". 
-        Please run "npm i node-bsdiff" to install`,
-      );
+      console.error(t('nodeBsdiffRequired', { scriptName }));
       process.exit(1);
     }
     diff = bsdiff;
   }
-  const { output } = options;
+  const { output } = translateOptions({
+    ...options,
+    tempDir,
+  });
 
   return {
     origin,
@@ -1004,14 +997,14 @@ export const bundleCommands = {
     const { origin, next, realOutput } = diffArgsCheck(args, options, 'diff');
 
     await diffFromPPK(origin, next, realOutput);
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 
   async hdiff({ args, options }) {
     const { origin, next, realOutput } = diffArgsCheck(args, options, 'hdiff');
 
     await diffFromPPK(origin, next, realOutput);
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 
   async diffFromApk({ args, options }) {
@@ -1027,7 +1020,7 @@ export const bundleCommands = {
       realOutput,
       'assets/index.android.bundle',
     );
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 
   async hdiffFromApk({ args, options }) {
@@ -1043,7 +1036,7 @@ export const bundleCommands = {
       realOutput,
       'assets/index.android.bundle',
     );
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 
   async diffFromApp({ args, options }) {
@@ -1058,7 +1051,7 @@ export const bundleCommands = {
       realOutput,
       'resources/rawfile/bundle.harmony.js',
     );
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 
   async hdiffFromApp({ args, options }) {
@@ -1073,7 +1066,7 @@ export const bundleCommands = {
       realOutput,
       'resources/rawfile/bundle.harmony.js',
     );
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 
   async diffFromIpa({ args, options }) {
@@ -1088,7 +1081,7 @@ export const bundleCommands = {
       return m?.[1];
     });
 
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 
   async hdiffFromIpa({ args, options }) {
@@ -1103,6 +1096,6 @@ export const bundleCommands = {
       return m?.[1];
     });
 
-    console.log(`${realOutput} generated.`);
+    console.log(t('diffPackageGenerated', { output: realOutput }));
   },
 };

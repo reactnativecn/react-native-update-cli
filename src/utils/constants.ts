@@ -1,6 +1,6 @@
 import path from 'path';
 
-const scriptName = path.basename(process.argv[1]) as 'cresc' | 'pushy';
+export const scriptName = path.basename(process.argv[1]) as 'cresc' | 'pushy';
 export const IS_CRESC = scriptName === 'cresc';
 
 export const credentialFile = IS_CRESC ? '.cresc.token' : '.update';
