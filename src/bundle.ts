@@ -163,18 +163,20 @@ async function runReactNativeBundleCommand({
     bundleCommand = 'build';
   }
 
-  reactNativeBundleArgs.push(cliPath, bundleCommand);
+  reactNativeBundleArgs.push(
+    cliPath,
+    bundleCommand,
+    '--assets-dest',
+    outputFolder,
+    '--bundle-output',
+    path.join(
+      outputFolder,
+      platform === 'harmony' ? 'harmony.bundle.js' : bundleName,
+    ),
+  );
 
   if (platform !== 'harmony') {
-    reactNativeBundleArgs.push(
-      '--platform',
-      platform,
-      '--assets-dest',
-      outputFolder,
-      '--bundle-output',
-      path.join(outputFolder, bundleName),
-      '--reset-cache',
-    );
+    reactNativeBundleArgs.push('--platform', platform, '--reset-cache');
   }
 
   if (cli.taro) {
@@ -240,8 +242,6 @@ async function runReactNativeBundleCommand({
           fs.existsSync('ios/Pods/hermes-engine')
         ) {
           hermesEnabled = true;
-        } else if (platform === 'harmony') {
-          await copyHarmonyBundle(outputFolder);
         }
         if (hermesEnabled) {
           await compileHermesByteCode(
@@ -255,66 +255,6 @@ async function runReactNativeBundleCommand({
       }
     });
   });
-}
-
-async function copyHarmonyBundle(outputFolder: string) {
-  const harmonyRawPath = 'harmony/entry/src/main/resources/rawfile';
-  try {
-    await fs.ensureDir(harmonyRawPath);
-    try {
-      await fs.access(harmonyRawPath, fs.constants.W_OK);
-    } catch (error) {
-      await fs.chmod(harmonyRawPath, 0o755);
-    }
-    await fs.remove(path.join(harmonyRawPath, 'update.json'));
-    await fs.copy('update.json', path.join(harmonyRawPath, 'update.json'));
-    await fs.ensureDir(outputFolder);
-
-    // Recursively copy files with special handling for assets directory
-    async function copyFilesRecursively(
-      srcDir: string,
-      destDir: string,
-      relativePath = '',
-    ) {
-      const fullSrcPath = path.join(srcDir, relativePath);
-      const items = await fs.readdir(fullSrcPath);
-
-      for (const item of items) {
-        const itemRelativePath = path.join(relativePath, item);
-        const itemSrcPath = path.join(srcDir, itemRelativePath);
-
-        // Skip update.json and meta.json at root level
-        if (!relativePath && (item === 'update.json' || item === 'meta.json')) {
-          continue;
-        }
-
-        const stat = await fs.stat(itemSrcPath);
-
-        if (stat.isFile()) {
-          // Special handling: remove 'assets/' prefix to move files up one level
-          let itemDestPath = itemRelativePath;
-          if (
-            itemDestPath.startsWith('assets/') ||
-            itemDestPath.startsWith('assets\\')
-          ) {
-            itemDestPath = itemDestPath.replace(/^assets[\\/]/, '');
-          }
-
-          const fullDestPath = path.join(destDir, itemDestPath);
-          await fs.ensureDir(path.dirname(fullDestPath));
-          await fs.copy(itemSrcPath, fullDestPath);
-        } else if (stat.isDirectory()) {
-          // Recursively process subdirectories
-          await copyFilesRecursively(srcDir, destDir, itemRelativePath);
-        }
-      }
-    }
-
-    await copyFilesRecursively(harmonyRawPath, outputFolder);
-  } catch (error: any) {
-    console.error(t('copyHarmonyBundleError', { error }));
-    throw new Error(t('copyFileFailed', { error: error.message }));
-  }
 }
 
 function getHermesOSBin() {
