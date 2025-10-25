@@ -42,7 +42,7 @@ async function runReactNativeBundleCommand({
   platform,
   sourcemapOutput,
   config,
-  disableHermes,
+  forceHermes,
   cli,
 }: {
   bundleName: string;
@@ -52,7 +52,7 @@ async function runReactNativeBundleCommand({
   platform: string;
   sourcemapOutput: string;
   config?: string;
-  disableHermes?: boolean;
+  forceHermes?: boolean;
   cli: {
     taro?: boolean;
     expo?: boolean;
@@ -163,16 +163,21 @@ async function runReactNativeBundleCommand({
     bundleCommand = 'build';
   }
 
+  if (platform === 'harmony') {
+    bundleName = 'harmony.bundle.js';
+    if (forceHermes === undefined) {
+      // enable hermes by default for harmony
+      forceHermes = true;
+    }
+  }
+
   reactNativeBundleArgs.push(
     cliPath,
     bundleCommand,
     '--assets-dest',
     outputFolder,
     '--bundle-output',
-    path.join(
-      outputFolder,
-      platform === 'harmony' ? 'harmony.bundle.js' : bundleName,
-    ),
+    path.join(outputFolder, bundleName),
   );
 
   if (platform !== 'harmony') {
@@ -213,9 +218,9 @@ async function runReactNativeBundleCommand({
       } else {
         let hermesEnabled: boolean | undefined = false;
 
-        if (disableHermes) {
-          hermesEnabled = false;
-          console.log(t('hermesDisabled'));
+        if (forceHermes) {
+          hermesEnabled = true;
+          console.log(t('forceHermes'));
         } else if (platform === 'android') {
           const gradlePropeties = await new Promise<{
             hermesEnabled?: boolean;
@@ -445,7 +450,12 @@ async function uploadSourcemapForSentry(
   }
 }
 
-const ignorePackingFileNames = ['.', '..', 'index.bundlejs.map'];
+const ignorePackingFileNames = [
+  '.',
+  '..',
+  'index.bundlejs.map',
+  'harmony.bundle.js.map',
+];
 const ignorePackingExtensions = ['DS_Store', 'txt.map'];
 async function pack(dir: string, output: string) {
   console.log(t('packing'));
@@ -886,7 +896,7 @@ export const bundleCommands = {
       taro,
       expo,
       rncli,
-      disableHermes,
+      hermes,
       name,
       description,
       metaInfo,
@@ -927,7 +937,7 @@ export const bundleCommands = {
       outputFolder: intermediaDir,
       platform,
       sourcemapOutput: sourcemap || sourcemapPlugin ? sourcemapOutput : '',
-      disableHermes: !!disableHermes,
+      forceHermes: hermes as unknown as boolean,
       cli: {
         taro: !!taro,
         expo: !!expo,

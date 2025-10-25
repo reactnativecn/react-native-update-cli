@@ -213,7 +213,7 @@
         "rncli": {
           "default": false
         },
-        "disableHermes": {
+        "hermes": {
           "default": false
         },
         "name": {

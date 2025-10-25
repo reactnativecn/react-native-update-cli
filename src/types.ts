@@ -65,7 +65,7 @@ export interface BundleOptions {
   taro?: boolean;
   expo?: boolean;
   rncli?: boolean;
-  disableHermes?: boolean;
+  hermes?: boolean;
 }
 
 export interface PublishOptions {

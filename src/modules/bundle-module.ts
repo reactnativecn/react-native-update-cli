@@ -53,7 +53,7 @@ export const bundleModule: CLIModule = {
               taro = false,
               expo = false,
               rncli = false,
-              disableHermes = false,
+              hermes = false,
               output,
             } = context.options;
 
@@ -73,7 +73,7 @@ export const bundleModule: CLIModule = {
                 taro,
                 expo,
                 rncli,
-                disableHermes,
+                hermes,
                 intermediaDir: '${tempDir}/intermedia/${platform}',
                 output: '${tempDir}/output/${platform}.${time}.ppk',
               };
@@ -170,10 +170,10 @@ export const bundleModule: CLIModule = {
           default: false,
           description: 'Use React Native CLI',
         },
-        disableHermes: {
+        hermes: {
           hasValue: false,
           default: false,
-          description: 'Disable Hermes',
+          description: 'Force enable Hermes',
         },
         name: {
           hasValue: true,

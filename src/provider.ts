@@ -42,7 +42,7 @@ export class CLIProviderImpl implements CLIProvider {
           taro: options.taro || false,
           expo: options.expo || false,
           rncli: options.rncli || false,
-          disableHermes: options.disableHermes || false,
+          hermes: options.hermes || false,
         },
       };
 

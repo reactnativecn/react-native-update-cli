@@ -47,7 +47,7 @@ export default {
   fileGenerated: '已生成 {{- file}}',
   fileSizeExceeded:
     '此文件大小 {{fileSize}} , 超出当前额度 {{maxSize}} 。您可以考虑升级付费业务以提升此额度。详情请访问: {{- pricingPageUrl}}',
-  hermesDisabled: 'Hermes 已禁用',
+  forceHermes: '强制启用 Hermes 编译',
   hermesEnabledCompiling: 'Hermes 已启用，正在编译为 hermes 字节码：\n',
   ipaUploadSuccess:
     '已成功上传ipa原生包（id: {{id}}, version: {{version}}, buildTime: {{buildTime}}）',

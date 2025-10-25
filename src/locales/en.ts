@@ -49,7 +49,7 @@ export default {
   fileGenerated: '{{- file}} generated.',
   fileSizeExceeded:
     'This file size is {{fileSize}} , exceeding the current quota {{maxSize}} . You may consider upgrading to a higher plan to increase this quota. Details can be found at: {{- pricingPageUrl}}',
-  hermesDisabled: 'Hermes disabled',
+  forceHermes: 'Forcing Hermes enabled for this build',
   hermesEnabledCompiling: 'Hermes enabled, now compiling to hermes bytecode:\n',
   ipaUploadSuccess:
     'Successfully uploaded IPA native package (id: {{id}}, version: {{version}}, buildTime: {{buildTime}})',
