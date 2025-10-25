@@ -164,7 +164,7 @@ async function runReactNativeBundleCommand({
   }
 
   if (platform === 'harmony') {
-    bundleName = 'harmony.bundle.js';
+    bundleName = 'bundle.harmony.js';
     if (forceHermes === undefined) {
       // enable hermes by default for harmony
       forceHermes = true;
@@ -454,7 +454,7 @@ const ignorePackingFileNames = [
   '.',
   '..',
   'index.bundlejs.map',
-  'harmony.bundle.js.map',
+  'bundle.harmony.js.map',
 ];
 const ignorePackingExtensions = ['DS_Store', 'txt.map'];
 async function pack(dir: string, output: string) {
