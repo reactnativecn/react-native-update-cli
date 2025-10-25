@@ -16,7 +16,7 @@ import os from 'os';
 const properties = require('properties');
 import { addGitIgnore } from './utils/add-gitignore';
 import { checkLockFiles } from './utils/check-lockfile';
-import { scriptName, tempDir } from './utils/constants';
+import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
 import { versionCommands } from './versions';
@@ -537,10 +537,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       // isFile
       originMap[entry.crc32] = entry.fileName;
 
-      if (
-        entry.fileName === 'index.bundlejs' ||
-        entry.fileName === 'bundle.harmony.js'
-      ) {
+      if (isPPKBundleFileName(entry.fileName)) {
         // This is source.
         return readEntry(entry, zipFile).then((v) => (originSource = v));
       }
@@ -589,23 +586,13 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       if (!originEntries[entry.fileName]) {
         addEntry(entry.fileName);
       }
-    } else if (entry.fileName === 'index.bundlejs') {
+    } else if (isPPKBundleFileName(entry.fileName)) {
       //console.log('Found bundle');
       return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
-          'index.bundlejs.patch',
-        );
-        //console.log('End diff');
-      });
-    } else if (entry.fileName === 'bundle.harmony.js') {
-      //console.log('Found bundle');
-      return readEntry(entry, nextZipfile).then((newSource) => {
-        //console.log('Begin diff');
-        zipfile.addBuffer(
-          diff(originSource, newSource),
-          'bundle.harmony.js.patch',
+          `${entry.fileName}.patch`,
         );
         //console.log('End diff');
       });
@@ -719,23 +706,13 @@ async function diffFromPackage(
     if (/\/$/.test(entry.fileName)) {
       // Directory
       zipfile.addEmptyDirectory(entry.fileName);
-    } else if (entry.fileName === 'index.bundlejs') {
+    } else if (isPPKBundleFileName(entry.fileName)) {
       //console.log('Found bundle');
       return readEntry(entry, nextZipfile).then((newSource) => {
         //console.log('Begin diff');
         zipfile.addBuffer(
           diff(originSource, newSource),
-          'index.bundlejs.patch',
-        );
-        //console.log('End diff');
-      });
-    } else if (entry.fileName === 'bundle.harmony.js') {
-      //console.log('Found bundle');
-      return readEntry(entry, nextZipfile).then((newSource) => {
-        //console.log('Begin diff');
-        zipfile.addBuffer(
-          diff(originSource, newSource),
-          'bundle.harmony.js.patch',
+          `${entry.fileName}.patch`,
         );
         //console.log('End diff');
       });
