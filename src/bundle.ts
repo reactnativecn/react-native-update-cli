@@ -256,6 +256,19 @@ async function runReactNativeBundleCommand({
             !isSentry,
           );
         }
+        if (platform === 'harmony') {
+          const harmonyRawAssetsPath =
+            'harmony/entry/src/main/resources/rawfile/assets';
+          // copy all files in outputFolder to harmonyRawPath
+          // assets should be in rawfile/assets
+          fs.ensureDirSync(harmonyRawAssetsPath);
+          fs.copySync(outputFolder, harmonyRawAssetsPath, { overwrite: true });
+          fs.moveSync(
+            `${harmonyRawAssetsPath}/bundle.harmony.js`,
+            `${harmonyRawAssetsPath}/../bundle.harmony.js`,
+            { overwrite: true },
+          );
+        }
         resolve(null);
       }
     });
