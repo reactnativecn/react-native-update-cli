@@ -85,14 +85,30 @@ async function runReactNativeBundleCommand({
 
   const getExpoCli = () => {
     try {
+      const searchPaths = [process.cwd()];
+
+      // 尝试添加 expo 包的路径作为额外的搜索路径
+      try {
+        const expoPath = require.resolve('expo/package.json', {
+          paths: [process.cwd()],
+        });
+        // 获取 expo 包的目录路径
+        const expoDir = expoPath.replace(/\/package\.json$/, '');
+        searchPaths.push(expoDir);
+      } catch {
+        // expo 包不存在，忽略
+      }
+
+      // 尝试从搜索路径中解析 @expo/cli
       cliPath = require.resolve('@expo/cli', {
-        paths: [process.cwd()],
+        paths: searchPaths,
       });
+
       const expoCliVersion = JSON.parse(
         fs
           .readFileSync(
             require.resolve('@expo/cli/package.json', {
-              paths: [process.cwd()],
+              paths: searchPaths,
             }),
           )
           .toString(),
