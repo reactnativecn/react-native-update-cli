@@ -122,17 +122,6 @@ export const bindVersionToPackages = async ({
     console.log(chalk.yellow(t('dryRun')));
   }
   if (rollout !== undefined) {
-    const rolloutConfig: Record<string, number> = {};
-    for (const pkg of pkgs) {
-      rolloutConfig[pkg.name] = rollout;
-    }
-    if (!dryRun) {
-      await put(`/app/${appId}/version/${versionId}`, {
-        config: {
-          rollout: rolloutConfig,
-        },
-      });
-    }
     console.log(
       `${t('rolloutConfigSet', {
         versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
@@ -142,8 +131,10 @@ export const bindVersionToPackages = async ({
   }
   for (const pkg of pkgs) {
     if (!dryRun) {
-      await put(`/app/${appId}/package/${pkg.id}`, {
+      await post(`/app/${appId}/binding`, {
         versionId,
+        rollout,
+        packageId: pkg.id,
       });
     }
     console.log(
