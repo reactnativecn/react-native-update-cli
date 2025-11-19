@@ -1,4 +1,5 @@
 import { defaultEndpoints } from './constants';
+import fetch from 'node-fetch';
 
 // const baseUrl = `http://localhost:9000`;
 // let baseUrl = SERVER.main[0];
