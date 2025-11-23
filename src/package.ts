@@ -6,7 +6,7 @@ import { getPlatform, getSelectedApp } from './app';
 
 import Table from 'tty-table';
 import type { Platform } from './types';
-import { getApkInfo, getAppInfo, getIpaInfo } from './utils';
+import { getApkInfo, getAppInfo, getIpaInfo, getAabInfo } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 
@@ -207,6 +207,13 @@ export const packageCommands = {
     }
     console.log(await getApkInfo(fn));
   },
+  parseAab: async ({ args }: { args: string[] }) => {
+    const fn = args[0];
+    if (!fn || !fn.endsWith('.aab')) {
+      throw new Error(t('usageParseAab'));
+    }
+    console.log(await getAabInfo(fn));
+  },
   packages: async ({ options }: { options: { platform: Platform } }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
@@ -217,7 +224,7 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: { appId?: string, packageId?: string, packageVersion?: string };
+    options: { appId?: string; packageId?: string; packageVersion?: string };
   }) => {
     let { appId, packageId, packageVersion } = options;
 
@@ -232,7 +239,9 @@ export const packageCommands = {
       if (!allPkgs) {
         throw new Error(t('noPackagesFound', { appId }));
       }
-      const selectedPackage = allPkgs.find((pkg) => pkg.name === packageVersion);
+      const selectedPackage = allPkgs.find(
+        (pkg) => pkg.name === packageVersion,
+      );
       if (!selectedPackage) {
         throw new Error(t('packageNotFound', { packageVersion }));
       }

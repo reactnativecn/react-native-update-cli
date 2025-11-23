@@ -149,6 +149,160 @@ export async function getIpaInfo(fn: string) {
   return { versionName, buildTime, ...appCredential };
 }
 
+export async function getAabInfo(fn: string) {
+  const protobuf = require('protobufjs');
+  const root = await protobuf.load(
+    path.join(__dirname, '../../proto/Resources.proto'),
+  );
+  const XmlNode = root.lookupType('aapt.pb.XmlNode');
+
+  const buffer = await readZipEntry(fn, 'base/manifest/AndroidManifest.xml');
+
+  const message = XmlNode.decode(buffer);
+  const object = XmlNode.toObject(message, {
+    enums: String,
+    longs: String,
+    bytes: String,
+    defaults: true,
+    arrays: true,
+  });
+
+  const manifestElement = object.element;
+  if (manifestElement.name !== 'manifest') {
+    throw new Error('Invalid manifest');
+  }
+
+  let versionName = '';
+  for (const attr of manifestElement.attribute) {
+    if (attr.name === 'versionName') {
+      versionName = attr.value;
+    }
+  }
+
+  let buildTime = 0;
+  const appCredential = {};
+
+  // Find application node
+  const applicationNode = manifestElement.child.find(
+    (c: any) => c.element && c.element.name === 'application',
+  );
+  if (applicationNode) {
+    const metaDataNodes = applicationNode.element.child.filter(
+      (c: any) => c.element && c.element.name === 'meta-data',
+    );
+    for (const meta of metaDataNodes) {
+      let name = '';
+      let value = '';
+      let resourceId = 0;
+
+      for (const attr of meta.element.attribute) {
+        if (attr.name === 'name') {
+          name = attr.value;
+        }
+        if (attr.name === 'value') {
+          value = attr.value;
+          if (attr.compiledItem?.ref?.id) {
+            resourceId = attr.compiledItem.ref.id;
+          } else if (attr.compiledItem?.prim?.intDecimalValue) {
+            value = attr.compiledItem.prim.intDecimalValue.toString();
+          }
+        }
+      }
+
+      if (name === 'pushy_build_time') {
+        if (resourceId > 0) {
+          const resolvedValue = await resolveResource(fn, resourceId, root);
+          if (resolvedValue) {
+            value = resolvedValue;
+          }
+        }
+        buildTime = Number(value);
+      }
+    }
+  }
+
+  if (buildTime === 0) {
+    throw new Error(t('buildTimeNotFound'));
+  }
+
+  return { versionName, buildTime, ...appCredential };
+}
+
+async function readZipEntry(fn: string, entryName: string): Promise<Buffer> {
+  const yauzl = require('yauzl');
+  return new Promise((resolve, reject) => {
+    yauzl.open(fn, { lazyEntries: true }, (err: any, zipfile: any) => {
+      if (err) return reject(err);
+      let found = false;
+      zipfile.readEntry();
+      zipfile.on('entry', (entry: any) => {
+        if (entry.fileName === entryName) {
+          found = true;
+          zipfile.openReadStream(entry, (err: any, readStream: any) => {
+            if (err) return reject(err);
+            const chunks: any[] = [];
+            readStream.on('data', (chunk: any) => chunks.push(chunk));
+            readStream.on('end', () => resolve(Buffer.concat(chunks)));
+            readStream.on('error', reject);
+          });
+        } else {
+          zipfile.readEntry();
+        }
+      });
+      zipfile.on('end', () => {
+        if (!found) reject(new Error(`${entryName} not found in AAB`));
+      });
+      zipfile.on('error', reject);
+    });
+  });
+}
+
+async function resolveResource(
+  fn: string,
+  resourceId: number,
+  root: any,
+): Promise<string | null> {
+  const pkgId = (resourceId >> 24) & 0xff;
+  const typeId = (resourceId >> 16) & 0xff;
+  const entryId = resourceId & 0xffff;
+
+  try {
+    const buffer = await readZipEntry(fn, 'base/resources.pb');
+    const ResourceTable = root.lookupType('aapt.pb.ResourceTable');
+    const message = ResourceTable.decode(buffer);
+    const object = ResourceTable.toObject(message, {
+      enums: String,
+      longs: String,
+      bytes: String,
+      defaults: true,
+      arrays: true,
+    });
+
+    // Find package
+    const pkg = object.package.find((p: any) => p.packageId === pkgId);
+    if (!pkg) return null;
+
+    // Find type
+    const type = pkg.type.find((t: any) => t.typeId === typeId);
+    if (!type) return null;
+
+    // Find entry
+    const entry = type.entry.find((e: any) => e.entryId === entryId);
+    if (!entry) return null;
+
+    // Get value from configValue
+    if (entry.configValue && entry.configValue.length > 0) {
+      const val = entry.configValue[0].value;
+      if (val.item?.str) {
+        return val.item.str.value;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to resolve resource:', e);
+  }
+  return null;
+}
+
 const localDir = path.resolve(os.homedir(), tempDir);
 fs.ensureDirSync(localDir);
 export function saveToLocal(originPath: string, destName: string) {

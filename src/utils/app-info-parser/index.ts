@@ -1,7 +1,8 @@
 const ApkParser = require('./apk');
 const IpaParser = require('./ipa');
 const AppParser = require('./app');
-const supportFileTypes = ['ipa', 'apk', 'app'];
+const AabParser = require('./aab');
+const supportFileTypes = ['ipa', 'apk', 'app', 'aab'];
 
 class AppInfoParser {
   file: string | File;
@@ -20,7 +21,7 @@ class AppInfoParser {
     const fileType = splits[splits.length - 1].toLowerCase();
     if (!supportFileTypes.includes(fileType)) {
       throw new Error(
-        'Unsupported file type, only support .ipa or .apk or .app file.',
+        'Unsupported file type, only support .ipa, .apk, .app, or .aab file.',
       );
     }
     this.file = file;
@@ -34,6 +35,9 @@ class AppInfoParser {
         break;
       case 'app':
         this.parser = new AppParser(this.file);
+        break;
+      case 'aab':
+        this.parser = new AabParser(this.file);
         break;
     }
   }

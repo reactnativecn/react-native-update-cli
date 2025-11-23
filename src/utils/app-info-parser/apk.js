@@ -81,7 +81,7 @@ class ApkParser extends Zip {
       });
       return parser.parse();
     } catch (e) {
-      throw new Error('Parse AndroidManifest.xml error: ', e);
+      throw new Error('Parse AndroidManifest.xml error: ' + (e.message || e));
     }
   }
   /**

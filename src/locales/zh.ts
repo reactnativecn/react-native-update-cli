@@ -109,6 +109,7 @@ export default {
   uploadingSourcemap: '正在上传 sourcemap',
   usageDiff: '用法：pushy {{command}} <origin> <next>',
   usageParseApk: '使用方法: pushy parseApk apk后缀文件',
+  usageParseAab: '使用方法: pushy parseAab aab后缀文件',
   usageParseApp: '使用方法: pushy parseApp app后缀文件',
   usageParseIpa: '使用方法: pushy parseIpa ipa后缀文件',
   usageUploadApk: '使用方法: pushy uploadApk apk后缀文件',

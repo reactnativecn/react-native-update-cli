@@ -55,6 +55,7 @@
     "parseApp": {},
     "parseIpa": {},
     "parseApk": {},
+    "parseAab": {},
     "packages": {
       "options": {
         "platform": {

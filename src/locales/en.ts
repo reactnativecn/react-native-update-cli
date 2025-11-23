@@ -115,6 +115,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   uploadingSourcemap: 'Uploading sourcemap',
   usageDiff: 'Usage: cresc {{command}} <origin> <next>',
   usageParseApk: 'Usage: cresc parseApk <apk file>',
+  usageParseAab: 'Usage: cresc parseAab <aab file>',
   usageParseApp: 'Usage: cresc parseApp <app file>',
   usageParseIpa: 'Usage: cresc parseIpa <ipa file>',
   usageUnderDevelopment: 'Usage is under development now.',
