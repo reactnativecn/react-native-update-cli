@@ -173,6 +173,19 @@
         }
       }
     },
+    "deleteVersion": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        },
+        "versionId": {
+          "hasValue": true
+        },
+        "appId": {
+          "hasValue": true
+        }
+      }
+    },
     "build": {
       "description": "Bundle javascript and copy assets."
     },

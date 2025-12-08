@@ -138,6 +138,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   deletePackageError:
     'Failed to delete native package {{packageId}}: {{error}}',
   usageDeletePackage: 'Usage: cresc deletePackage [packageId] --appId [appId]',
+  deleteVersionSuccess: 'Version {{versionId}} deleted successfully',
+  deleteVersionError: 'Failed to delete version {{versionId}}: {{error}}',
   bundleFileNotFound:
     'Bundle file not found! Please use default bundle file name and path.',
   diffPackageGenerated: '{{- output}} generated.',

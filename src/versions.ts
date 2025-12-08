@@ -1,4 +1,4 @@
-import { get, getAllPackages, post, put, uploadFile } from './api';
+import { get, getAllPackages, post, put, uploadFile, doDelete } from './api';
 import { question, saveToLocal } from './utils';
 import { t } from './utils/i18n';
 
@@ -342,5 +342,30 @@ export const versionCommands = {
 
     await put(`/app/${appId}/version/${versionId}`, updateParams);
     console.log(t('operationSuccess'));
+  },
+  deleteVersion: async ({
+    options,
+  }: {
+    options: VersionCommandOptions;
+  }) => {
+    let appId = options.appId;
+    if (!appId) {
+      const platform = await getPlatform(options.platform);
+      appId = (await getSelectedApp(platform)).appId;
+    }
+
+    let versionId = options.versionId;
+    if (!versionId) {
+      versionId = (await chooseVersion(appId as string)).id;
+    }
+
+    try {
+      await doDelete(`/app/${appId}/version/${versionId}`);
+      console.log(t('deleteVersionSuccess', { versionId }));
+    } catch (error: any) {
+      throw new Error(
+        t('deleteVersionError', { versionId, error: error.message }),
+      );
+    }
   },
 };

@@ -130,6 +130,8 @@ export default {
   deletePackageError: '删除原生包 {{packageId}} 失败: {{error}}',
   usageDeletePackage:
     '使用方法: pushy deletePackage [packageId] --appId [appId]',
+  deleteVersionSuccess: '热更包 {{versionId}} 删除成功',
+  deleteVersionError: '删除热更包 {{versionId}} 失败: {{error}}',
   bundleFileNotFound: '未找到 bundle 文件！请使用默认的 bundle 文件名和路径。',
   diffPackageGenerated: '{{- output}} 已生成。',
   nodeBsdiffRequired:
