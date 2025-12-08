@@ -224,12 +224,12 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: { appId?: string; packageId?: string; packageVersion?: string };
+    options: { appId?: string; packageId?: string; packageVersion?: string; platform?: Platform };
   }) => {
     let { appId, packageId, packageVersion } = options;
 
     if (!appId) {
-      const platform = await getPlatform();
+      const platform = await getPlatform(options.platform);
       appId = (await getSelectedApp(platform)).appId as string;
     }
 
