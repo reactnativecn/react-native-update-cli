@@ -116,6 +116,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   usageDiff: 'Usage: cresc {{command}} <origin> <next>',
   usageParseApk: 'Usage: cresc parseApk <apk file>',
   usageParseAab: 'Usage: cresc parseAab <aab file>',
+  usageExtractApk:
+    'Usage: cresc extractApk <aab file> [--output <apk file>] [--includeAllSplits] [--splits <split names>]',
   usageParseApp: 'Usage: cresc parseApp <app file>',
   usageParseIpa: 'Usage: cresc parseIpa <ipa file>',
   usageUnderDevelopment: 'Usage is under development now.',
@@ -147,4 +149,5 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'This function needs "node-bsdiff". Please run "{{scriptName}} install node-bsdiff" to install',
   nodeHdiffpatchRequired:
     'This function needs "node-hdiffpatch". Please run "{{scriptName}} install node-hdiffpatch" to install',
+  apkExtracted: 'APK extracted to {{output}}',
 };

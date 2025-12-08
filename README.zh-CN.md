@@ -225,6 +225,7 @@ const workflowResult = await moduleManager.executeWorkflow('my-workflow', {
 - `parseApp`: 解析 APP 文件信息
 - `parseIpa`: 解析 IPA 文件信息
 - `parseApk`: 解析 APK 文件信息
+- `extractApk`: 从 AAB 提取通用 APK（支持 `--output`、`--includeAllSplits`、`--splits`）
 - `packages`: 列出包
 
 ### User 模块 (`user`)

@@ -1,6 +1,6 @@
 const Unzip = require('isomorphic-unzip');
 const { isBrowser, decodeNullUnicode } = require('./utils');
-const { enumZipEntries, readEntry } = require('../../bundle');
+let bundleZipUtils;
 
 class Zip {
   constructor(file) {
@@ -50,6 +50,8 @@ class Zip {
 
   async getEntryFromHarmonyApp(regex) {
     try {
+      const { enumZipEntries, readEntry } =
+        bundleZipUtils ?? (bundleZipUtils = require('../../bundle'));
       let originSource;
       await enumZipEntries(this.file, (entry, zipFile) => {
         if (regex.test(entry.fileName)) {

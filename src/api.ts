@@ -6,20 +6,16 @@ import FormData from 'form-data';
 import fetch from 'node-fetch';
 import ProgressBar from 'progress';
 import tcpp from 'tcp-ping';
+import { getBaseUrl } from 'utils/http-helper';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
-import {
-  credentialFile,
-  pricingPageUrl,
-} from './utils/constants';
+import { credentialFile, pricingPageUrl } from './utils/constants';
 import { t } from './utils/i18n';
-import { getBaseUrl } from 'utils/http-helper';
 
 const tcpPing = util.promisify(tcpp.ping);
 
 let session: Session | undefined;
 let savedSession: Session | undefined;
-
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 

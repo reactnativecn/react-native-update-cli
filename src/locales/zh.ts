@@ -110,6 +110,8 @@ export default {
   usageDiff: '用法：pushy {{command}} <origin> <next>',
   usageParseApk: '使用方法: pushy parseApk apk后缀文件',
   usageParseAab: '使用方法: pushy parseAab aab后缀文件',
+  usageExtractApk:
+    '使用方法: pushy extractApk aab后缀文件 [--output apk文件] [--includeAllSplits] [--splits 分包名列表]',
   usageParseApp: '使用方法: pushy parseApp app后缀文件',
   usageParseIpa: '使用方法: pushy parseIpa ipa后缀文件',
   usageUploadApk: '使用方法: pushy uploadApk apk后缀文件',
@@ -138,4 +140,5 @@ export default {
     '此功能需要 "node-bsdiff"。请运行 "{{scriptName}} install node-bsdiff" 来安装',
   nodeHdiffpatchRequired:
     '此功能需要 "node-hdiffpatch"。请运行 "{{scriptName}} install node-hdiffpatch" 来安装',
+  apkExtracted: 'APK 已提取到 {{output}}',
 };

@@ -56,6 +56,19 @@
     "parseIpa": {},
     "parseApk": {},
     "parseAab": {},
+    "extractApk": {
+      "options": {
+        "output": {
+          "hasValue": true
+        },
+        "includeAllSplits": {
+          "default": false
+        },
+        "splits": {
+          "hasValue": true
+        }
+      }
+    },
     "packages": {
       "options": {
         "platform": {

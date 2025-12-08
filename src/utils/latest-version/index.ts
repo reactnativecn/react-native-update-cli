@@ -227,7 +227,8 @@ const downloadMetadata = (
     };
     const authInfo = registryAuthToken(pkgUrl.toString(), { recursive: true });
     if (authInfo && requestOptions.headers) {
-      (requestOptions.headers as any).authorization = `${authInfo.type} ${authInfo.token}`;
+      (requestOptions.headers as any).authorization =
+        `${authInfo.type} ${authInfo.token}`;
     }
     if (options?.requestOptions) {
       requestOptions = { ...requestOptions, ...options.requestOptions };

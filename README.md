@@ -227,6 +227,7 @@ Each workflow step contains:
 - `parseApp`: Parse APP file information
 - `parseIpa`: Parse IPA file information
 - `parseApk`: Parse APK file information
+- `extractApk`: Extract a universal APK from an AAB (supports `--output`, `--includeAllSplits`, `--splits`)
 - `packages`: List packages
 
 ### User Module (`user`)

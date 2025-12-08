@@ -1,14 +1,15 @@
 import { getAllPackages, post, uploadFile, doDelete } from './api';
 import { question, saveToLocal } from './utils';
-import { t } from './utils/i18n';
 
 import { getPlatform, getSelectedApp } from './app';
-
 import Table from 'tty-table';
 import type { Platform } from './types';
-import { getApkInfo, getAppInfo, getIpaInfo, getAabInfo } from './utils';
+import { getAabInfo, getApkInfo, getAppInfo, getIpaInfo } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import AabParser from './utils/app-info-parser/aab';
+import { t } from './utils/i18n';
+import path from 'path';
 
 export async function listPackage(appId: string) {
   const allPkgs = await getAllPackages(appId) || [];
@@ -213,6 +214,42 @@ export const packageCommands = {
       throw new Error(t('usageParseAab'));
     }
     console.log(await getAabInfo(fn));
+  },
+  extractApk: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: Record<string, any>;
+  }) => {
+    const source = args[0];
+    if (!source || !source.endsWith('.aab')) {
+      throw new Error(t('usageExtractApk'));
+    }
+
+    const output =
+      options.output ||
+      path.join(
+        path.dirname(source),
+        `${path.basename(source, path.extname(source))}.apk`,
+      );
+
+    const includeAllSplits =
+      options.includeAllSplits === true || options.includeAllSplits === 'true';
+    const splits = options.splits
+      ? String(options.splits)
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : null;
+
+    const parser = new AabParser(source);
+    await parser.extractApk(output, {
+      includeAllSplits,
+      splits,
+    });
+
+    console.log(t('apkExtracted', { output }));
   },
   packages: async ({ options }: { options: { platform: Platform } }) => {
     const platform = await getPlatform(options.platform);
