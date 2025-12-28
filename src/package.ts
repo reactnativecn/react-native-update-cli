@@ -1,4 +1,4 @@
-import { get, getAllPackages, post, uploadFile, doDelete } from './api';
+import { getAllPackages, post, uploadFile, doDelete } from './api';
 import { question, saveToLocal } from './utils';
 import { t } from './utils/i18n';
 
@@ -11,7 +11,7 @@ import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 
 export async function listPackage(appId: string) {
-  const allPkgs = await getAllPackages(appId);
+  const allPkgs = await getAllPackages(appId) || [];
 
   const header = [
     { value: t('nativePackageId') },
@@ -49,7 +49,7 @@ export async function choosePackage(appId: string) {
 
   while (true) {
     const id = await question(t('enterNativePackageId'));
-    const app = list.find((v) => v.id.toString() === id);
+    const app = list?.find((v) => v.id.toString() === id);
     if (app) {
       return app;
     }
