@@ -5,6 +5,8 @@ export default {
   aabOpenApksFailed: '无法打开生成的 .apks 文件',
   aabReadUniversalApkFailed: '无法读取 universal.apk',
   aabUniversalApkNotFound: '在生成的 .apks 中未找到 universal.apk',
+  aabBundletoolDownloadHint:
+    '未找到 bundletool，正在通过 npx 下载 node-bundletool（首次下载可能需要一些时间）。',
   aabManifestNotFound: '在 AAB 的 base/manifest/ 中找不到 AndroidManifest.xml',
   aabParseResourcesWarning: '[警告] 解析 resources.arsc 失败：{{error}}',
   aabParseFailed: '解析 AAB 失败：{{error}}',

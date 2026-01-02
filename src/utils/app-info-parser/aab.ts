@@ -32,15 +32,23 @@ export class AabParser extends Zip {
       : Array.from(new Set(['base', ...normalizedSplits]));
     const modulesArgs = modules ? [`--modules=${modules.join(',')}`] : [];
 
-    const runCommand = (command: string, args: string[]) =>
+    const runCommand = (
+      command: string,
+      args: string[],
+      options: { stdio?: 'inherit'; env?: NodeJS.ProcessEnv } = {},
+    ) =>
       new Promise<void>((resolve, reject) => {
+        const inheritStdio = options.stdio === 'inherit';
         const child = spawn(command, args, {
-          stdio: ['ignore', 'pipe', 'pipe'],
+          stdio: inheritStdio ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+          env: options.env,
         });
         let stderr = '';
-        child.stderr?.on('data', (chunk) => {
-          stderr += chunk.toString();
-        });
+        if (!inheritStdio) {
+          child.stderr?.on('data', (chunk) => {
+            stderr += chunk.toString();
+          });
+        }
         child.on('error', reject);
         child.on('close', (code) => {
           if (code === 0) {
@@ -58,6 +66,19 @@ export class AabParser extends Zip {
     // Create a temp file for the .apks output
     const tempDir = os.tmpdir();
     const tempApksPath = path.join(tempDir, `temp-${Date.now()}.apks`);
+
+    const needsNpxDownload = async () => {
+      try {
+        await runCommand('npx', [
+          '--no-install',
+          'node-bundletool',
+          '--version',
+        ]);
+        return false;
+      } catch {
+        return true;
+      }
+    };
 
     try {
       // 1. Build APKS (universal mode)
@@ -77,16 +98,29 @@ export class AabParser extends Zip {
       } catch (e) {
         // Fallback to npx node-bundletool if bundletool is not in PATH
         // We use -y to avoid interactive prompt for installation
-        await runCommand('npx', [
-          '-y',
-          'node-bundletool',
-          'build-apks',
-          '--mode=universal',
-          `--bundle=${this.file}`,
-          `--output=${tempApksPath}`,
-          '--overwrite',
-          ...modulesArgs,
-        ]);
+        if (await needsNpxDownload()) {
+          console.log(t('aabBundletoolDownloadHint'));
+        }
+        await runCommand(
+          'npx',
+          [
+            '-y',
+            'node-bundletool',
+            'build-apks',
+            '--mode=universal',
+            `--bundle=${this.file}`,
+            `--output=${tempApksPath}`,
+            '--overwrite',
+            ...modulesArgs,
+          ],
+          {
+            stdio: 'inherit',
+            env: {
+              ...process.env,
+              npm_config_progress: 'true',
+            },
+          },
+        );
       }
 
       // 2. Extract universal.apk from the .apks (zip) file

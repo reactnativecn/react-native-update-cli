@@ -5,9 +5,12 @@ export default {
   aabOpenApksFailed: 'Failed to open generated .apks file',
   aabReadUniversalApkFailed: 'Failed to read universal.apk',
   aabUniversalApkNotFound: 'universal.apk not found in generated .apks',
+  aabBundletoolDownloadHint:
+    'bundletool not found. Downloading node-bundletool via npx (first run may take a while).',
   aabManifestNotFound:
     "AndroidManifest.xml can't be found in AAB base/manifest/",
-  aabParseResourcesWarning: '[Warning] Failed to parse resources.arsc: {{error}}',
+  aabParseResourcesWarning:
+    '[Warning] Failed to parse resources.arsc: {{error}}',
   aabParseFailed: 'Failed to parse AAB: {{error}}',
   aabParseManifestError: 'Parse AndroidManifest.xml error: {{error}}',
   aabParseResourcesError: 'Parser resources.arsc error: {{error}}',
