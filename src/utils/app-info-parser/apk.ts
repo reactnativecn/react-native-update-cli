@@ -1,11 +1,10 @@
+import { ResourceFinder } from './resource-finder';
 import { findApkIconPath, getBase64FromBuffer, mapInfoResource } from './utils';
+import { ManifestParser } from './xml-parser/manifest';
 import { Zip } from './zip';
 
 const ManifestName = /^androidmanifest\.xml$/;
 const ResourceName = /^resources\.arsc$/;
-
-const ManifestXmlParser = require('./xml-parser/manifest');
-const ResourceFinder = require('./resource-finder');
 
 export class ApkParser extends Zip {
   parse(): Promise<any> {
@@ -61,7 +60,7 @@ export class ApkParser extends Zip {
    */
   private _parseManifest(buffer: Buffer) {
     try {
-      const parser = new ManifestXmlParser(buffer, {
+      const parser = new ManifestParser(buffer, {
         ignore: [
           'application.activity',
           'application.service',

@@ -1,7 +1,7 @@
-import { ApkParser } from './apk';
-const IpaParser = require('./ipa');
-import { AppParser } from './app';
 import { AabParser } from './aab';
+import { ApkParser } from './apk';
+import { AppParser } from './app';
+import { IpaParser } from './ipa';
 const supportFileTypes = ['ipa', 'apk', 'app', 'aab'];
 
 class AppInfoParser {

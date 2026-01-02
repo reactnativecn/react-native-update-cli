@@ -1,61 +1,64 @@
 // From https://github.com/openstf/adbkit-apkreader
-const BinaryXmlParser = require('./binary');
+import { BinaryXmlParser } from './binary';
 
 const INTENT_MAIN = 'android.intent.action.MAIN';
 const CATEGORY_LAUNCHER = 'android.intent.category.LAUNCHER';
 
-class ManifestParser {
-  constructor(buffer, options = {}) {
+export class ManifestParser {
+  private buffer: Buffer;
+  private xmlParser: BinaryXmlParser;
+
+  constructor(buffer: Buffer, options: Record<string, any> = {}) {
     this.buffer = buffer;
     this.xmlParser = new BinaryXmlParser(this.buffer, options);
   }
 
-  collapseAttributes(element) {
-    const collapsed = Object.create(null);
+  private collapseAttributes(element: any) {
+    const collapsed: Record<string, any> = Object.create(null);
     for (const attr of Array.from(element.attributes)) {
       collapsed[attr.name] = attr.typedValue.value;
     }
     return collapsed;
   }
 
-  parseIntents(element, target) {
+  private parseIntents(element: any, target: any) {
     target.intentFilters = [];
     target.metaData = [];
 
-    return element.childNodes.forEach((element) => {
-      switch (element.nodeName) {
+    for (const child of element.childNodes) {
+      switch (child.nodeName) {
         case 'intent-filter': {
-          const intentFilter = this.collapseAttributes(element);
+          const intentFilter = this.collapseAttributes(child);
 
           intentFilter.actions = [];
           intentFilter.categories = [];
           intentFilter.data = [];
 
-          element.childNodes.forEach((element) => {
-            switch (element.nodeName) {
+          for (const item of child.childNodes) {
+            switch (item.nodeName) {
               case 'action':
-                intentFilter.actions.push(this.collapseAttributes(element));
+                intentFilter.actions.push(this.collapseAttributes(item));
                 break;
               case 'category':
-                intentFilter.categories.push(this.collapseAttributes(element));
+                intentFilter.categories.push(this.collapseAttributes(item));
                 break;
               case 'data':
-                intentFilter.data.push(this.collapseAttributes(element));
+                intentFilter.data.push(this.collapseAttributes(item));
                 break;
             }
-          });
+          }
 
           target.intentFilters.push(intentFilter);
           break;
         }
         case 'meta-data':
-          target.metaData.push(this.collapseAttributes(element));
+          target.metaData.push(this.collapseAttributes(child));
           break;
       }
-    });
+    }
   }
 
-  parseApplication(element) {
+  private parseApplication(element: any) {
     const app = this.collapseAttributes(element);
 
     app.activities = [];
@@ -67,11 +70,11 @@ class ManifestParser {
     app.usesLibraries = [];
     app.metaData = [];
 
-    element.childNodes.forEach((element) => {
-      switch (element.nodeName) {
+    for (const child of element.childNodes) {
+      switch (child.nodeName) {
         case 'activity': {
-          const activity = this.collapseAttributes(element);
-          this.parseIntents(element, activity);
+          const activity = this.collapseAttributes(child);
+          this.parseIntents(child, activity);
           app.activities.push(activity);
           if (this.isLauncherActivity(activity)) {
             app.launcherActivities.push(activity);
@@ -79,8 +82,8 @@ class ManifestParser {
           break;
         }
         case 'activity-alias': {
-          const activityAlias = this.collapseAttributes(element);
-          this.parseIntents(element, activityAlias);
+          const activityAlias = this.collapseAttributes(child);
+          this.parseIntents(child, activityAlias);
           app.activityAliases.push(activityAlias);
           if (this.isLauncherActivity(activityAlias)) {
             app.launcherActivities.push(activityAlias);
@@ -88,65 +91,65 @@ class ManifestParser {
           break;
         }
         case 'service': {
-          const service = this.collapseAttributes(element);
-          this.parseIntents(element, service);
+          const service = this.collapseAttributes(child);
+          this.parseIntents(child, service);
           app.services.push(service);
           break;
         }
         case 'receiver': {
-          const receiver = this.collapseAttributes(element);
-          this.parseIntents(element, receiver);
+          const receiver = this.collapseAttributes(child);
+          this.parseIntents(child, receiver);
           app.receivers.push(receiver);
           break;
         }
         case 'provider': {
-          const provider = this.collapseAttributes(element);
+          const provider = this.collapseAttributes(child);
 
           provider.grantUriPermissions = [];
           provider.metaData = [];
           provider.pathPermissions = [];
 
-          element.childNodes.forEach((element) => {
-            switch (element.nodeName) {
+          for (const item of child.childNodes) {
+            switch (item.nodeName) {
               case 'grant-uri-permission':
                 provider.grantUriPermissions.push(
-                  this.collapseAttributes(element),
+                  this.collapseAttributes(item),
                 );
                 break;
               case 'meta-data':
-                provider.metaData.push(this.collapseAttributes(element));
+                provider.metaData.push(this.collapseAttributes(item));
                 break;
               case 'path-permission':
-                provider.pathPermissions.push(this.collapseAttributes(element));
+                provider.pathPermissions.push(this.collapseAttributes(item));
                 break;
             }
-          });
+          }
 
           app.providers.push(provider);
           break;
         }
         case 'uses-library':
-          app.usesLibraries.push(this.collapseAttributes(element));
+          app.usesLibraries.push(this.collapseAttributes(child));
           break;
         case 'meta-data':
-          app.metaData.push(this.collapseAttributes(element));
+          app.metaData.push(this.collapseAttributes(child));
           break;
       }
-    });
+    }
 
     return app;
   }
 
-  isLauncherActivity(activity) {
-    return activity.intentFilters.some((filter) => {
+  private isLauncherActivity(activity: any) {
+    return activity.intentFilters.some((filter: any) => {
       const hasMain = filter.actions.some(
-        (action) => action.name === INTENT_MAIN,
+        (action: any) => action.name === INTENT_MAIN,
       );
       if (!hasMain) {
         return false;
       }
       return filter.categories.some(
-        (category) => category.name === CATEGORY_LAUNCHER,
+        (category: any) => category.name === CATEGORY_LAUNCHER,
       );
     });
   }
@@ -169,7 +172,7 @@ class ManifestParser {
     manifest.supportsGlTextures = [];
     manifest.application = Object.create(null);
 
-    document.childNodes.forEach((element) => {
+    for (const element of document.childNodes) {
       switch (element.nodeName) {
         case 'uses-permission':
           manifest.usesPermissions.push(this.collapseAttributes(element));
@@ -202,11 +205,9 @@ class ManifestParser {
           manifest.supportsScreens = this.collapseAttributes(element);
           break;
         case 'compatible-screens':
-          element.childNodes.forEach((screen) => {
-            return manifest.compatibleScreens.push(
-              this.collapseAttributes(screen),
-            );
-          });
+          for (const screen of element.childNodes) {
+            manifest.compatibleScreens.push(this.collapseAttributes(screen));
+          }
           break;
         case 'supports-gl-texture':
           manifest.supportsGlTextures.push(this.collapseAttributes(element));
@@ -215,10 +216,8 @@ class ManifestParser {
           manifest.application = this.parseApplication(element);
           break;
       }
-    });
+    }
 
     return manifest;
   }
 }
-
-module.exports = ManifestParser;

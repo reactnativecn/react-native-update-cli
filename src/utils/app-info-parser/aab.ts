@@ -1,9 +1,13 @@
-import fs from 'fs-extra';
-import path from 'path';
+import { spawn } from 'child_process';
 import os from 'os';
+import path from 'path';
+import fs from 'fs-extra';
 import { open as openZipFile } from 'yauzl';
-import { Zip } from './zip';
 import { t } from '../i18n';
+import { ResourceFinder } from './resource-finder';
+import { mapInfoResource } from './utils';
+import { ManifestParser } from './xml-parser/manifest';
+import { Zip } from './zip';
 
 export class AabParser extends Zip {
   file: string | File;
@@ -16,20 +20,40 @@ export class AabParser extends Zip {
   async extractApk(
     outputPath: string,
     {
-      includeAllSplits = true,
+      includeAllSplits,
       splits,
     }: { includeAllSplits?: boolean; splits?: string[] | null },
   ) {
-    const { exec } = require('child_process');
-    const util = require('util');
-    const execAsync = util.promisify(exec);
     const normalizedSplits = Array.isArray(splits)
       ? splits.map((item) => item.trim()).filter(Boolean)
       : [];
     const modules = includeAllSplits
       ? null
       : Array.from(new Set(['base', ...normalizedSplits]));
-    const modulesArg = modules ? ` --modules="${modules.join(',')}"` : '';
+    const modulesArgs = modules ? [`--modules=${modules.join(',')}`] : [];
+
+    const runCommand = (command: string, args: string[]) =>
+      new Promise<void>((resolve, reject) => {
+        const child = spawn(command, args, {
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stderr = '';
+        child.stderr?.on('data', (chunk) => {
+          stderr += chunk.toString();
+        });
+        child.on('error', reject);
+        child.on('close', (code) => {
+          if (code === 0) {
+            resolve();
+            return;
+          }
+          reject(
+            new Error(
+              stderr.trim() || `Command failed: ${command} (code ${code})`,
+            ),
+          );
+        });
+      });
 
     // Create a temp file for the .apks output
     const tempDir = os.tmpdir();
@@ -41,14 +65,28 @@ export class AabParser extends Zip {
       // User might need keystore to sign it properly but for simple extraction we stick to default debug key if possible or unsigned?
       // actually bundletool build-apks signs with debug key by default if no keystore provided.
 
-      let cmd = `bundletool build-apks --mode=universal --bundle="${this.file}" --output="${tempApksPath}" --overwrite${modulesArg}`;
       try {
-        await execAsync(cmd);
+        await runCommand('bundletool', [
+          'build-apks',
+          '--mode=universal',
+          `--bundle=${this.file}`,
+          `--output=${tempApksPath}`,
+          '--overwrite',
+          ...modulesArgs,
+        ]);
       } catch (e) {
         // Fallback to npx node-bundletool if bundletool is not in PATH
         // We use -y to avoid interactive prompt for installation
-        cmd = `npx -y node-bundletool build-apks --mode=universal --bundle="${this.file}" --output="${tempApksPath}" --overwrite${modulesArg}`;
-        await execAsync(cmd);
+        await runCommand('npx', [
+          '-y',
+          'node-bundletool',
+          'build-apks',
+          '--mode=universal',
+          `--bundle=${this.file}`,
+          `--output=${tempApksPath}`,
+          '--overwrite',
+          ...modulesArgs,
+        ]);
       }
 
       // 2. Extract universal.apk from the .apks (zip) file
@@ -119,7 +157,6 @@ export class AabParser extends Zip {
         const resourceBuffer = await this.getEntry(ResourceName);
         if (resourceBuffer) {
           const resourceMap = this._parseResourceMap(resourceBuffer as Buffer);
-          const { mapInfoResource } = require('./utils');
           apkInfo = mapInfoResource(apkInfo, resourceMap);
         }
       } catch (e: any) {
@@ -137,8 +174,7 @@ export class AabParser extends Zip {
    */
   private _parseManifest(buffer: Buffer) {
     try {
-      const ManifestXmlParser = require('./xml-parser/manifest');
-      const parser = new ManifestXmlParser(buffer, {
+      const parser = new ManifestParser(buffer, {
         ignore: [
           'application.activity',
           'application.service',
@@ -159,7 +195,6 @@ export class AabParser extends Zip {
    */
   private _parseResourceMap(buffer: Buffer) {
     try {
-      const ResourceFinder = require('./resource-finder');
       return new ResourceFinder().processResourceTable(buffer);
     } catch (e: any) {
       throw new Error(t('aabParseResourcesError', { error: e?.message ?? e }));
