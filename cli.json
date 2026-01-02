@@ -45,6 +45,19 @@
         }
       }
     },
+    "uploadAab": {
+      "options": {
+        "version": {
+          "hasValue": true
+        },
+        "includeAllSplits": {
+          "default": false
+        },
+        "splits": {
+          "hasValue": true
+        }
+      }
+    },
     "uploadApp": {
       "options": {
         "version": {

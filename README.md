@@ -223,6 +223,7 @@ Each workflow step contains:
 
 - `uploadIpa`: Upload IPA files (supports `--version` to override extracted version)
 - `uploadApk`: Upload APK files (supports `--version` to override extracted version)
+- `uploadAab`: Upload AAB files (converted to APK, supports `--version`, `--includeAllSplits`, `--splits`)
 - `uploadApp`: Upload APP files (supports `--version` to override extracted version)
 - `parseApp`: Parse APP file information
 - `parseIpa`: Parse IPA file information

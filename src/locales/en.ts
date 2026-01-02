@@ -131,6 +131,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   usageParseIpa: 'Usage: cresc parseIpa <ipa file>',
   usageUnderDevelopment: 'Usage is under development now.',
   usageUploadApk: 'Usage: cresc uploadApk <apk file>',
+  usageUploadAab:
+    'Usage: cresc uploadAab <aab file> [--includeAllSplits] [--splits <split names>]',
   usageUploadApp: 'Usage: cresc uploadApp <app file>',
   usageUploadIpa: 'Usage: cresc uploadIpa <ipa file>',
   versionBind:

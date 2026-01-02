@@ -122,6 +122,9 @@ export class CLIProviderImpl implements CLIProvider {
         case 'apk':
           await packageCommands.uploadApk(context);
           break;
+        case 'aab':
+          await packageCommands.uploadAab(context);
+          break;
         case 'app':
           await packageCommands.uploadApp(context);
           break;

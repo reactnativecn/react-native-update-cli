@@ -123,6 +123,8 @@ export default {
   usageParseApp: '使用方法: pushy parseApp app后缀文件',
   usageParseIpa: '使用方法: pushy parseIpa ipa后缀文件',
   usageUploadApk: '使用方法: pushy uploadApk apk后缀文件',
+  usageUploadAab:
+    '使用方法: pushy uploadAab aab后缀文件 [--includeAllSplits] [--splits 分包名列表]',
   usageUploadApp: '使用方法: pushy uploadApp app后缀文件',
   usageUploadIpa: '使用方法: pushy uploadIpa ipa后缀文件',
   versionBind:
