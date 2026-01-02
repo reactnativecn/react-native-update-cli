@@ -2,23 +2,13 @@ const parsePlist = require('plist').parse;
 const parseBplist = require('bplist-parser').parseBuffer;
 const cgbiToPng = require('cgbi-to-png');
 
-const Zip = require('./zip');
+import { Zip } from './zip';
 const { findIpaIconPath, getBase64FromBuffer, isBrowser } = require('./utils');
 
 const PlistName = /payload\/[^\/]+?.app\/info.plist$/i;
 const ProvisionName = /payload\/.+?\.app\/embedded.mobileprovision/;
 
 class IpaParser extends Zip {
-  /**
-   * parser for parsing .ipa file
-   * @param {String | File | Blob} file // file's path in Node, instance of File or Blob in Browser
-   */
-  constructor(file) {
-    super(file);
-    if (!(this instanceof IpaParser)) {
-      return new IpaParser(file);
-    }
-  }
   parse() {
     return new Promise((resolve, reject) => {
       this.getEntries([PlistName, ProvisionName])

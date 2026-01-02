@@ -7,12 +7,12 @@ import type { Platform } from './types';
 import { getAabInfo, getApkInfo, getAppInfo, getIpaInfo } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import AabParser from './utils/app-info-parser/aab';
+import { AabParser } from './utils/app-info-parser/aab';
 import { t } from './utils/i18n';
 import path from 'path';
 
 export async function listPackage(appId: string) {
-  const allPkgs = await getAllPackages(appId) || [];
+  const allPkgs = (await getAllPackages(appId)) || [];
 
   const header = [
     { value: t('nativePackageId') },
@@ -261,7 +261,12 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: { appId?: string; packageId?: string; packageVersion?: string; platform?: Platform };
+    options: {
+      appId?: string;
+      packageId?: string;
+      packageVersion?: string;
+      platform?: Platform;
+    };
   }) => {
     let { appId, packageId, packageVersion } = options;
 

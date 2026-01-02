@@ -2,7 +2,7 @@ const Unzip = require('isomorphic-unzip');
 const { isBrowser, decodeNullUnicode } = require('./utils');
 let bundleZipUtils;
 
-class Zip {
+export class Zip {
   constructor(file) {
     if (isBrowser()) {
       if (!(file instanceof window.Blob || typeof file.size !== 'undefined')) {
@@ -64,5 +64,3 @@ class Zip {
     }
   }
 }
-
-module.exports = Zip;

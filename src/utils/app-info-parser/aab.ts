@@ -2,10 +2,10 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import { open as openZipFile } from 'yauzl';
-import Zip from './zip';
+import { Zip } from './zip';
 import { t } from '../i18n';
 
-class AabParser extends Zip {
+export class AabParser extends Zip {
   file: string | File;
 
   constructor(file: string | File) {
@@ -169,5 +169,3 @@ class AabParser extends Zip {
 
 const escapeRegExp = (value: string) =>
   value.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
-
-export = AabParser;
