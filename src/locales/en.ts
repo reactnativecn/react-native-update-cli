@@ -2,6 +2,15 @@ export default {
   addedToGitignore: 'Added {{line}} to .gitignore',
   androidCrunchPngsWarning:
     'The crunchPngs option of android seems not disabled (Please ignore this warning if already disabled), which may cause abnormal consumption of mobile network traffic. Please refer to https://cresc.dev/docs/getting-started#disable-crunchpngs-on-android \n',
+  aabOpenApksFailed: 'Failed to open generated .apks file',
+  aabReadUniversalApkFailed: 'Failed to read universal.apk',
+  aabUniversalApkNotFound: 'universal.apk not found in generated .apks',
+  aabManifestNotFound:
+    "AndroidManifest.xml can't be found in AAB base/manifest/",
+  aabParseResourcesWarning: '[Warning] Failed to parse resources.arsc: {{error}}',
+  aabParseFailed: 'Failed to parse AAB: {{error}}',
+  aabParseManifestError: 'Parse AndroidManifest.xml error: {{error}}',
+  aabParseResourcesError: 'Parser resources.arsc error: {{error}}',
   appId: 'App ID',
   appIdMismatchApk:
     'App ID mismatch! Current APK: {{appIdInPkg}}, current update.json: {{appId}}',
