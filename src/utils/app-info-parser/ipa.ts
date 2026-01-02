@@ -2,49 +2,37 @@ const parsePlist = require('plist').parse;
 const parseBplist = require('bplist-parser').parseBuffer;
 const cgbiToPng = require('cgbi-to-png');
 
-const Zip = require('./zip');
-const { findIpaIconPath, getBase64FromBuffer, isBrowser } = require('./utils');
+import { findIpaIconPath, getBase64FromBuffer, isBrowser } from './utils';
+import { Zip } from './zip';
 
 const PlistName = /payload\/[^\/]+?.app\/info.plist$/i;
 const ProvisionName = /payload\/.+?\.app\/embedded.mobileprovision/;
 
-class IpaParser extends Zip {
-  /**
-   * parser for parsing .ipa file
-   * @param {String | File | Blob} file // file's path in Node, instance of File or Blob in Browser
-   */
-  constructor(file) {
-    super(file);
-    if (!(this instanceof IpaParser)) {
-      return new IpaParser(file);
-    }
-  }
-  parse() {
+export class IpaParser extends Zip {
+  parse(): Promise<any> {
     return new Promise((resolve, reject) => {
       this.getEntries([PlistName, ProvisionName])
-        .then((buffers) => {
-          if (!buffers[PlistName]) {
+        .then((buffers: any) => {
+          if (!buffers[PlistName as any]) {
             throw new Error("Info.plist can't be found.");
           }
-          const plistInfo = this._parsePlist(buffers[PlistName]);
-          // parse mobile provision
-          const provisionInfo = this._parseProvision(buffers[ProvisionName]);
+          const plistInfo = this._parsePlist(buffers[PlistName as any]);
+          const provisionInfo = this._parseProvision(
+            buffers[ProvisionName as any],
+          );
           plistInfo.mobileProvision = provisionInfo;
 
-          // find icon path and parse icon
           const iconRegex = new RegExp(
             findIpaIconPath(plistInfo).toLowerCase(),
           );
           this.getEntry(iconRegex)
-            .then((iconBuffer) => {
+            .then((iconBuffer: any) => {
               try {
-                // In general, the ipa file's icon has been specially processed, should be converted
                 plistInfo.icon = iconBuffer
                   ? getBase64FromBuffer(cgbiToPng.revert(iconBuffer))
                   : null;
               } catch (err) {
                 if (isBrowser()) {
-                  // Normal conversion in other cases
                   plistInfo.icon = iconBuffer
                     ? getBase64FromBuffer(
                         window.btoa(String.fromCharCode(...iconBuffer)),
@@ -57,11 +45,11 @@ class IpaParser extends Zip {
               }
               resolve(plistInfo);
             })
-            .catch((e) => {
+            .catch((e: any) => {
               reject(e);
             });
         })
-        .catch((e) => {
+        .catch((e: any) => {
           reject(e);
         });
     });
@@ -70,8 +58,8 @@ class IpaParser extends Zip {
    * Parse plist
    * @param {Buffer} buffer // plist file's buffer
    */
-  _parsePlist(buffer) {
-    let result;
+  private _parsePlist(buffer: Buffer) {
+    let result: any;
     const bufferType = buffer[0];
     if (bufferType === 60 || bufferType === '<' || bufferType === 239) {
       result = parsePlist(buffer.toString());
@@ -86,8 +74,8 @@ class IpaParser extends Zip {
    * parse provision
    * @param {Buffer} buffer // provision file's buffer
    */
-  _parseProvision(buffer) {
-    let info = {};
+  private _parseProvision(buffer: Buffer | undefined) {
+    let info: Record<string, any> = {};
     if (buffer) {
       let content = buffer.toString('utf-8');
       const firstIndex = content.indexOf('<?xml');
@@ -100,5 +88,3 @@ class IpaParser extends Zip {
     return info;
   }
 }
-
-module.exports = IpaParser;

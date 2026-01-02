@@ -29,9 +29,12 @@ if (currentPackage) {
 
 export const depVersions = Object.keys(_depVersions)
   .sort() // Sort the keys alphabetically
-  .reduce((obj, key) => {
-    obj[key] = _depVersions[key]; // Rebuild the object with sorted keys
-    return obj;
-  }, {} as Record<string, string>);
+  .reduce(
+    (obj, key) => {
+      obj[key] = _depVersions[key]; // Rebuild the object with sorted keys
+      return obj;
+    },
+    {} as Record<string, string>,
+  );
 
 // console.log({ depVersions });

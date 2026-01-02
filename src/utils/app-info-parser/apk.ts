@@ -1,54 +1,43 @@
-const Zip = require('./zip');
-const {
-  mapInfoResource,
-  findApkIconPath,
-  getBase64FromBuffer,
-} = require('./utils');
+import { ResourceFinder } from './resource-finder';
+import { findApkIconPath, getBase64FromBuffer, mapInfoResource } from './utils';
+import { ManifestParser } from './xml-parser/manifest';
+import { Zip } from './zip';
+
 const ManifestName = /^androidmanifest\.xml$/;
 const ResourceName = /^resources\.arsc$/;
 
-const ManifestXmlParser = require('./xml-parser/manifest');
-const ResourceFinder = require('./resource-finder');
-
-class ApkParser extends Zip {
-  /**
-   * parser for parsing .apk file
-   * @param {String | File | Blob} file // file's path in Node, instance of File or Blob in Browser
-   */
-  constructor(file) {
-    super(file);
-    if (!(this instanceof ApkParser)) {
-      return new ApkParser(file);
-    }
-  }
-  parse() {
+export class ApkParser extends Zip {
+  parse(): Promise<any> {
     return new Promise((resolve, reject) => {
       this.getEntries([ManifestName, ResourceName])
-        .then((buffers) => {
-          if (!buffers[ManifestName]) {
+        .then((buffers: any) => {
+          const manifestBuffer = buffers[ManifestName];
+          if (!manifestBuffer) {
             throw new Error("AndroidManifest.xml can't be found.");
           }
-          let apkInfo = this._parseManifest(buffers[ManifestName]);
-          let resourceMap;
+          let apkInfo: any;
+          let resourceMap: any;
+
+          apkInfo = this._parseManifest(manifestBuffer as Buffer);
+
           if (!buffers[ResourceName]) {
             resolve(apkInfo);
           } else {
-            // parse resourceMap
-            resourceMap = this._parseResourceMap(buffers[ResourceName]);
-            // update apkInfo with resourceMap
+            resourceMap = this._parseResourceMap(
+              buffers[ResourceName] as Buffer,
+            );
             apkInfo = mapInfoResource(apkInfo, resourceMap);
 
-            // find icon path and parse icon
             const iconPath = findApkIconPath(apkInfo);
             if (iconPath) {
               this.getEntry(iconPath)
-                .then((iconBuffer) => {
+                .then((iconBuffer: Buffer | null) => {
                   apkInfo.icon = iconBuffer
                     ? getBase64FromBuffer(iconBuffer)
                     : null;
                   resolve(apkInfo);
                 })
-                .catch((e) => {
+                .catch((e: any) => {
                   apkInfo.icon = null;
                   resolve(apkInfo);
                   console.warn('[Warning] failed to parse icon: ', e);
@@ -59,18 +48,19 @@ class ApkParser extends Zip {
             }
           }
         })
-        .catch((e) => {
+        .catch((e: any) => {
           reject(e);
         });
     });
   }
+
   /**
    * Parse manifest
    * @param {Buffer} buffer // manifest file's buffer
    */
-  _parseManifest(buffer) {
+  private _parseManifest(buffer: Buffer) {
     try {
-      const parser = new ManifestXmlParser(buffer, {
+      const parser = new ManifestParser(buffer, {
         ignore: [
           'application.activity',
           'application.service',
@@ -80,21 +70,20 @@ class ApkParser extends Zip {
         ],
       });
       return parser.parse();
-    } catch (e) {
-      throw new Error('Parse AndroidManifest.xml error: ' + (e.message || e));
+    } catch (e: any) {
+      throw new Error(`Parse AndroidManifest.xml error: ${e.message || e}`);
     }
   }
+
   /**
    * Parse resourceMap
    * @param {Buffer} buffer // resourceMap file's buffer
    */
-  _parseResourceMap(buffer) {
+  private _parseResourceMap(buffer: Buffer) {
     try {
       return new ResourceFinder().processResourceTable(buffer);
-    } catch (e) {
-      throw new Error('Parser resources.arsc error: ' + e);
+    } catch (e: any) {
+      throw new Error(`Parser resources.arsc error: ${e}`);
     }
   }
 }
-
-module.exports = ApkParser;

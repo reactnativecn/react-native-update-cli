@@ -2,6 +2,16 @@ export default {
   addedToGitignore: '已将 {{line}} 添加到 .gitignore',
   androidCrunchPngsWarning:
     'android 的 crunchPngs 选项似乎尚未禁用（如已禁用则请忽略此提示），这可能导致热更包体积异常增大，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8-android-%E7%9A%84-crunch-%E4%BC%98%E5%8C%96 \n',
+  aabOpenApksFailed: '无法打开生成的 .apks 文件',
+  aabReadUniversalApkFailed: '无法读取 universal.apk',
+  aabUniversalApkNotFound: '在生成的 .apks 中未找到 universal.apk',
+  aabBundletoolDownloadHint:
+    '未找到 bundletool，正在通过 npx 下载 node-bundletool（首次下载可能需要一些时间）。',
+  aabManifestNotFound: '在 AAB 的 base/manifest/ 中找不到 AndroidManifest.xml',
+  aabParseResourcesWarning: '[警告] 解析 resources.arsc 失败：{{error}}',
+  aabParseFailed: '解析 AAB 失败：{{error}}',
+  aabParseManifestError: '解析 AndroidManifest.xml 出错：{{error}}',
+  aabParseResourcesError: '解析 resources.arsc 出错：{{error}}',
   appId: '应用 id',
   appIdMismatchApk:
     'appId不匹配！当前apk: {{appIdInPkg}}, 当前update.json: {{appId}}',
@@ -110,9 +120,13 @@ export default {
   usageDiff: '用法：pushy {{command}} <origin> <next>',
   usageParseApk: '使用方法: pushy parseApk apk后缀文件',
   usageParseAab: '使用方法: pushy parseAab aab后缀文件',
+  usageExtractApk:
+    '使用方法: pushy extractApk aab后缀文件 [--output apk文件] [--includeAllSplits] [--splits 分包名列表]',
   usageParseApp: '使用方法: pushy parseApp app后缀文件',
   usageParseIpa: '使用方法: pushy parseIpa ipa后缀文件',
   usageUploadApk: '使用方法: pushy uploadApk apk后缀文件',
+  usageUploadAab:
+    '使用方法: pushy uploadAab aab后缀文件 [--includeAllSplits] [--splits 分包名列表]',
   usageUploadApp: '使用方法: pushy uploadApp app后缀文件',
   usageUploadIpa: '使用方法: pushy uploadIpa ipa后缀文件',
   versionBind:
@@ -138,4 +152,5 @@ export default {
     '此功能需要 "node-bsdiff"。请运行 "{{scriptName}} install node-bsdiff" 来安装',
   nodeHdiffpatchRequired:
     '此功能需要 "node-hdiffpatch"。请运行 "{{scriptName}} install node-hdiffpatch" 来安装',
+  apkExtracted: 'APK 已提取到 {{output}}',
 };

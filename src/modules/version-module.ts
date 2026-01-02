@@ -1,4 +1,4 @@
-import type { CLIModule} from '../types';
+import type { CLIModule } from '../types';
 
 export const versionModule: CLIModule = {
   name: 'version',

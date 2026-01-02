@@ -4,9 +4,9 @@ import { t } from './utils/i18n';
 
 import chalk from 'chalk';
 import { satisfies } from 'compare-versions';
-import type { Package, Platform, Version } from './types';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
+import type { Package, Platform, Version } from './types';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 

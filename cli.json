@@ -45,6 +45,19 @@
         }
       }
     },
+    "uploadAab": {
+      "options": {
+        "version": {
+          "hasValue": true
+        },
+        "includeAllSplits": {
+          "default": false
+        },
+        "splits": {
+          "hasValue": true
+        }
+      }
+    },
     "uploadApp": {
       "options": {
         "version": {
@@ -56,6 +69,19 @@
     "parseIpa": {},
     "parseApk": {},
     "parseAab": {},
+    "extractApk": {
+      "options": {
+        "output": {
+          "hasValue": true
+        },
+        "includeAllSplits": {
+          "default": false
+        },
+        "splits": {
+          "hasValue": true
+        }
+      }
+    },
     "packages": {
       "options": {
         "platform": {

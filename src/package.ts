@@ -1,17 +1,25 @@
-import { get, getAllPackages, post, uploadFile, doDelete } from './api';
-import { question, saveToLocal } from './utils';
-import { t } from './utils/i18n';
-
-import { getPlatform, getSelectedApp } from './app';
-
+import os from 'os';
+import path from 'path';
+import fs from 'fs-extra';
 import Table from 'tty-table';
+import { doDelete, getAllPackages, post, uploadFile } from './api';
+import { getPlatform, getSelectedApp } from './app';
 import type { Platform } from './types';
-import { getApkInfo, getAppInfo, getIpaInfo, getAabInfo } from './utils';
+import {
+  getAabInfo,
+  getApkInfo,
+  getAppInfo,
+  getIpaInfo,
+  question,
+  saveToLocal,
+} from './utils';
+import { AabParser } from './utils/app-info-parser/aab';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import { t } from './utils/i18n';
 
 export async function listPackage(appId: string) {
-  const allPkgs = await getAllPackages(appId);
+  const allPkgs = (await getAllPackages(appId)) || [];
 
   const header = [
     { value: t('nativePackageId') },
@@ -49,7 +57,7 @@ export async function choosePackage(appId: string) {
 
   while (true) {
     const id = await question(t('enterNativePackageId'));
-    const app = list.find((v) => v.id.toString() === id);
+    const app = list?.find((v) => v.id.toString() === id);
     if (app) {
       return app;
     }
@@ -143,6 +151,48 @@ export const packageCommands = {
     saveToLocal(fn, `${appId}/package/${id}.apk`);
     console.log(t('apkUploadSuccess', { id, version: versionName, buildTime }));
   },
+  uploadAab: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: Record<string, any>;
+  }) => {
+    const source = args[0];
+    if (!source || !source.endsWith('.aab')) {
+      throw new Error(t('usageUploadAab'));
+    }
+
+    const output = path.join(
+      os.tmpdir(),
+      `${path.basename(source, path.extname(source))}-${Date.now()}.apk`,
+    );
+
+    const includeAllSplits =
+      options.includeAllSplits === true || options.includeAllSplits === 'true';
+    const splits = options.splits
+      ? String(options.splits)
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : null;
+
+    const parser = new AabParser(source);
+    try {
+      await parser.extractApk(output, {
+        includeAllSplits,
+        splits,
+      });
+      await packageCommands.uploadApk({
+        args: [output],
+        options,
+      });
+    } finally {
+      if (await fs.pathExists(output)) {
+        await fs.remove(output);
+      }
+    }
+  },
   uploadApp: async ({
     args,
     options,
@@ -214,6 +264,42 @@ export const packageCommands = {
     }
     console.log(await getAabInfo(fn));
   },
+  extractApk: async ({
+    args,
+    options,
+  }: {
+    args: string[];
+    options: Record<string, any>;
+  }) => {
+    const source = args[0];
+    if (!source || !source.endsWith('.aab')) {
+      throw new Error(t('usageExtractApk'));
+    }
+
+    const output =
+      options.output ||
+      path.join(
+        path.dirname(source),
+        `${path.basename(source, path.extname(source))}.apk`,
+      );
+
+    const includeAllSplits =
+      options.includeAllSplits === true || options.includeAllSplits === 'true';
+    const splits = options.splits
+      ? String(options.splits)
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : null;
+
+    const parser = new AabParser(source);
+    await parser.extractApk(output, {
+      includeAllSplits,
+      splits,
+    });
+
+    console.log(t('apkExtracted', { output }));
+  },
   packages: async ({ options }: { options: { platform: Platform } }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
@@ -224,7 +310,12 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: { appId?: string; packageId?: string; packageVersion?: string; platform?: Platform };
+    options: {
+      appId?: string;
+      packageId?: string;
+      packageVersion?: string;
+      platform?: Platform;
+    };
   }) => {
     let { appId, packageId, packageVersion } = options;
 

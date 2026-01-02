@@ -2,6 +2,18 @@ export default {
   addedToGitignore: 'Added {{line}} to .gitignore',
   androidCrunchPngsWarning:
     'The crunchPngs option of android seems not disabled (Please ignore this warning if already disabled), which may cause abnormal consumption of mobile network traffic. Please refer to https://cresc.dev/docs/getting-started#disable-crunchpngs-on-android \n',
+  aabOpenApksFailed: 'Failed to open generated .apks file',
+  aabReadUniversalApkFailed: 'Failed to read universal.apk',
+  aabUniversalApkNotFound: 'universal.apk not found in generated .apks',
+  aabBundletoolDownloadHint:
+    'bundletool not found. Downloading node-bundletool via npx (first run may take a while).',
+  aabManifestNotFound:
+    "AndroidManifest.xml can't be found in AAB base/manifest/",
+  aabParseResourcesWarning:
+    '[Warning] Failed to parse resources.arsc: {{error}}',
+  aabParseFailed: 'Failed to parse AAB: {{error}}',
+  aabParseManifestError: 'Parse AndroidManifest.xml error: {{error}}',
+  aabParseResourcesError: 'Parser resources.arsc error: {{error}}',
   appId: 'App ID',
   appIdMismatchApk:
     'App ID mismatch! Current APK: {{appIdInPkg}}, current update.json: {{appId}}',
@@ -116,10 +128,14 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   usageDiff: 'Usage: cresc {{command}} <origin> <next>',
   usageParseApk: 'Usage: cresc parseApk <apk file>',
   usageParseAab: 'Usage: cresc parseAab <aab file>',
+  usageExtractApk:
+    'Usage: cresc extractApk <aab file> [--output <apk file>] [--includeAllSplits] [--splits <split names>]',
   usageParseApp: 'Usage: cresc parseApp <app file>',
   usageParseIpa: 'Usage: cresc parseIpa <ipa file>',
   usageUnderDevelopment: 'Usage is under development now.',
   usageUploadApk: 'Usage: cresc uploadApk <apk file>',
+  usageUploadAab:
+    'Usage: cresc uploadAab <aab file> [--includeAllSplits] [--splits <split names>]',
   usageUploadApp: 'Usage: cresc uploadApp <app file>',
   usageUploadIpa: 'Usage: cresc uploadIpa <ipa file>',
   versionBind:
@@ -147,4 +163,5 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'This function needs "node-bsdiff". Please run "{{scriptName}} install node-bsdiff" to install',
   nodeHdiffpatchRequired:
     'This function needs "node-hdiffpatch". Please run "{{scriptName}} install node-hdiffpatch" to install',
+  apkExtracted: 'APK extracted to {{output}}',
 };

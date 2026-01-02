@@ -221,10 +221,12 @@ const workflowResult = await moduleManager.executeWorkflow('my-workflow', {
 
 - `uploadIpa`: 上传 IPA 文件（支持 `--version` 参数覆盖提取的版本）
 - `uploadApk`: 上传 APK 文件（支持 `--version` 参数覆盖提取的版本）
+- `uploadAab`: 上传 AAB 文件（转换为 APK，支持 `--version`、`--includeAllSplits`、`--splits`）
 - `uploadApp`: 上传 APP 文件（支持 `--version` 参数覆盖提取的版本）
 - `parseApp`: 解析 APP 文件信息
 - `parseIpa`: 解析 IPA 文件信息
 - `parseApk`: 解析 APK 文件信息
+- `extractApk`: 从 AAB 提取通用 APK（支持 `--output`、`--includeAllSplits`、`--splits`）
 - `packages`: 列出包
 
 ### User 模块 (`user`)

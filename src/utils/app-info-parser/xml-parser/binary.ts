@@ -70,8 +70,21 @@ const TypedValue = {
   TYPE_STRING: 0x00000003,
 };
 
-class BinaryXmlParser {
-  constructor(buffer, options = {}) {
+type BinaryXmlParserOptions = {
+  debug?: boolean;
+};
+
+export class BinaryXmlParser {
+  buffer: Buffer;
+  cursor = 0;
+  strings: string[] = [];
+  resources: number[] = [];
+  document: any = null;
+  parent: any = null;
+  stack: any[] = [];
+  debug: boolean;
+
+  constructor(buffer: Buffer, options: BinaryXmlParserOptions = {}) {
     this.buffer = buffer;
     this.cursor = 0;
     this.strings = [];
@@ -149,14 +162,18 @@ class BinaryXmlParser {
   readDimension() {
     this.debug && console.group('readDimension');
 
-    const dimension = {
+    const dimension: {
+      value: number | null;
+      unit: string | null;
+      rawUnit: number | null;
+    } = {
       value: null,
       unit: null,
       rawUnit: null,
     };
 
     const value = this.readU32();
-    const unit = dimension.value & 0xff;
+    const unit = (dimension.value ?? 0) & 0xff;
 
     dimension.value = value >> 8;
     dimension.rawUnit = unit;
@@ -190,7 +207,11 @@ class BinaryXmlParser {
   readFraction() {
     this.debug && console.group('readFraction');
 
-    const fraction = {
+    const fraction: {
+      value: number | null;
+      type: string | null;
+      rawType: number | null;
+    } = {
       value: null,
       type: null,
       rawType: null,
@@ -218,14 +239,14 @@ class BinaryXmlParser {
 
   readHex24() {
     this.debug && console.group('readHex24');
-    var val = (this.readU32() & 0xffffff).toString(16);
+    const val = (this.readU32() & 0xffffff).toString(16);
     this.debug && console.groupEnd();
     return val;
   }
 
   readHex32() {
     this.debug && console.group('readHex32');
-    var val = this.readU32().toString(16);
+    const val = this.readU32().toString(16);
     this.debug && console.groupEnd();
     return val;
   }
@@ -233,7 +254,11 @@ class BinaryXmlParser {
   readTypedValue() {
     this.debug && console.group('readTypedValue');
 
-    const typedValue = {
+    const typedValue: {
+      value: any;
+      type: string | null;
+      rawType: number | null;
+    } = {
       value: null,
       type: null,
       rawType: null,
@@ -245,7 +270,6 @@ class BinaryXmlParser {
     /* const zero = */ this.readU8();
     const dataType = this.readU8();
 
-    // Yes, there has been a real world APK where the size is malformed.
     if (size === 0) {
       size = 8;
     }
@@ -261,16 +285,18 @@ class BinaryXmlParser {
         typedValue.value = this.readS32();
         typedValue.type = 'int_hex';
         break;
-      case TypedValue.TYPE_STRING:
-        var ref = this.readS32();
+      case TypedValue.TYPE_STRING: {
+        const ref = this.readS32();
         typedValue.value = ref > 0 ? this.strings[ref] : '';
         typedValue.type = 'string';
         break;
-      case TypedValue.TYPE_REFERENCE:
-        var id = this.readU32();
+      }
+      case TypedValue.TYPE_REFERENCE: {
+        const id = this.readU32();
         typedValue.value = `resourceId:0x${id.toString(16)}`;
         typedValue.type = 'reference';
         break;
+      }
       case TypedValue.TYPE_INT_BOOLEAN:
         typedValue.value = this.readS32() !== 0;
         typedValue.type = 'boolean';
@@ -314,7 +340,6 @@ class BinaryXmlParser {
       }
     }
 
-    // Ensure we consume the whole value
     const end = start + size;
     if (this.cursor !== end) {
       const type = dataType.toString(16);
@@ -331,21 +356,21 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
   }
 
   // https://twitter.com/kawasima/status/427730289201139712
-  convertIntToFloat(int) {
+  convertIntToFloat(int: number) {
     const buf = new ArrayBuffer(4);
     new Int32Array(buf)[0] = int;
     return new Float32Array(buf)[0];
   }
 
-  readString(encoding) {
+  readString(encoding: string) {
     this.debug && console.group('readString', encoding);
     switch (encoding) {
-      case 'utf-8':
-        var stringLength = this.readLength8(encoding);
+      case 'utf-8': {
+        const stringLength = this.readLength8();
         this.debug && console.debug('stringLength:', stringLength);
-        var byteLength = this.readLength8(encoding);
+        const byteLength = this.readLength8();
         this.debug && console.debug('byteLength:', byteLength);
-        var value = this.buffer.toString(
+        const value = this.buffer.toString(
           encoding,
           this.cursor,
           (this.cursor += byteLength),
@@ -353,12 +378,13 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
         this.debug && console.debug('value:', value);
         this.debug && console.groupEnd();
         return value;
-      case 'ucs2':
-        stringLength = this.readLength16(encoding);
+      }
+      case 'ucs2': {
+        const stringLength = this.readLength16();
         this.debug && console.debug('stringLength:', stringLength);
-        byteLength = stringLength * 2;
+        const byteLength = stringLength * 2;
         this.debug && console.debug('byteLength:', byteLength);
-        value = this.buffer.toString(
+        const value = this.buffer.toString(
           encoding,
           this.cursor,
           (this.cursor += byteLength),
@@ -366,6 +392,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
         this.debug && console.debug('value:', value);
         this.debug && console.groupEnd();
         return value;
+      }
       default:
         throw new Error(`Unsupported encoding '${encoding}'`);
     }
@@ -373,7 +400,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
 
   readChunkHeader() {
     this.debug && console.group('readChunkHeader');
-    var header = {
+    const header = {
       startOffset: this.cursor,
       chunkType: this.readU16(),
       headerSize: this.readU16(),
@@ -387,7 +414,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     return header;
   }
 
-  readStringPool(header) {
+  readStringPool(header: any) {
     this.debug && console.group('readStringPool');
 
     header.stringCount = this.readU32();
@@ -405,7 +432,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
       throw new Error('Invalid string pool header');
     }
 
-    const offsets = [];
+    const offsets: number[] = [];
     for (let i = 0, l = header.stringCount; i < l; ++i) {
       this.debug && console.debug('offset:', i);
       offsets.push(this.readU32());
@@ -426,7 +453,6 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
       this.strings.push(this.readString(encoding));
     }
 
-    // Skip styles
     this.cursor = header.startOffset + header.chunkSize;
 
     this.debug && console.groupEnd();
@@ -434,7 +460,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     return null;
   }
 
-  readResourceMap(header) {
+  readResourceMap(header: any) {
     this.debug && console.group('readResourceMap');
     const count = Math.floor((header.chunkSize - header.headerSize) / 4);
     for (let i = 0; i < count; ++i) {
@@ -444,7 +470,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     return null;
   }
 
-  readXmlNamespaceStart(/* header */) {
+  readXmlNamespaceStart() {
     this.debug && console.group('readXmlNamespaceStart');
 
     /* const line = */ this.readU32();
@@ -452,18 +478,12 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     /* const prefixRef = */ this.readS32();
     /* const uriRef = */ this.readS32();
 
-    // We don't currently care about the values, but they could
-    // be accessed like so:
-    //
-    // namespaceURI.prefix = this.strings[prefixRef] // if prefixRef > 0
-    // namespaceURI.uri = this.strings[uriRef] // if uriRef > 0
-
     this.debug && console.groupEnd();
 
     return null;
   }
 
-  readXmlNamespaceEnd(/* header */) {
+  readXmlNamespaceEnd() {
     this.debug && console.group('readXmlNamespaceEnd');
 
     /* const line = */ this.readU32();
@@ -471,21 +491,15 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     /* const prefixRef = */ this.readS32();
     /* const uriRef = */ this.readS32();
 
-    // We don't currently care about the values, but they could
-    // be accessed like so:
-    //
-    // namespaceURI.prefix = this.strings[prefixRef] // if prefixRef > 0
-    // namespaceURI.uri = this.strings[uriRef] // if uriRef > 0
-
     this.debug && console.groupEnd();
 
     return null;
   }
 
-  readXmlElementStart(/* header */) {
+  readXmlElementStart() {
     this.debug && console.group('readXmlElementStart');
 
-    const node = {
+    const node: any = {
       namespaceURI: null,
       nodeType: NodeType.ELEMENT_NODE,
       nodeName: null,
@@ -532,7 +546,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
   readXmlAttribute() {
     this.debug && console.group('readXmlAttribute');
 
-    const attr = {
+    const attr: any = {
       namespaceURI: null,
       nodeType: NodeType.ATTRIBUTE_NODE,
       nodeName: null,
@@ -552,10 +566,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     attr.nodeName = attr.name = this.strings[nameRef];
 
     if (valueRef > 0) {
-      // some apk have versionName with special characters
       if (attr.name === 'versionName') {
-        // only keep printable characters
-        // https://www.ascii-code.com/characters/printable-characters
         this.strings[valueRef] = this.strings[valueRef].replace(
           /[^\x21-\x7E]/g,
           '',
@@ -571,7 +582,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     return attr;
   }
 
-  readXmlElementEnd(/* header */) {
+  readXmlElementEnd() {
     this.debug && console.group('readXmlCData');
 
     /* const line = */ this.readU32();
@@ -587,10 +598,10 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     return null;
   }
 
-  readXmlCData(/* header */) {
+  readXmlCData() {
     this.debug && console.group('readXmlCData');
 
-    const cdata = {
+    const cdata: any = {
       namespaceURI: null,
       nodeType: NodeType.CDATA_SECTION_NODE,
       nodeName: '#cdata',
@@ -615,7 +626,7 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
     return cdata;
   }
 
-  readNull(header) {
+  readNull(header: any) {
     this.debug && console.group('readNull');
     this.cursor += header.chunkSize - header.headerSize;
     this.debug && console.groupEnd();
@@ -642,19 +653,19 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
           this.readResourceMap(header);
           break;
         case ChunkType.XML_START_NAMESPACE:
-          this.readXmlNamespaceStart(header);
+          this.readXmlNamespaceStart();
           break;
         case ChunkType.XML_END_NAMESPACE:
-          this.readXmlNamespaceEnd(header);
+          this.readXmlNamespaceEnd();
           break;
         case ChunkType.XML_START_ELEMENT:
-          this.readXmlElementStart(header);
+          this.readXmlElementStart();
           break;
         case ChunkType.XML_END_ELEMENT:
-          this.readXmlElementEnd(header);
+          this.readXmlElementEnd();
           break;
         case ChunkType.XML_CDATA:
-          this.readXmlCData(header);
+          this.readXmlCData();
           break;
         case ChunkType.NULL:
           this.readNull(header);
@@ -663,7 +674,6 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
           throw new Error(`Unsupported chunk type '${header.chunkType}'`);
       }
 
-      // Ensure we consume the whole chunk
       const end = start + header.chunkSize;
       if (this.cursor !== end) {
         const diff = end - this.cursor;
@@ -682,5 +692,3 @@ supposed to end at offset ${end}. Ignoring the rest of the chunk.`);
     return this.document;
   }
 }
-
-module.exports = BinaryXmlParser;
