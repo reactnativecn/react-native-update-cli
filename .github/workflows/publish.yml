@@ -19,7 +19,4 @@ jobs:
           node-version: '24.x'
           registry-url: 'https://registry.npmjs.org'
       - run: bun install --frozen-lockfile
-      # Ensure npm 11.5.1 or later is installed
-      - name: Update npm
-        run: npm install -g npm@latest
-      - run: npm publish
+      - run: npm publish --provenance --access public
