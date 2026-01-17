@@ -9,23 +9,41 @@ import tcpp from 'tcp-ping';
 import { getBaseUrl } from 'utils/http-helper';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
-import { credentialFile, pricingPageUrl } from './utils/constants';
+import { credentialFile, pricingPageUrl, IS_CRESC } from './utils/constants';
 import { t } from './utils/i18n';
 
 const tcpPing = util.promisify(tcpp.ping);
 
 let session: Session | undefined;
 let savedSession: Session | undefined;
+let apiToken: string | undefined;
 
 const userAgent = `react-native-update-cli/${packageJson.version}`;
 
 export const getSession = () => session;
+
+export const getApiToken = () => apiToken;
+
+export const setApiToken = (token: string) => {
+  apiToken = token;
+};
+
+const loadApiTokenFromEnv = () => {
+  // Use CRESC_API_TOKEN for cresc, PUSHY_API_TOKEN for pushy
+  const envToken = IS_CRESC
+    ? process.env.CRESC_API_TOKEN
+    : process.env.PUSHY_API_TOKEN;
+  if (envToken) {
+    apiToken = envToken;
+  }
+};
 
 export const replaceSession = (newSession: { token: string }) => {
   session = newSession;
 };
 
 export const loadSession = async () => {
+  loadApiTokenFromEnv();
   if (fs.existsSync(credentialFile)) {
     try {
       replaceSession(JSON.parse(fs.readFileSync(credentialFile, 'utf8')));
@@ -78,27 +96,39 @@ async function query(url: string, options: fetch.RequestInit) {
 }
 
 function queryWithoutBody(method: string) {
-  return (api: string) =>
-    query(api, {
+  return (api: string) => {
+    const headers: Record<string, string> = {
+      'User-Agent': userAgent,
+    };
+    if (apiToken) {
+      headers['x-api-token'] = apiToken;
+    } else if (session?.token) {
+      headers['X-AccessToken'] = session.token;
+    }
+    return query(api, {
       method,
-      headers: {
-        'User-Agent': userAgent,
-        'X-AccessToken': session ? session.token : '',
-      },
+      headers,
     });
+  };
 }
 
 function queryWithBody(method: string) {
-  return (api: string, body?: Record<string, any>) =>
-    query(api, {
+  return (api: string, body?: Record<string, any>) => {
+    const headers: Record<string, string> = {
+      'User-Agent': userAgent,
+      'Content-Type': 'application/json',
+    };
+    if (apiToken) {
+      headers['x-api-token'] = apiToken;
+    } else if (session?.token) {
+      headers['X-AccessToken'] = session.token;
+    }
+    return query(api, {
       method,
-      headers: {
-        'User-Agent': userAgent,
-        'Content-Type': 'application/json',
-        'X-AccessToken': session ? session.token : '',
-      },
+      headers,
       body: JSON.stringify(body),
     });
+  };
 }
 
 export const get = queryWithoutBody('GET');
