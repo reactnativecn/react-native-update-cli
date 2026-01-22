@@ -229,7 +229,7 @@ export const packageCommands = {
     const { id } = await post(`/app/${appId}/package/create`, {
       name: versionName,
       hash,
-      buildTime,
+      buildTime: String(buildTime),
       deps: depVersions,
       commit: await getCommitInfo(),
     });

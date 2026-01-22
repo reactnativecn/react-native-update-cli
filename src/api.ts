@@ -191,6 +191,9 @@ export async function uploadFile(fn: string, key?: string) {
     form.append('key', key);
   }
   form.append('file', fileStream);
+  // form.append('file', fileStream, {
+  //   contentType: 'application/octet-stream',
+  // });
 
   const res = await fetch(realUrl, {
     method: 'POST',
