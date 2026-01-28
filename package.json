@@ -1,15 +1,32 @@
 {
   "name": "react-native-update-cli",
-  "version": "2.7.1",
+  "version": "2.7.2",
   "description": "command line tool for react-native-update (remote updates for react native)",
   "main": "index.js",
+  "exports": {
+    ".": {
+      "import": "./lib/esm/index.mjs",
+      "require": "./lib/index.js"
+    },
+    "./cli.json": "./cli.json",
+    "./package.json": "./package.json",
+    "./lib/*": "./lib/*",
+    "./src/*": "./src/*",
+    "./proto/*": "./proto/*",
+    "./*": {
+      "import": "./lib/esm/*.mjs",
+      "require": "./lib/*.js"
+    }
+  },
   "bin": {
     "pushy": "lib/index.js",
     "cresc": "lib/index.js"
   },
   "files": ["lib", "src", "proto", "cli.json"],
   "scripts": {
-    "build": "swc src -d lib --strip-leading-paths",
+    "build:cjs": "swc src -d lib --strip-leading-paths",
+    "build:esm": "swc src -d lib/esm --strip-leading-paths --out-file-extension .mjs -C module.type=es6",
+    "build": "npm run build:cjs && npm run build:esm",
     "prepublishOnly": "npm run build && chmod +x lib/index.js",
     "lint": "tsc --noEmit & biome check --write ."
   },
