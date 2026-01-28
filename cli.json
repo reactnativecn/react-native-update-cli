@@ -254,7 +254,6 @@
           "default": false
         },
         "hermes": {
-          "hasValue": true,
           "default": false
         },
         "name": {
