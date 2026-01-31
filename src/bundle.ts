@@ -13,6 +13,7 @@ import { translateOptions } from './utils';
 import { checkPlugins, question } from './utils';
 const g2js = require('gradle-to-js/lib/parser');
 import os from 'os';
+import { npm, yarn } from 'global-dirs';
 const properties = require('properties');
 import { addGitIgnore } from './utils/add-gitignore';
 import { checkLockFiles } from './utils/check-lockfile';
@@ -23,16 +24,25 @@ import { versionCommands } from './versions';
 
 type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
 
-let bsdiff: Diff;
-let hdiff: Diff;
-let diff: Diff;
-try {
-  bsdiff = require('node-bsdiff').diff;
-} catch (e) {}
+const loadDiffModule = (pkgName: string): Diff | undefined => {
+  const resolvePaths = [process.cwd(), npm.packages, yarn.packages];
 
-try {
-  hdiff = require('node-hdiffpatch').diff;
-} catch (e) {}
+  try {
+    const resolved = require.resolve(pkgName, { paths: resolvePaths });
+    const mod = require(resolved);
+    if (mod?.diff) {
+      return mod.diff as Diff;
+    }
+  } catch {}
+
+  return undefined;
+};
+
+let bsdiff: Diff | undefined;
+let hdiff: Diff | undefined;
+let diff: Diff;
+bsdiff = loadDiffModule('node-bsdiff');
+hdiff = loadDiffModule('node-hdiffpatch');
 
 async function runReactNativeBundleCommand({
   bundleName,
