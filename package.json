@@ -73,8 +73,5 @@
     "@types/yazl": "^2.4.6",
     "typescript": "^5.8.3"
   },
-  "optionalDependencies": {
-    "node-hdiffpatch": "^1.2.1"
-  },
-  "trustedDependencies": ["@biomejs/biome", "@swc/core", "node-hdiffpatch"]
+  "trustedDependencies": ["@biomejs/biome", "@swc/core"]
 }
