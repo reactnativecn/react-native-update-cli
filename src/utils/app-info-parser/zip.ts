@@ -1,27 +1,19 @@
+import { decodeNullUnicode } from './utils';
+import path from 'path';
+
 const Unzip = require('isomorphic-unzip');
 
-import { decodeNullUnicode, isBrowser } from './utils';
-
-let bundleZipUtils: any;
+import { enumZipEntries, readEntry } from '../zip-entries';
 
 export class Zip {
-  file: string | File | Blob;
+  file: string;
   unzip: any;
 
-  constructor(file: string | File | Blob) {
-    if (isBrowser()) {
-      if (!(file instanceof window.Blob || typeof file.size !== 'undefined')) {
-        throw new Error(
-          'Param error: [file] must be an instance of Blob or File in browser.',
-        );
-      }
-      this.file = file;
-    } else {
-      if (typeof file !== 'string') {
-        throw new Error('Param error: [file] must be file path in Node.');
-      }
-      this.file = require('path').resolve(file);
+  constructor(file: string) {
+    if (typeof file !== 'string') {
+      throw new Error('Param error: [file] must be file path in Node.');
     }
+    this.file = path.resolve(file);
     this.unzip = new Unzip(this.file);
   }
 
@@ -66,8 +58,6 @@ export class Zip {
 
   async getEntryFromHarmonyApp(regex: RegExp) {
     try {
-      const { enumZipEntries, readEntry } =
-        bundleZipUtils ?? (bundleZipUtils = require('../../bundle'));
       let originSource: Buffer | Blob | undefined;
       await enumZipEntries(this.file, (entry: any, zipFile: any) => {
         if (regex.test(entry.fileName)) {

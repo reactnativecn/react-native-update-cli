@@ -11,10 +11,6 @@ const isPrimitive = (value: unknown): boolean =>
   value === null ||
   ['boolean', 'number', 'string', 'undefined'].includes(objectType(value));
 
-const isBrowser = (): boolean =>
-  typeof process === 'undefined' ||
-  Object.prototype.toString.call(process) !== '[object process]';
-
 /**
  * map file place with resourceMap
  * @param {Object} apkInfo // json info parsed from .apk file

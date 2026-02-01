@@ -3,6 +3,7 @@
 import { loadSession } from './api';
 import { appCommands } from './app';
 import { bundleCommands } from './bundle';
+import { diffCommands } from './diff';
 import { installCommands } from './install';
 import { moduleManager } from './module-manager';
 import { builtinModules } from './modules';
@@ -31,6 +32,7 @@ function printUsage() {
   const legacyCommands = {
     ...userCommands,
     ...bundleCommands,
+    ...diffCommands,
     ...appCommands,
     ...packageCommands,
     ...versionCommands,
@@ -75,6 +77,7 @@ function printUsage() {
 const legacyCommands = {
   ...userCommands,
   ...bundleCommands,
+  ...diffCommands,
   ...appCommands,
   ...packageCommands,
   ...versionCommands,
