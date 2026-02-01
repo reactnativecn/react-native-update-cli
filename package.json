@@ -10,7 +10,7 @@
   "files": ["lib", "src", "proto", "cli.json"],
   "scripts": {
     "build": "swc src -d lib --strip-leading-paths",
-    "prepublishOnly": "npm run build && chmod +x lib/index.js",
+    "prepublishOnly": "bun scripts/prepublish.js && bun run build && chmod +x lib/index.js",
     "lint": "tsc --noEmit & biome check --write ."
   },
   "repository": {
@@ -61,6 +61,7 @@
     "@biomejs/biome": "^1.9.4",
     "@swc/cli": "0.7.7",
     "@swc/core": "^1.11.24",
+    "@types/bun": "^1.3.8",
     "@types/filesize-parser": "^1.5.3",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.15.18",
@@ -72,5 +73,8 @@
     "@types/yazl": "^2.4.6",
     "typescript": "^5.8.3"
   },
-  "trustedDependencies": ["@biomejs/biome", "@swc/core"]
+  "optionalDependencies": {
+    "node-hdiffpatch": "^1.2.1"
+  },
+  "trustedDependencies": ["@biomejs/biome", "@swc/core", "node-hdiffpatch"]
 }

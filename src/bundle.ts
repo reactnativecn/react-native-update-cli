@@ -38,11 +38,11 @@ const loadDiffModule = (pkgName: string): Diff | undefined => {
   return undefined;
 };
 
-let bsdiff: Diff | undefined;
 let hdiff: Diff | undefined;
+hdiff = (loadDiffModule('node-hdiffpatch') as any)?.diff;
+let bsdiff: Diff | undefined;
 let diff: Diff;
 bsdiff = loadDiffModule('node-bsdiff');
-hdiff = loadDiffModule('node-hdiffpatch');
 
 async function runReactNativeBundleCommand({
   bundleName,
