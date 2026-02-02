@@ -1,6 +1,6 @@
 import path from 'path';
 import * as fs from 'fs-extra';
-import globalDirectory from 'global-directory';
+import { npm, yarn } from 'global-dirs';
 import { ZipFile as YazlZipFile } from 'yazl';
 import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
@@ -9,7 +9,6 @@ import { enumZipEntries, readEntry } from './utils/zip-entries';
 
 type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
 
-const { npm, yarn } = globalDirectory;
 export { enumZipEntries, readEntry };
 
 const loadDiffModule = (pkgName: string): Diff | undefined => {

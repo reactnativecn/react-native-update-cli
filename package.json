@@ -36,7 +36,7 @@
     "filesize-parser": "^1.5.1",
     "form-data": "^4.0.2",
     "fs-extra": "8",
-    "global-directory": "^4.0.1",
+    "global-dirs": "^4.0.0",
     "gradle-to-js": "^2.0.1",
     "i18next": "^24.2.3",
     "isomorphic-git": "^1.30.1",

@@ -8,8 +8,7 @@ import type { RequestOptions as HttpsRequestOptions } from 'https';
 import { homedir } from 'os';
 import { dirname, join, parse, resolve as pathResolve } from 'path';
 import { URL } from 'url';
-import globalDirectory from 'global-directory';
-const { npm, yarn } = globalDirectory;
+import { npm, yarn } from 'global-dirs';
 
 import registryAuthToken from 'registry-auth-token';
 import getRegistryUrl from 'registry-auth-token/registry-url';
