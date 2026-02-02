@@ -13,7 +13,7 @@ const { npm, yarn } = globalDirectory;
 export { enumZipEntries, readEntry };
 
 const loadDiffModule = (pkgName: string): Diff | undefined => {
-  const resolvePaths = [process.cwd(), npm.packages, yarn.packages];
+  const resolvePaths = ['.', npm.packages, yarn.packages];
 
   try {
     const resolved = require.resolve(pkgName, { paths: resolvePaths });
