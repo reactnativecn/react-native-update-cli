@@ -14,6 +14,7 @@ import { tempDir } from './utils/constants';
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
 import { versionCommands } from './versions';
+import os from 'os';
 
 async function runReactNativeBundleCommand({
   bundleName,
