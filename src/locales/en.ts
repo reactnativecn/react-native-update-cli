@@ -96,6 +96,21 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   packageIdRequired: 'Please provide packageId or packageVersion parameter',
   packageUploadSuccess:
     'Successfully uploaded new hot update package (id: {{id}})',
+  depsChangeSummary:
+    'Dependency changes: added {{added}}, removed {{removed}}, changed {{changed}}.',
+  depsChangeTargetPackage:
+    'Target native package: {{packageName}} (id: {{packageId}})',
+  depsChangeDependencyHeader: 'Dependency',
+  depsChangeVersionHeader: 'Version change',
+  depsChangeAddedLabel: 'Added',
+  depsChangeRemovedLabel: 'Removed',
+  depsChangeChangedLabel: 'Changed',
+  depsChangeArrow: '->',
+  depsChangeRiskWarning:
+    'Warning: if changed dependencies are pure JS modules, impact is usually low; if native code is newly introduced or changed, OTA update may cause abnormal behavior or even crashes. Test thoroughly before production release.',
+  depsChangeFetchFailed: 'Failed to fetch OTA dependency info: {{error}}',
+  depsChangeNonBlockingHint:
+    'This is only a dependency change warning and will not block publishing.',
   packing: 'Packing',
   pausedStatus: '(Paused)',
   platform: 'Platform',

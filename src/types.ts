@@ -18,6 +18,7 @@ export interface Package {
   appKey?: string;
   versionName?: any;
   buildTime?: any;
+  deps?: Record<string, string> | string | null;
 }
 
 export interface Version {
@@ -25,6 +26,7 @@ export interface Version {
   hash: string;
   name: string;
   packages?: Package[];
+  deps?: Record<string, string> | string | null;
 }
 
 export interface CommandContext {
