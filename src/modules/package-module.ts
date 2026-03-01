@@ -1,4 +1,3 @@
-import { packageCommands } from '../package';
 import type { CLIModule } from '../types';
 
 export const packageModule: CLIModule = {

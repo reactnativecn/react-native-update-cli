@@ -12,11 +12,20 @@ import type {
   UploadOptions,
   Version,
 } from './types';
+import { runAsCommandResult } from './utils/command-result';
+import { runWorkflow } from './workflow-runner';
 
 export class CLIProviderImpl implements CLIProvider {
   private workflows: Map<string, CustomWorkflow> = new Map();
   private session?: Session;
   private sessionInitPromise?: Promise<void>;
+
+  private createContext(
+    options: Record<string, unknown>,
+    args: string[] = [],
+  ): CommandContext {
+    return { args, options };
+  }
 
   private async ensureInitialized(): Promise<void> {
     if (this.session) {
@@ -35,11 +44,41 @@ export class CLIProviderImpl implements CLIProvider {
     await this.sessionInitPromise;
   }
 
+  private runMessageCommand(
+    task: () => Promise<void>,
+    fallbackError: string,
+    successMessage: string,
+    requireSession = true,
+  ): Promise<CommandResult> {
+    return runAsCommandResult(
+      async () => {
+        if (requireSession) {
+          await this.ensureInitialized();
+        }
+        await task();
+      },
+      fallbackError,
+      () => ({ message: successMessage }),
+    );
+  }
+
+  private runDataCommand<T>(
+    task: () => Promise<T>,
+    fallbackError: string,
+    requireSession = true,
+  ): Promise<CommandResult> {
+    return runAsCommandResult(async () => {
+      if (requireSession) {
+        await this.ensureInitialized();
+      }
+      return task();
+    }, fallbackError);
+  }
+
   async bundle(options: BundleOptions): Promise<CommandResult> {
-    try {
-      const context: CommandContext = {
-        args: [],
-        options: {
+    return this.runMessageCommand(
+      async () => {
+        const context = this.createContext({
           dev: options.dev || false,
           platform: options.platform,
           bundleName: options.bundleName || 'index.bundlejs',
@@ -50,33 +89,21 @@ export class CLIProviderImpl implements CLIProvider {
           expo: options.expo || false,
           rncli: options.rncli || false,
           hermes: options.hermes || false,
-        },
-      };
+        });
 
-      const { bundleCommands } = await import('./bundle');
-      await bundleCommands.bundle(context);
-
-      return {
-        success: true,
-        data: { message: 'Bundle created successfully' },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error during bundling',
-      };
-    }
+        const { bundleCommands } = await import('./bundle');
+        await bundleCommands.bundle(context);
+      },
+      'Unknown error during bundling',
+      'Bundle created successfully',
+      false,
+    );
   }
 
   async publish(options: PublishOptions): Promise<CommandResult> {
-    try {
-      await this.ensureInitialized();
-      const context: CommandContext = {
-        args: [],
-        options: {
+    return this.runMessageCommand(
+      async () => {
+        const context = this.createContext({
           name: options.name,
           description: options.description,
           metaInfo: options.metaInfo,
@@ -87,73 +114,50 @@ export class CLIProviderImpl implements CLIProvider {
           packageVersionRange: options.packageVersionRange,
           rollout: options.rollout,
           dryRun: options.dryRun || false,
-        },
-      };
+        });
 
-      const { versionCommands } = await import('./versions');
-      await versionCommands.publish(context);
-
-      return {
-        success: true,
-        data: { message: 'Version published successfully' },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error during publishing',
-      };
-    }
+        const { versionCommands } = await import('./versions');
+        await versionCommands.publish(context);
+      },
+      'Unknown error during publishing',
+      'Version published successfully',
+    );
   }
 
   async upload(options: UploadOptions): Promise<CommandResult> {
-    try {
-      await this.ensureInitialized();
-      const platform = await this.getPlatform(options.platform);
-      const { appId } = await this.getSelectedApp(platform);
+    return this.runMessageCommand(
+      async () => {
+        const platform = await this.getPlatform(options.platform);
+        const { appId } = await this.getSelectedApp(platform);
 
-      const filePath = options.filePath;
-      const fileType = filePath.split('.').pop()?.toLowerCase();
+        const filePath = options.filePath;
+        const fileType = filePath.split('.').pop()?.toLowerCase();
 
-      const context: CommandContext = {
-        args: [filePath],
-        options: { platform, appId, version: options.version },
-      };
+        const context = this.createContext(
+          { platform, appId, version: options.version },
+          [filePath],
+        );
 
-      const { packageCommands } = await import('./package');
+        const { packageCommands } = await import('./package');
+        const uploadHandlerMap = {
+          ipa: packageCommands.uploadIpa,
+          apk: packageCommands.uploadApk,
+          aab: packageCommands.uploadAab,
+          app: packageCommands.uploadApp,
+        } as const;
+        const uploadHandler =
+          fileType && fileType in uploadHandlerMap
+            ? uploadHandlerMap[fileType as keyof typeof uploadHandlerMap]
+            : undefined;
 
-      switch (fileType) {
-        case 'ipa':
-          await packageCommands.uploadIpa(context);
-          break;
-        case 'apk':
-          await packageCommands.uploadApk(context);
-          break;
-        case 'aab':
-          await packageCommands.uploadAab(context);
-          break;
-        case 'app':
-          await packageCommands.uploadApp(context);
-          break;
-        default:
+        if (!uploadHandler) {
           throw new Error(`Unsupported file type: ${fileType}`);
-      }
-
-      return {
-        success: true,
-        data: { message: 'File uploaded successfully' },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error during upload',
-      };
-    }
+        }
+        await uploadHandler(context);
+      },
+      'Unknown error during upload',
+      'File uploaded successfully',
+    );
   }
 
   async getSelectedApp(
@@ -164,74 +168,45 @@ export class CLIProviderImpl implements CLIProvider {
   }
 
   async listApps(platform?: Platform): Promise<CommandResult> {
-    try {
-      await this.ensureInitialized();
-      const resolvedPlatform = await this.getPlatform(platform);
-      const { appCommands } = await import('./app');
-      await appCommands.apps({ options: { platform: resolvedPlatform } });
-
-      return {
-        success: true,
-        data: { message: 'Apps listed successfully' },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error ? error.message : 'Unknown error listing apps',
-      };
-    }
+    return this.runMessageCommand(
+      async () => {
+        const resolvedPlatform = await this.getPlatform(platform);
+        const { appCommands } = await import('./app');
+        await appCommands.apps({ options: { platform: resolvedPlatform } });
+      },
+      'Unknown error listing apps',
+      'Apps listed successfully',
+    );
   }
 
   async createApp(name: string, platform: Platform): Promise<CommandResult> {
-    try {
-      await this.ensureInitialized();
-      const { appCommands } = await import('./app');
-      await appCommands.createApp({
-        options: {
-          name,
-          platform,
-          downloadUrl: '',
-        },
-      });
-
-      return {
-        success: true,
-        data: { message: 'App created successfully' },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error ? error.message : 'Unknown error creating app',
-      };
-    }
+    return this.runMessageCommand(
+      async () => {
+        const { appCommands } = await import('./app');
+        await appCommands.createApp({
+          options: {
+            name,
+            platform,
+            downloadUrl: '',
+          },
+        });
+      },
+      'Unknown error creating app',
+      'App created successfully',
+    );
   }
 
   async listVersions(appId: string): Promise<CommandResult> {
-    try {
-      await this.ensureInitialized();
-      const context: CommandContext = {
-        args: [],
-        options: { appId },
-      };
+    return this.runMessageCommand(
+      async () => {
+        const context = this.createContext({ appId });
 
-      const { versionCommands } = await import('./versions');
-      await versionCommands.versions(context);
-
-      return {
-        success: true,
-        data: { message: 'Versions listed successfully' },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error listing versions',
-      };
-    }
+        const { versionCommands } = await import('./versions');
+        await versionCommands.versions(context);
+      },
+      'Unknown error listing versions',
+      'Versions listed successfully',
+    );
   }
 
   async updateVersion(
@@ -239,32 +214,16 @@ export class CLIProviderImpl implements CLIProvider {
     versionId: string,
     updates: Partial<Version>,
   ): Promise<CommandResult> {
-    try {
-      await this.ensureInitialized();
-      const context: CommandContext = {
-        args: [versionId],
-        options: {
-          appId,
-          ...updates,
-        },
-      };
+    return this.runMessageCommand(
+      async () => {
+        const context = this.createContext({ appId, ...updates }, [versionId]);
 
-      const { versionCommands } = await import('./versions');
-      await versionCommands.update(context);
-
-      return {
-        success: true,
-        data: { message: 'Version updated successfully' },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error updating version',
-      };
-    }
+        const { versionCommands } = await import('./versions');
+        await versionCommands.update(context);
+      },
+      'Unknown error updating version',
+      'Version updated successfully',
+    );
   }
 
   async getPlatform(platform?: Platform): Promise<Platform> {
@@ -287,71 +246,23 @@ export class CLIProviderImpl implements CLIProvider {
     workflowName: string,
     context: CommandContext,
   ): Promise<CommandResult> {
-    const workflow = this.workflows.get(workflowName);
-    if (!workflow) {
-      return {
-        success: false,
-        error: `Workflow '${workflowName}' not found`,
-      };
-    }
-
-    try {
-      let previousResult: any = null;
-      for (const step of workflow.steps) {
-        if (step.condition && !step.condition(context)) {
-          console.log(`Skipping step '${step.name}' due to condition`);
-          continue;
-        }
-
-        console.log(`Executing step '${step.name}'`);
-        previousResult = await step.execute(context, previousResult);
+    return this.runDataCommand(async () => {
+      const workflow = this.workflows.get(workflowName);
+      if (!workflow) {
+        throw new Error(`Workflow '${workflowName}' not found`);
       }
-
+      const result = await runWorkflow(workflowName, workflow, context);
       return {
-        success: true,
-        data: {
-          message: `Workflow '${workflowName}' completed successfully`,
-          result: previousResult,
-        },
+        message: `Workflow '${workflowName}' completed successfully`,
+        result,
       };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : `Workflow '${workflowName}' failed`,
-      };
-    }
-  }
-
-  getRegisteredWorkflows(): string[] {
-    return Array.from(this.workflows.keys());
+    }, `Workflow '${workflowName}' failed`);
   }
 
   async listPackages(appId?: string): Promise<CommandResult> {
-    try {
-      await this.ensureInitialized();
-      const context: CommandContext = {
-        args: [],
-        options: appId ? { appId } : {},
-      };
-
+    return this.runDataCommand(async () => {
       const { listPackage } = await import('./package');
-      const result = await listPackage(appId || '');
-
-      return {
-        success: true,
-        data: result,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error listing packages',
-      };
-    }
+      return listPackage(appId || '');
+    }, 'Unknown error listing packages');
   }
 }

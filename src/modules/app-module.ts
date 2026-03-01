@@ -1,5 +1,6 @@
 import { appCommands, listApp } from '../app';
 import type { CLIModule, CommandContext, Platform } from '../types';
+import { getStringOption, toObjectState } from '../utils/options';
 
 type WorkflowApp = {
   id: string;
@@ -32,21 +33,6 @@ function isPlatform(value: unknown): value is Platform {
 
 function normalizePlatformOption(value: unknown): Platform | '' {
   return isPlatform(value) ? value : '';
-}
-
-function getStringOption(
-  options: Record<string, unknown>,
-  key: string,
-): string {
-  const value = options[key];
-  return typeof value === 'string' ? value : '';
-}
-
-function toWorkflowState(previousResult: unknown): AppWorkflowState {
-  if (previousResult && typeof previousResult === 'object') {
-    return previousResult as AppWorkflowState;
-  }
-  return {};
 }
 
 export const appModule: CLIModule = {
@@ -86,7 +72,7 @@ export const appModule: CLIModule = {
             previousResult?: unknown,
           ) => {
             console.log('Selecting app in workflow');
-            const state = toWorkflowState(previousResult);
+            const state = toObjectState<AppWorkflowState>(previousResult, {});
             const platform = normalizePlatformOption(context.options.platform);
             await appCommands.selectApp({
               args: [],
@@ -121,7 +107,7 @@ export const appModule: CLIModule = {
             previousResult?: unknown,
           ) => {
             console.log('Selecting target app');
-            const state = toWorkflowState(previousResult);
+            const state = toObjectState<AppWorkflowState>(previousResult, {});
             const platform = normalizePlatformOption(context.options.platform);
             await appCommands.selectApp({
               args: [],
@@ -188,7 +174,7 @@ export const appModule: CLIModule = {
           ) => {
             console.log('📊 Analyzing app status...');
 
-            const state = toWorkflowState(previousResult);
+            const state = toObjectState<AppWorkflowState>(previousResult, {});
             const appsData =
               (state.appsData as Record<Platform, WorkflowApp[]> | undefined) ??
               emptyAppsData;
@@ -245,7 +231,7 @@ export const appModule: CLIModule = {
           ) => {
             console.log('⚡ Optimizing app configuration...');
 
-            const state = toWorkflowState(previousResult);
+            const state = toObjectState<AppWorkflowState>(previousResult, {});
             const analysis = state.analysis as AppAnalysis | undefined;
             if (!analysis) {
               console.log('  No analysis data, skip optimization');

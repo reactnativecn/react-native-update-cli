@@ -36,24 +36,13 @@ function printUsage() {
   console.log('React Native Update CLI');
   console.log('');
   console.log('Traditional commands:');
-
-  const legacyCommands = {
-    ...userCommands,
-    ...bundleCommands,
-    ...diffCommands,
-    ...appCommands,
-    ...packageCommands,
-    ...versionCommands,
-    ...installCommands,
-  };
-
-  for (const [name, handler] of Object.entries(legacyCommands)) {
+  for (const name of Object.keys(legacyCommands)) {
     console.log(`  ${name}: Legacy command`);
   }
 
   console.log('');
   console.log('Modular commands:');
-  const commands = moduleManager.getRegisteredCommands();
+  const commands = moduleManager.listCommands();
   for (const command of commands) {
     console.log(
       `  ${command.name}: ${command.description || 'No description'}`,
@@ -62,7 +51,7 @@ function printUsage() {
 
   console.log('');
   console.log('Available workflows:');
-  const workflows = moduleManager.getRegisteredWorkflows();
+  const workflows = moduleManager.listWorkflows();
   for (const workflow of workflows) {
     console.log(
       `  ${workflow.name}: ${workflow.description || 'No description'}`,

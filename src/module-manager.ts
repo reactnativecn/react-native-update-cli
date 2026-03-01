@@ -87,18 +87,6 @@ export class ModuleManager {
     this.provider.registerWorkflow(workflow);
   }
 
-  getRegisteredCommands(): CommandDefinition[] {
-    return Array.from(this.commands.values());
-  }
-
-  getRegisteredWorkflows(): CustomWorkflow[] {
-    return Array.from(this.workflows.values());
-  }
-
-  getRegisteredModules(): CLIModule[] {
-    return Array.from(this.modules.values());
-  }
-
   async executeCommand(
     commandName: string,
     context: CommandContext,
@@ -128,6 +116,10 @@ export class ModuleManager {
 
   listWorkflows(): CustomWorkflow[] {
     return Array.from(this.workflows.values());
+  }
+
+  listModules(): CLIModule[] {
+    return Array.from(this.modules.values());
   }
 
   listAll(): void {

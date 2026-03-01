@@ -1,6 +1,11 @@
 import { getSession, loadSession } from '../api';
 import type { CLIModule, CommandContext } from '../types';
 import { userCommands } from '../user';
+import {
+  getBooleanOption,
+  getOptionalStringOption,
+  toObjectState,
+} from '../utils/options';
 
 type AuthCheckState = {
   hasToken?: boolean;
@@ -15,37 +20,6 @@ type LoginFlowState = {
   loginError?: string;
   [key: string]: unknown;
 };
-
-function toAuthCheckState(previousResult: unknown): AuthCheckState {
-  if (previousResult && typeof previousResult === 'object') {
-    return previousResult as AuthCheckState;
-  }
-  return {};
-}
-
-function toLoginFlowState(previousResult: unknown): LoginFlowState {
-  if (previousResult && typeof previousResult === 'object') {
-    return previousResult as LoginFlowState;
-  }
-  return {};
-}
-
-function getBooleanOption(
-  options: Record<string, unknown>,
-  key: string,
-  fallback: boolean,
-): boolean {
-  const value = options[key];
-  return typeof value === 'boolean' ? value : fallback;
-}
-
-function getStringOption(
-  options: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = options[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
 
 export const userModule: CLIModule = {
   name: 'user',
@@ -113,7 +87,7 @@ export const userModule: CLIModule = {
             context: CommandContext,
             previousResult?: unknown,
           ) => {
-            const state = toAuthCheckState(previousResult);
+            const state = toObjectState<AuthCheckState>(previousResult, {});
             if (!state.hasToken) {
               console.log('No token available, skipping validation');
               return {
@@ -154,7 +128,7 @@ export const userModule: CLIModule = {
             context: CommandContext,
             previousResult?: unknown,
           ) => {
-            const state = toAuthCheckState(previousResult);
+            const state = toObjectState<AuthCheckState>(previousResult, {});
             if (!state.validated) {
               console.log('Session not valid, cannot get user info');
               return {
@@ -216,7 +190,7 @@ export const userModule: CLIModule = {
             context: CommandContext,
             previousResult?: unknown,
           ) => {
-            const state = toAuthCheckState(previousResult);
+            const state = toObjectState<AuthCheckState>(previousResult, {});
             if (state.validated) {
               console.log('✓ Authentication check completed successfully');
               return {
@@ -341,7 +315,7 @@ export const userModule: CLIModule = {
             context: CommandContext,
             previousResult?: unknown,
           ) => {
-            const state = toLoginFlowState(previousResult);
+            const state = toObjectState<LoginFlowState>(previousResult, {});
             if (state.alreadyLoggedIn) {
               console.log('Skipping login - user already authenticated');
               return {
@@ -355,11 +329,14 @@ export const userModule: CLIModule = {
 
             try {
               const loginArgs: string[] = [];
-              const email = getStringOption(context.options, 'email');
+              const email = getOptionalStringOption(context.options, 'email');
               if (email) {
                 loginArgs.push(email);
               }
-              const password = getStringOption(context.options, 'password');
+              const password = getOptionalStringOption(
+                context.options,
+                'password',
+              );
               if (password) {
                 loginArgs.push(password);
               }
@@ -394,7 +371,7 @@ export const userModule: CLIModule = {
             context: CommandContext,
             previousResult?: unknown,
           ) => {
-            const state = toLoginFlowState(previousResult);
+            const state = toObjectState<LoginFlowState>(previousResult, {});
             if (!state.loginSuccess && !state.alreadyLoggedIn) {
               console.log('Login failed, skipping validation');
               return {
@@ -452,7 +429,7 @@ export const userModule: CLIModule = {
             context: CommandContext,
             previousResult?: unknown,
           ) => {
-            const state = toLoginFlowState(previousResult);
+            const state = toObjectState<LoginFlowState>(previousResult, {});
             console.log('\n=== Login Flow Summary ===');
 
             if (state.alreadyLoggedIn) {

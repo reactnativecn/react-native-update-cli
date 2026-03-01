@@ -18,6 +18,122 @@ import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { t } from './utils/i18n';
 
+type PackageCommandOptions = Record<string, unknown> & {
+  version?: string;
+  includeAllSplits?: boolean | string;
+  splits?: string;
+  output?: string;
+};
+
+type PackageVersionRef = {
+  id?: string | number;
+  name?: string | number;
+};
+
+type NativePackageInfo = {
+  versionName?: string | number;
+  buildTime?: string | number;
+  appId?: string;
+  appKey?: string;
+  [key: string]: unknown;
+};
+
+type NativeUploadConfig = {
+  extension: '.ipa' | '.apk' | '.app';
+  platform: Platform;
+  appIdMismatchKey: string;
+  appKeyMismatchKey: string;
+  successKey: string;
+  getInfo: (filePath: string) => Promise<NativePackageInfo>;
+  normalizeBuildTime?: (
+    buildTime: NativePackageInfo['buildTime'],
+  ) => string | number | undefined;
+};
+
+function ensureFileByExt(
+  filePath: string | undefined,
+  extension: NativeUploadConfig['extension'] | '.aab',
+  usageKey: string,
+): string {
+  if (!filePath || !filePath.endsWith(extension)) {
+    throw new Error(t(usageKey));
+  }
+  return filePath;
+}
+
+function parseBooleanOption(value: unknown): boolean {
+  return value === true || value === 'true';
+}
+
+function parseCsvOption(value: unknown): string[] | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const parsed = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parsed.length > 0 ? parsed : null;
+}
+
+function getVersionBinding(version: unknown): PackageVersionRef | undefined {
+  if (!version || typeof version !== 'object') {
+    return undefined;
+  }
+
+  const v = version as PackageVersionRef;
+  return { id: v.id, name: v.name };
+}
+
+async function uploadNativePackage(
+  filePath: string,
+  options: PackageCommandOptions,
+  config: NativeUploadConfig,
+): Promise<void> {
+  const info = await config.getInfo(filePath);
+  const { versionName: extractedVersionName, buildTime } = info;
+  const { appId: appIdInPkg, appKey: appKeyInPkg } = info;
+  const { appId, appKey } = await getSelectedApp(config.platform);
+
+  if (appIdInPkg && appIdInPkg != appId) {
+    throw new Error(t(config.appIdMismatchKey, { appIdInPkg, appId }));
+  }
+
+  if (appKeyInPkg && appKeyInPkg !== appKey) {
+    throw new Error(t(config.appKeyMismatchKey, { appKeyInPkg, appKey }));
+  }
+
+  const customVersion =
+    typeof options.version === 'string' && options.version
+      ? options.version
+      : undefined;
+  const versionName = customVersion ?? extractedVersionName;
+  if (customVersion !== undefined) {
+    console.log(t('usingCustomVersion', { version: versionName }));
+  }
+
+  const { hash } = await uploadFile(filePath);
+  const normalizedBuildTime = config.normalizeBuildTime
+    ? config.normalizeBuildTime(buildTime)
+    : buildTime;
+
+  const { id } = await post(`/app/${appId}/package/create`, {
+    name: versionName,
+    hash,
+    buildTime: normalizedBuildTime,
+    deps: depVersions,
+    commit: await getCommitInfo(),
+  });
+  saveToLocal(filePath, `${appId}/package/${id}${config.extension}`);
+  console.log(
+    t(config.successKey, {
+      id,
+      version: versionName,
+      buildTime: normalizedBuildTime,
+    }),
+  );
+}
+
 export async function listPackage(appId: string) {
   const allPkgs = (await getAllPackages(appId)) || [];
 
@@ -30,10 +146,10 @@ export async function listPackage(appId: string) {
     const { version } = pkg;
     let versionInfo = '';
     if (version) {
-      const versionObj = version as any;
+      const versionObj = getVersionBinding(version);
       versionInfo = t('boundTo', {
-        name: versionObj.name || version,
-        id: versionObj.id || version,
+        name: versionObj?.name ?? version,
+        id: versionObj?.id ?? version,
       });
     }
     let output = pkg.name;
@@ -70,112 +186,51 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: Record<string, any>;
+    options: PackageCommandOptions;
   }) => {
-    const fn = args[0];
-    if (!fn || !fn.endsWith('.ipa')) {
-      throw new Error(t('usageUploadIpa'));
-    }
-    const ipaInfo = await getIpaInfo(fn);
-    const { versionName: extractedVersionName, buildTime } = ipaInfo;
-    const appIdInPkg = (ipaInfo as any).appId;
-    const appKeyInPkg = (ipaInfo as any).appKey;
-    const { appId, appKey } = await getSelectedApp('ios');
-
-    if (appIdInPkg && appIdInPkg != appId) {
-      throw new Error(t('appIdMismatchIpa', { appIdInPkg, appId }));
-    }
-
-    if (appKeyInPkg && appKeyInPkg !== appKey) {
-      throw new Error(t('appKeyMismatchIpa', { appKeyInPkg, appKey }));
-    }
-
-    // Use custom version if provided, otherwise use extracted version
-    const versionName = options.version || extractedVersionName;
-    if (options.version) {
-      console.log(t('usingCustomVersion', { version: versionName }));
-    }
-
-    const { hash } = await uploadFile(fn);
-
-    const { id } = await post(`/app/${appId}/package/create`, {
-      name: versionName,
-      hash,
-      buildTime,
-      deps: depVersions,
-      commit: await getCommitInfo(),
+    const fn = ensureFileByExt(args[0], '.ipa', 'usageUploadIpa');
+    await uploadNativePackage(fn, options, {
+      extension: '.ipa',
+      platform: 'ios',
+      appIdMismatchKey: 'appIdMismatchIpa',
+      appKeyMismatchKey: 'appKeyMismatchIpa',
+      successKey: 'ipaUploadSuccess',
+      getInfo: (filePath) => getIpaInfo(filePath),
     });
-    saveToLocal(fn, `${appId}/package/${id}.ipa`);
-    console.log(t('ipaUploadSuccess', { id, version: versionName, buildTime }));
   },
   uploadApk: async ({
     args,
     options,
   }: {
     args: string[];
-    options: Record<string, any>;
+    options: PackageCommandOptions;
   }) => {
-    const fn = args[0];
-    if (!fn || !fn.endsWith('.apk')) {
-      throw new Error(t('usageUploadApk'));
-    }
-    const apkInfo = await getApkInfo(fn);
-    const { versionName: extractedVersionName, buildTime } = apkInfo;
-    const appIdInPkg = (apkInfo as any).appId;
-    const appKeyInPkg = (apkInfo as any).appKey;
-    const { appId, appKey } = await getSelectedApp('android');
-
-    if (appIdInPkg && appIdInPkg != appId) {
-      throw new Error(t('appIdMismatchApk', { appIdInPkg, appId }));
-    }
-
-    if (appKeyInPkg && appKeyInPkg !== appKey) {
-      throw new Error(t('appKeyMismatchApk', { appKeyInPkg, appKey }));
-    }
-
-    // Use custom version if provided, otherwise use extracted version
-    const versionName = options.version || extractedVersionName;
-    if (options.version) {
-      console.log(t('usingCustomVersion', { version: versionName }));
-    }
-
-    const { hash } = await uploadFile(fn);
-
-    const { id } = await post(`/app/${appId}/package/create`, {
-      name: versionName,
-      hash,
-      buildTime,
-      deps: depVersions,
-      commit: await getCommitInfo(),
+    const fn = ensureFileByExt(args[0], '.apk', 'usageUploadApk');
+    await uploadNativePackage(fn, options, {
+      extension: '.apk',
+      platform: 'android',
+      appIdMismatchKey: 'appIdMismatchApk',
+      appKeyMismatchKey: 'appKeyMismatchApk',
+      successKey: 'apkUploadSuccess',
+      getInfo: (filePath) => getApkInfo(filePath),
     });
-    saveToLocal(fn, `${appId}/package/${id}.apk`);
-    console.log(t('apkUploadSuccess', { id, version: versionName, buildTime }));
   },
   uploadAab: async ({
     args,
     options,
   }: {
     args: string[];
-    options: Record<string, any>;
+    options: PackageCommandOptions;
   }) => {
-    const source = args[0];
-    if (!source || !source.endsWith('.aab')) {
-      throw new Error(t('usageUploadAab'));
-    }
+    const source = ensureFileByExt(args[0], '.aab', 'usageUploadAab');
 
     const output = path.join(
       os.tmpdir(),
       `${path.basename(source, path.extname(source))}-${Date.now()}.apk`,
     );
 
-    const includeAllSplits =
-      options.includeAllSplits === true || options.includeAllSplits === 'true';
-    const splits = options.splits
-      ? String(options.splits)
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean)
-      : null;
+    const includeAllSplits = parseBooleanOption(options.includeAllSplits);
+    const splits = parseCsvOption(options.splits);
 
     const parser = new AabParser(source);
     try {
@@ -198,43 +253,18 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: Record<string, any>;
+    options: PackageCommandOptions;
   }) => {
-    const fn = args[0];
-    if (!fn || !fn.endsWith('.app')) {
-      throw new Error(t('usageUploadApp'));
-    }
-    const appInfo = await getAppInfo(fn);
-    const { versionName: extractedVersionName, buildTime } = appInfo;
-    const appIdInPkg = (appInfo as any).appId;
-    const appKeyInPkg = (appInfo as any).appKey;
-    const { appId, appKey } = await getSelectedApp('harmony');
-
-    if (appIdInPkg && appIdInPkg != appId) {
-      throw new Error(t('appIdMismatchApp', { appIdInPkg, appId }));
-    }
-
-    if (appKeyInPkg && appKeyInPkg !== appKey) {
-      throw new Error(t('appKeyMismatchApp', { appKeyInPkg, appKey }));
-    }
-
-    // Use custom version if provided, otherwise use extracted version
-    const versionName = options.version || extractedVersionName;
-    if (options.version) {
-      console.log(t('usingCustomVersion', { version: versionName }));
-    }
-
-    const { hash } = await uploadFile(fn);
-
-    const { id } = await post(`/app/${appId}/package/create`, {
-      name: versionName,
-      hash,
-      buildTime: String(buildTime),
-      deps: depVersions,
-      commit: await getCommitInfo(),
+    const fn = ensureFileByExt(args[0], '.app', 'usageUploadApp');
+    await uploadNativePackage(fn, options, {
+      extension: '.app',
+      platform: 'harmony',
+      appIdMismatchKey: 'appIdMismatchApp',
+      appKeyMismatchKey: 'appKeyMismatchApp',
+      successKey: 'appUploadSuccess',
+      getInfo: (filePath) => getAppInfo(filePath),
+      normalizeBuildTime: (buildTime) => String(buildTime),
     });
-    saveToLocal(fn, `${appId}/package/${id}.app`);
-    console.log(t('appUploadSuccess', { id, version: versionName, buildTime }));
   },
   parseApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
@@ -269,12 +299,9 @@ export const packageCommands = {
     options,
   }: {
     args: string[];
-    options: Record<string, any>;
+    options: PackageCommandOptions;
   }) => {
-    const source = args[0];
-    if (!source || !source.endsWith('.aab')) {
-      throw new Error(t('usageExtractApk'));
-    }
+    const source = ensureFileByExt(args[0], '.aab', 'usageExtractApk');
 
     const output =
       options.output ||
@@ -283,14 +310,8 @@ export const packageCommands = {
         `${path.basename(source, path.extname(source))}.apk`,
       );
 
-    const includeAllSplits =
-      options.includeAllSplits === true || options.includeAllSplits === 'true';
-    const splits = options.splits
-      ? String(options.splits)
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean)
-      : null;
+    const includeAllSplits = parseBooleanOption(options.includeAllSplits);
+    const splits = parseCsvOption(options.splits);
 
     const parser = new AabParser(source);
     await parser.extractApk(output, {
@@ -355,10 +376,9 @@ export const packageCommands = {
     try {
       await doDelete(`/app/${appId}/package/${packageId}`);
       console.log(t('deletePackageSuccess', { packageId }));
-    } catch (error: any) {
-      throw new Error(
-        t('deletePackageError', { packageId, error: error.message }),
-      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(t('deletePackageError', { packageId, error: message }));
     }
   },
 };
