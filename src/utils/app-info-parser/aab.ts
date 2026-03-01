@@ -10,13 +10,6 @@ import { ManifestParser } from './xml-parser/manifest';
 import { Zip } from './zip';
 
 export class AabParser extends Zip {
-  file: string | File;
-
-  constructor(file: string | File) {
-    super(file);
-    this.file = file;
-  }
-
   async extractApk(
     outputPath: string,
     {

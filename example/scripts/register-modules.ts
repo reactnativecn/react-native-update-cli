@@ -22,17 +22,17 @@ async function main() {
     // 2. 列出所有可用的命令
     console.log('📋 可用命令列表:');
     const commands = moduleManager.listCommands();
-    commands.forEach((cmd) => {
+    for (const cmd of commands) {
       console.log(`  - ${cmd.name}: ${cmd.description || '无描述'}`);
-    });
+    }
     console.log();
 
     // 3. 列出所有可用的工作流
     console.log('🔄 可用工作流列表:');
     const workflows = moduleManager.listWorkflows();
-    workflows.forEach((workflow) => {
+    for (const workflow of workflows) {
       console.log(`  - ${workflow.name}: ${workflow.description || '无描述'}`);
-    });
+    }
     console.log();
 
     // 4. 执行自定义命令示例

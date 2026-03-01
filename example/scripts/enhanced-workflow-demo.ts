@@ -14,13 +14,13 @@ async function registerEnhancedWorkflows() {
   const provider = moduleManager.getProvider();
 
   // 注册所有增强核心工作流
-  enhancedCoreWorkflows.forEach((workflow) => {
+  for (const workflow of enhancedCoreWorkflows) {
     provider.registerWorkflow(workflow);
     console.log(`✅ 注册工作流: ${workflow.name}`);
     console.log(`   描述: ${workflow.description}`);
     console.log(`   步骤数: ${workflow.steps.length}`);
     console.log();
-  });
+  }
 
   console.log('📋 所有增强核心工作流注册完成\n');
 }
@@ -67,7 +67,7 @@ async function demonstrateAppWorkflows() {
     );
   }
 
-  console.log('\\n' + '-'.repeat(40));
+  console.log(`\\n${'-'.repeat(40)}`);
 
   // 2. 多平台应用管理工作流
   console.log('\\n🌍 多平台应用管理工作流演示');
@@ -99,7 +99,7 @@ async function demonstrateAppWorkflows() {
     );
   }
 
-  console.log('\\n' + '='.repeat(70) + '\\n');
+  console.log(`\\n${'='.repeat(70)}\\n`);
 }
 
 /**
@@ -130,11 +130,11 @@ async function demonstrateBundleWorkflows() {
     console.log('\\n📊 智能打包结果:');
     if (bundleResult.data?.buildResults) {
       const builds = bundleResult.data.buildResults;
-      builds.forEach((build: any) => {
+      for (const build of builds as Array<Record<string, unknown>>) {
         console.log(
           `${build.platform}: ${build.success ? '✅ 成功' : '❌ 失败'} (${build.buildTime}s, ${build.bundleSize}MB)`,
         );
-      });
+      }
     }
 
     if (bundleResult.data?.averageScore) {
@@ -147,7 +147,7 @@ async function demonstrateBundleWorkflows() {
     );
   }
 
-  console.log('\\n' + '-'.repeat(40));
+  console.log(`\\n${'-'.repeat(40)}`);
 
   // 2. 增量构建工作流
   console.log('\\n🔄 增量构建工作流演示');
@@ -186,7 +186,7 @@ async function demonstrateBundleWorkflows() {
     );
   }
 
-  console.log('\\n' + '='.repeat(70) + '\\n');
+  console.log(`\\n${'='.repeat(70)}\\n`);
 }
 
 /**
@@ -223,9 +223,11 @@ async function demonstratePackageWorkflows() {
 
       if (report.failedOperations.length > 0) {
         console.log('\\n❌ 失败操作:');
-        report.failedOperations.forEach((op: any) => {
+        for (const op of report.failedOperations as Array<
+          Record<string, unknown>
+        >) {
           console.log(`  ${op.operation}: ${op.file}`);
-        });
+        }
       }
     }
   } catch (error) {
@@ -235,7 +237,7 @@ async function demonstratePackageWorkflows() {
     );
   }
 
-  console.log('\\n' + '='.repeat(70) + '\\n');
+  console.log(`\\n${'='.repeat(70)}\\n`);
 }
 
 /**
@@ -290,7 +292,7 @@ async function demonstrateVersionWorkflows() {
     );
   }
 
-  console.log('\\n' + '='.repeat(70) + '\\n');
+  console.log(`\\n${'='.repeat(70)}\\n`);
 }
 
 /**
@@ -378,7 +380,7 @@ async function demonstrateWorkflowComposition() {
     );
   }
 
-  console.log('\\n' + '='.repeat(70) + '\\n');
+  console.log(`\\n${'='.repeat(70)}\\n`);
 }
 
 /**
@@ -429,19 +431,19 @@ async function listEnhancedWorkflows() {
     ],
   };
 
-  Object.entries(workflowCategories).forEach(([category, workflows]) => {
+  for (const [category, workflows] of Object.entries(workflowCategories)) {
     console.log(`\\n📂 ${category}:`);
     console.log('-'.repeat(50));
 
-    workflows.forEach((workflow, index) => {
+    for (const [index, workflow] of workflows.entries()) {
       console.log(`${index + 1}. ${workflow.name}`);
       console.log(`   描述: ${workflow.description}`);
       console.log(`   用途: ${workflow.useCase}`);
       console.log();
-    });
-  });
+    }
+  }
 
-  console.log('='.repeat(70) + '\\n');
+  console.log(`${'='.repeat(70)}\\n`);
 }
 
 /**

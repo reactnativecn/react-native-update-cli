@@ -1,19 +1,16 @@
-import { decodeNullUnicode } from './utils';
 import path from 'path';
+import { decodeNullUnicode } from './utils';
 
 const Unzip = require('isomorphic-unzip');
 
 import { enumZipEntries, readEntry } from '../zip-entries';
 
 export class Zip {
-  file: string;
+  file: string | File;
   unzip: any;
 
-  constructor(file: string) {
-    if (typeof file !== 'string') {
-      throw new Error('Param error: [file] must be file path in Node.');
-    }
-    this.file = path.resolve(file);
+  constructor(file: string | File) {
+    this.file = typeof file === 'string' ? path.resolve(file) : file;
     this.unzip = new Unzip(this.file);
   }
 
@@ -56,16 +53,17 @@ export class Zip {
     });
   }
 
-  async getEntryFromHarmonyApp(regex: RegExp) {
+  async getEntryFromHarmonyApp(
+    regex: RegExp,
+  ): Promise<Buffer | Blob | undefined> {
     try {
       let originSource: Buffer | Blob | undefined;
-      await enumZipEntries(this.file, (entry: any, zipFile: any) => {
+      if (typeof this.file !== 'string') {
+        throw new Error('Param error: [file] must be file path in Node.');
+      }
+      await enumZipEntries(this.file, async (entry, zipFile) => {
         if (regex.test(entry.fileName)) {
-          return readEntry(entry, zipFile).then(
-            (value: Buffer | Blob | undefined) => {
-              originSource = value;
-            },
-          );
+          originSource = await readEntry(entry, zipFile);
         }
       });
       return originSource;

@@ -2,7 +2,9 @@ import { CLIProviderImpl } from './provider';
 import type {
   CLIModule,
   CLIProvider,
+  CommandContext,
   CommandDefinition,
+  CommandResult,
   CustomWorkflow,
 } from './types';
 
@@ -97,7 +99,10 @@ export class ModuleManager {
     return Array.from(this.modules.values());
   }
 
-  async executeCommand(commandName: string, context: any): Promise<any> {
+  async executeCommand(
+    commandName: string,
+    context: CommandContext,
+  ): Promise<CommandResult> {
     const command = this.commands.get(commandName);
     if (!command) {
       throw new Error(`Command '${commandName}' not found`);
@@ -106,7 +111,10 @@ export class ModuleManager {
     return await command.handler(context);
   }
 
-  async executeWorkflow(workflowName: string, context: any): Promise<any> {
+  async executeWorkflow(
+    workflowName: string,
+    context: CommandContext,
+  ): Promise<CommandResult> {
     return await this.provider.executeWorkflow(workflowName, context);
   }
 
@@ -114,7 +122,7 @@ export class ModuleManager {
     return this.provider;
   }
 
-  listCommands(): any[] {
+  listCommands(): CommandDefinition[] {
     return Array.from(this.commands.values());
   }
 

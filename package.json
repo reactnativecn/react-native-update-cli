@@ -2,16 +2,29 @@
   "name": "react-native-update-cli",
   "version": "2.8.5",
   "description": "command line tool for react-native-update (remote updates for react native)",
-  "main": "index.js",
+  "main": "lib/exports.js",
+  "types": "lib/exports.d.ts",
   "bin": {
     "pushy": "lib/index.js",
     "cresc": "lib/index.js"
   },
+  "exports": {
+    ".": {
+      "types": "./lib/exports.d.ts",
+      "require": "./lib/exports.js",
+      "default": "./lib/exports.js"
+    },
+    "./cli": {
+      "types": "./lib/index.d.ts",
+      "require": "./lib/index.js",
+      "default": "./lib/index.js"
+    }
+  },
   "files": ["lib", "src", "proto", "cli.json"],
   "scripts": {
-    "build": "swc src -d lib --strip-leading-paths",
-    "prepublishOnly": "bun scripts/prepublish.js && bun run build && chmod +x lib/index.js",
-    "lint": "tsc --noEmit & biome check --write ."
+    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && tsc -p tsconfig.build.json",
+    "prepublishOnly": "bun scripts/prepublish.ts && bun run build && chmod +x lib/index.js",
+    "lint": "tsc --noEmit && biome check --write ."
   },
   "repository": {
     "type": "git",

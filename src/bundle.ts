@@ -8,13 +8,13 @@ import { translateOptions } from './utils';
 import { checkPlugins, question } from './utils';
 const g2js = require('gradle-to-js/lib/parser');
 const properties = require('properties');
+import os from 'os';
 import { addGitIgnore } from './utils/add-gitignore';
 import { checkLockFiles } from './utils/check-lockfile';
 import { tempDir } from './utils/constants';
 import { depVersions } from './utils/dep-versions';
 import { t } from './utils/i18n';
 import { versionCommands } from './versions';
-import os from 'os';
 
 async function runReactNativeBundleCommand({
   bundleName,
@@ -226,7 +226,10 @@ async function runReactNativeBundleCommand({
             properties.parse(
               './android/gradle.properties',
               { path: true },
-              (error: any, props: { hermesEnabled?: boolean }) => {
+              (
+                error: Error | null,
+                props: { hermesEnabled?: boolean } = {},
+              ) => {
                 if (error) {
                   console.error(error);
                   resolve({});
@@ -500,7 +503,7 @@ async function pack(dir: string, output: string) {
 
     addDirectory(dir, '');
 
-    zipfile.outputStream.on('error', (err: any) => reject(err));
+    zipfile.outputStream.on('error', (err: unknown) => reject(err));
     zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
       resolve(void 0);
     });
@@ -509,36 +512,122 @@ async function pack(dir: string, output: string) {
   console.log(t('fileGenerated', { file: output }));
 }
 
-export const bundleCommands = {
-  bundle: async ({ options }) => {
-    const platform = await getPlatform(options.platform);
+function getBooleanOption(
+  options: Record<string, unknown>,
+  key: string,
+  fallback = false,
+): boolean {
+  const value = options[key];
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    return value.toLowerCase() === 'true';
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  return fallback;
+}
 
-    const {
-      bundleName,
-      entryFile,
-      intermediaDir,
-      output,
-      dev,
-      sourcemap,
-      taro,
-      expo,
-      rncli,
-      hermes,
-      name,
-      description,
-      metaInfo,
-      packageId,
-      packageVersion,
-      minPackageVersion,
-      maxPackageVersion,
-      packageVersionRange,
-      rollout,
-      dryRun,
-    } = translateOptions({
+function getStringOption(
+  options: Record<string, unknown>,
+  key: string,
+  fallback = '',
+): string {
+  const value = options[key];
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return fallback;
+}
+
+function getOptionalStringOption(
+  options: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = options[key];
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return undefined;
+}
+
+export const bundleCommands = {
+  bundle: async ({
+    options,
+  }: {
+    args?: string[];
+    options: Record<string, unknown>;
+  }) => {
+    const platform = await getPlatform(
+      typeof options.platform === 'string' ? options.platform : undefined,
+    );
+
+    const translatedOptions = translateOptions({
       ...options,
       tempDir,
       platform,
     });
+    const bundleName = getStringOption(
+      translatedOptions,
+      'bundleName',
+      'index.bundlejs',
+    );
+    const entryFile = getStringOption(
+      translatedOptions,
+      'entryFile',
+      'index.js',
+    );
+    const intermediaDir = getStringOption(
+      translatedOptions,
+      'intermediaDir',
+      `${tempDir}/intermedia/${platform}`,
+    );
+    const output = getStringOption(
+      translatedOptions,
+      'output',
+      `${tempDir}/output/${platform}.${Date.now()}.ppk`,
+    );
+    const dev = getBooleanOption(translatedOptions, 'dev', false)
+      ? 'true'
+      : 'false';
+    const sourcemap = getBooleanOption(translatedOptions, 'sourcemap', false);
+    const taro = getBooleanOption(translatedOptions, 'taro', false);
+    const expo = getBooleanOption(translatedOptions, 'expo', false);
+    const rncli = getBooleanOption(translatedOptions, 'rncli', false);
+    const hermes = getBooleanOption(translatedOptions, 'hermes', false);
+    const name = getOptionalStringOption(translatedOptions, 'name');
+    const description = getOptionalStringOption(
+      translatedOptions,
+      'description',
+    );
+    const metaInfo = getOptionalStringOption(translatedOptions, 'metaInfo');
+    const packageId = getOptionalStringOption(translatedOptions, 'packageId');
+    const packageVersion = getOptionalStringOption(
+      translatedOptions,
+      'packageVersion',
+    );
+    const minPackageVersion = getOptionalStringOption(
+      translatedOptions,
+      'minPackageVersion',
+    );
+    const maxPackageVersion = getOptionalStringOption(
+      translatedOptions,
+      'maxPackageVersion',
+    );
+    const packageVersionRange = getOptionalStringOption(
+      translatedOptions,
+      'packageVersionRange',
+    );
+    const rollout = getOptionalStringOption(translatedOptions, 'rollout');
+    const dryRun = getBooleanOption(translatedOptions, 'dryRun', false);
 
     checkLockFiles();
     addGitIgnore();
@@ -564,11 +653,11 @@ export const bundleCommands = {
       outputFolder: intermediaDir,
       platform,
       sourcemapOutput: sourcemap || sourcemapPlugin ? sourcemapOutput : '',
-      forceHermes: hermes as unknown as boolean,
+      forceHermes: hermes,
       cli: {
-        taro: !!taro,
-        expo: !!expo,
-        rncli: !!rncli,
+        taro,
+        expo,
+        rncli,
       },
     });
 
@@ -601,7 +690,7 @@ export const bundleCommands = {
           versionName,
         );
       }
-    } else if (!options['no-interactive']) {
+    } else if (!getBooleanOption(options, 'no-interactive', false)) {
       const v = await question(t('uploadBundlePrompt'));
       if (v.toLowerCase() === 'y') {
         const versionName = await versionCommands.publish({

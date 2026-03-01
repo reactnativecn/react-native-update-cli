@@ -34,7 +34,7 @@ export async function enumZipEntries(
     entry: Entry,
     zipFile: YauzlZipFile,
     nestedPath?: string,
-  ) => Promise<any>,
+  ) => Promise<any> | undefined,
   nestedPath = '',
 ) {
   return new Promise((resolve, reject) => {

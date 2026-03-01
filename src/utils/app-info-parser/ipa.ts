@@ -61,7 +61,7 @@ export class IpaParser extends Zip {
   private _parsePlist(buffer: Buffer) {
     let result: any;
     const bufferType = buffer[0];
-    if (bufferType === 60 || bufferType === '<' || bufferType === 239) {
+    if (bufferType === 60 || bufferType === 239) {
       result = parsePlist(buffer.toString());
     } else if (bufferType === 98) {
       result = parseBplist(buffer)[0];

@@ -45,7 +45,6 @@ async function main(): Promise<void> {
     console.error('❌ Prepublish script failed:', error);
     process.exit(1);
   }
-
 }
 
 main();

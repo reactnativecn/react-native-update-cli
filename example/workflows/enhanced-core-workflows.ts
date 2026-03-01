@@ -301,7 +301,9 @@ export const multiPlatformAppManagementWorkflow: CustomWorkflow = {
 
         if (analysis.issues.length > 0) {
           console.log('⚠️ 发现问题:');
-          analysis.issues.forEach((issue) => console.log(`    - ${issue}`));
+          for (const issue of analysis.issues) {
+            console.log(`    - ${issue}`);
+          }
         }
 
         return { ...previousResult, analysis };
@@ -440,7 +442,9 @@ export const intelligentBundleWorkflow: CustomWorkflow = {
 
         if (recommendations.length > 0) {
           console.log('💡 优化建议:');
-          recommendations.forEach((rec) => console.log(`  - ${rec}`));
+          for (const rec of recommendations) {
+            console.log(`  - ${rec}`);
+          }
         }
 
         return { ...previousResult, projectInfo, recommendations };
@@ -464,9 +468,9 @@ export const intelligentBundleWorkflow: CustomWorkflow = {
         };
 
         console.log('🔧 优化配置:');
-        Object.entries(optimizations).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(optimizations)) {
           console.log(`  ${key}: ${value ? '✅' : '❌'}`);
-        });
+        }
 
         return { ...previousResult, optimizations };
       },
@@ -689,7 +693,7 @@ export const incrementalBuildWorkflow: CustomWorkflow = {
           size: Math.floor(Math.random() * 12) + 8,
         };
 
-        console.log(`✅ 基准版本下载完成`);
+        console.log('✅ 基准版本下载完成');
 
         return { ...previousResult, baseBuild };
       },
@@ -733,7 +737,7 @@ export const incrementalBuildWorkflow: CustomWorkflow = {
           (1 - diffPackage.diffSize / diffPackage.originalSize) * 100,
         );
 
-        console.log(`✅ 差异包生成完成`);
+        console.log('✅ 差异包生成完成');
         console.log(`   原始大小: ${diffPackage.originalSize}MB`);
         console.log(`   差异包大小: ${diffPackage.diffSize}MB`);
         console.log(`   压缩比: ${diffPackage.compressionRatio}%`);
@@ -866,9 +870,9 @@ export const batchPackageProcessingWorkflow: CustomWorkflow = {
         ];
 
         console.log(`✅ 发现 ${packages.length} 个包文件:`);
-        packages.forEach((pkg) => {
+        for (const pkg of packages) {
           console.log(`  ${pkg.path} (${pkg.size}MB, ${pkg.platform})`);
-        });
+        }
 
         return { packages, scanned: true };
       },
@@ -916,15 +920,17 @@ export const batchPackageProcessingWorkflow: CustomWorkflow = {
         console.log(`  总大小: ${analysis.totalSize.toFixed(1)}MB`);
         console.log(`  版本数: ${analysis.versions.size}`);
         console.log('  平台分布:');
-        Object.entries(analysis.platformDistribution).forEach(
-          ([platform, count]) => {
-            console.log(`    ${platform}: ${count} 个`);
-          },
-        );
+        for (const [platform, count] of Object.entries(
+          analysis.platformDistribution,
+        )) {
+          console.log(`    ${platform}: ${count} 个`);
+        }
 
         if (analysis.issues.length > 0) {
           console.log('⚠️ 发现问题:');
-          analysis.issues.forEach((issue) => console.log(`    - ${issue}`));
+          for (const issue of analysis.issues) {
+            console.log(`    - ${issue}`);
+          }
         }
 
         return { ...previousResult, analysis };
@@ -969,13 +975,13 @@ export const batchPackageProcessingWorkflow: CustomWorkflow = {
           parseResults.push(parseResult);
 
           if (parseResult.success) {
-            console.log(`  ✅ 解析成功`);
+            console.log('  ✅ 解析成功');
             console.log(`     Bundle ID: ${parseResult.appInfo.bundleId}`);
             console.log(
               `     版本: ${parseResult.appInfo.version} (${parseResult.appInfo.buildNumber})`,
             );
           } else {
-            console.log(`  ❌ 解析失败`);
+            console.log('  ❌ 解析失败');
           }
         }
 
@@ -1021,7 +1027,7 @@ export const batchPackageProcessingWorkflow: CustomWorkflow = {
           if (uploadResult.success) {
             console.log(`  ✅ 上传成功，包ID: ${uploadResult.packageId}`);
           } else {
-            console.log(`  ❌ 上传失败`);
+            console.log('  ❌ 上传失败');
           }
         }
 
@@ -1073,9 +1079,9 @@ export const batchPackageProcessingWorkflow: CustomWorkflow = {
 
         if (report.failedOperations.length > 0) {
           console.log('\\n❌ 失败操作:');
-          report.failedOperations.forEach((op) => {
+          for (const op of report.failedOperations) {
             console.log(`  ${op.operation}: ${op.file}`);
-          });
+          }
         }
 
         console.log('='.repeat(50));
@@ -1238,11 +1244,11 @@ export const versionReleaseManagementWorkflow: CustomWorkflow = {
         };
 
         console.log('🔧 发布配置:');
-        Object.entries(releaseConfig).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(releaseConfig)) {
           if (value !== undefined) {
             console.log(`  ${key}: ${value}`);
           }
-        });
+        }
 
         console.log('✅ 发布准备完成');
 
@@ -1317,7 +1323,7 @@ export const versionReleaseManagementWorkflow: CustomWorkflow = {
 
         const releaseId = Math.random().toString(36).substr(2, 10);
 
-        console.log(`✅ 版本发布成功`);
+        console.log('✅ 版本发布成功');
         console.log(`   发布ID: ${releaseId}`);
         console.log(`   版本: ${versionInfo.name}`);
         console.log(`   覆盖率: ${releaseConfig.rollout}%`);
@@ -1403,7 +1409,9 @@ export const versionReleaseManagementWorkflow: CustomWorkflow = {
 
         if (alerts.length > 0) {
           console.log('\\n⚠️ 监控警告:');
-          alerts.forEach((alert) => console.log(`  - ${alert}`));
+          for (const alert of alerts) {
+            console.log(`  - ${alert}`);
+          }
         } else {
           console.log('\\n✅ 所有监控指标正常');
         }
@@ -1435,7 +1443,7 @@ export const versionReleaseManagementWorkflow: CustomWorkflow = {
           monitoring,
         } = previousResult;
 
-        console.log('\\n' + '='.repeat(60));
+        console.log(`\\n${'='.repeat(60)}`);
         console.log('📊 版本发布总结');
         console.log('='.repeat(60));
 
@@ -1447,13 +1455,13 @@ export const versionReleaseManagementWorkflow: CustomWorkflow = {
         if (dryRun) {
           console.log('状态: 模拟发布 ✅');
         } else if (released) {
-          console.log(`状态: 发布成功 ✅`);
+          console.log('状态: 发布成功 ✅');
           console.log(`发布ID: ${releaseId}`);
 
           if (monitoring && !monitoring.allMetricsHealthy) {
-            console.log(`监控状态: 有警告 ⚠️`);
+            console.log('监控状态: 有警告 ⚠️');
           } else if (monitoring) {
-            console.log(`监控状态: 正常 ✅`);
+            console.log('监控状态: 正常 ✅');
           }
         } else {
           console.log('状态: 发布失败 ❌');

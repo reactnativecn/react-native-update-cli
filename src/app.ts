@@ -6,7 +6,13 @@ import { doDelete, get, post } from './api';
 import type { Platform } from './types';
 import { t } from './utils/i18n';
 
-const validPlatforms = ['ios', 'android', 'harmony'];
+interface AppSummary {
+  id: number;
+  name: string;
+  platform: Platform;
+}
+
+const validPlatforms = ['ios', 'android', 'harmony'] as const;
 
 export async function getPlatform(platform?: string) {
   return assertPlatform(
@@ -14,11 +20,11 @@ export async function getPlatform(platform?: string) {
   ) as Platform;
 }
 
-export function assertPlatform(platform: string) {
-  if (!validPlatforms.includes(platform)) {
+export function assertPlatform(platform: string): Platform {
+  if (!validPlatforms.includes(platform as Platform)) {
     throw new Error(t('unsupportedPlatform', { platform }));
   }
-  return platform;
+  return platform as Platform;
 }
 
 export function getSelectedApp(platform: Platform) {
@@ -36,7 +42,10 @@ export function getSelectedApp(platform: Platform) {
 
 export async function listApp(platform: Platform | '' = '') {
   const { data } = await get('/app/list');
-  const list = platform ? data.filter((v) => v.platform === platform) : data;
+  const allApps = data as AppSummary[];
+  const list = platform
+    ? allApps.filter((app: AppSummary) => app.platform === platform)
+    : allApps;
 
   const header = [
     { value: t('appId') },
@@ -59,7 +68,7 @@ export async function chooseApp(platform: Platform) {
 
   while (true) {
     const id = await question(t('enterAppIdQuestion'));
-    const app = list.find((v) => v.id === Number(id));
+    const app = list.find((item: AppSummary) => item.id === Number(id));
     if (app) {
       return app;
     }
@@ -70,7 +79,7 @@ export const appCommands = {
   createApp: async function ({
     options,
   }: {
-    options: { name: string; downloadUrl: string; platform: Platform };
+    options: { name: string; downloadUrl: string; platform?: Platform | '' };
   }) {
     const name = options.name || (await question(t('appNameQuestion')));
     const { downloadUrl } = options;
@@ -97,16 +106,16 @@ export const appCommands = {
     await doDelete(`/app/${id}`);
     console.log(t('operationSuccess'));
   },
-  apps: async ({ options }: { options: { platform: Platform } }) => {
-    const { platform } = options;
-    listApp(platform);
+  apps: async ({ options }: { options: { platform?: Platform | '' } }) => {
+    const { platform = '' } = options;
+    await listApp(platform);
   },
   selectApp: async ({
     args,
     options,
   }: {
     args: string[];
-    options: { platform: Platform };
+    options: { platform?: Platform | '' };
   }) => {
     const platform = await getPlatform(options.platform);
     const id = args[0]

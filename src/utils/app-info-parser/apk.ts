@@ -8,10 +8,13 @@ const ResourceName = /^resources\.arsc$/;
 
 export class ApkParser extends Zip {
   parse(): Promise<any> {
+    const manifestKey = ManifestName.toString();
+    const resourceKey = ResourceName.toString();
+
     return new Promise((resolve, reject) => {
       this.getEntries([ManifestName, ResourceName])
-        .then((buffers: any) => {
-          const manifestBuffer = buffers[ManifestName];
+        .then((buffers: Record<string, Buffer | Blob | undefined>) => {
+          const manifestBuffer = buffers[manifestKey];
           if (!manifestBuffer) {
             throw new Error("AndroidManifest.xml can't be found.");
           }
@@ -20,19 +23,19 @@ export class ApkParser extends Zip {
 
           apkInfo = this._parseManifest(manifestBuffer as Buffer);
 
-          if (!buffers[ResourceName]) {
+          if (!buffers[resourceKey]) {
             resolve(apkInfo);
           } else {
             resourceMap = this._parseResourceMap(
-              buffers[ResourceName] as Buffer,
+              buffers[resourceKey] as Buffer,
             );
             apkInfo = mapInfoResource(apkInfo, resourceMap);
 
             const iconPath = findApkIconPath(apkInfo);
             if (iconPath) {
               this.getEntry(iconPath)
-                .then((iconBuffer: Buffer | null) => {
-                  apkInfo.icon = iconBuffer
+                .then((iconBuffer: Buffer | Blob | undefined) => {
+                  apkInfo.icon = Buffer.isBuffer(iconBuffer)
                     ? getBase64FromBuffer(iconBuffer)
                     : null;
                   resolve(apkInfo);

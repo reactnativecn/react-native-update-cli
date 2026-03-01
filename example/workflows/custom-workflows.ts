@@ -537,9 +537,9 @@ export const rollbackWorkflow: CustomWorkflow = {
         };
 
         console.log('📬 发送通知给:');
-        notification.notifiedStakeholders.forEach((stakeholder) => {
+        for (const stakeholder of notification.notifiedStakeholders) {
           console.log(`  - ${stakeholder}`);
-        });
+        }
 
         await new Promise((resolve) => setTimeout(resolve, 500));
 

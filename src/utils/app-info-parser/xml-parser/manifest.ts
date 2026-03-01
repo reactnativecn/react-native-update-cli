@@ -15,7 +15,9 @@ export class ManifestParser {
 
   private collapseAttributes(element: any) {
     const collapsed: Record<string, any> = Object.create(null);
-    for (const attr of Array.from(element.attributes)) {
+    for (const attr of Array.from(
+      element.attributes as Array<{ name: string; typedValue: { value: any } }>,
+    )) {
       collapsed[attr.name] = attr.typedValue.value;
     }
     return collapsed;

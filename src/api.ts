@@ -9,7 +9,7 @@ import tcpp from 'tcp-ping';
 import { getBaseUrl } from 'utils/http-helper';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
-import { credentialFile, pricingPageUrl, IS_CRESC } from './utils/constants';
+import { IS_CRESC, credentialFile, pricingPageUrl } from './utils/constants';
 import { t } from './utils/i18n';
 
 const tcpPing = util.promisify(tcpp.ping);

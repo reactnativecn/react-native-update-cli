@@ -11,6 +11,9 @@ const isPrimitive = (value: unknown): boolean =>
   value === null ||
   ['boolean', 'number', 'string', 'undefined'].includes(objectType(value));
 
+const isBrowser = (): boolean =>
+  typeof window !== 'undefined' && typeof window.document !== 'undefined';
+
 /**
  * map file place with resourceMap
  * @param {Object} apkInfo // json info parsed from .apk file

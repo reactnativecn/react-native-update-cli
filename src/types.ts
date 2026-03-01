@@ -16,8 +16,8 @@ export interface Package {
   status?: string;
   appId?: string;
   appKey?: string;
-  versionName?: any;
-  buildTime?: any;
+  versionName?: string | number | null;
+  buildTime?: string | number | null;
   deps?: Record<string, string> | string | null;
 }
 
@@ -29,9 +29,11 @@ export interface Version {
   deps?: Record<string, string> | string | null;
 }
 
-export interface CommandContext {
+export interface CommandContext<
+  TOptions extends Record<string, unknown> = Record<string, unknown>,
+> {
   args: string[];
-  options: Record<string, any>;
+  options: TOptions;
   platform?: Platform;
   appId?: string;
   session?: Session;
@@ -39,7 +41,7 @@ export interface CommandContext {
 
 export interface CommandResult {
   success: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
 }
 
@@ -51,7 +53,7 @@ export interface CommandDefinition {
     string,
     {
       hasValue?: boolean;
-      default?: any;
+      default?: unknown;
       description?: string;
     }
   >;
@@ -93,7 +95,10 @@ export interface UploadOptions {
 export interface WorkflowStep {
   name: string;
   description?: string;
-  execute: (context: CommandContext, previousResult?: any) => Promise<any>;
+  execute: (
+    context: CommandContext,
+    previousResult?: unknown,
+  ) => Promise<unknown>;
   condition?: (context: CommandContext) => boolean;
 }
 
@@ -106,7 +111,7 @@ export interface CustomWorkflow {
     string,
     {
       hasValue?: boolean;
-      default?: any;
+      default?: unknown;
       description?: string;
     }
   >;

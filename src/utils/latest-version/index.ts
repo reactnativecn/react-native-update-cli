@@ -363,7 +363,8 @@ const getInstalledVersion = (
     if (location === 'globalNpm') {
       return require(join(npm.packages, pkgName, 'package.json'))
         ?.version as string;
-    } else if (location === 'globalYarn') {
+    }
+    if (location === 'globalYarn') {
       // Make sure package is globally installed by Yarn
       const yarnGlobalPkg = require(
         pathResolve(yarn.packages, '..', 'package.json'),
@@ -373,25 +374,24 @@ const getInstalledVersion = (
       }
       return require(join(yarn.packages, pkgName, 'package.json'))
         ?.version as string;
-    } else {
-      /**
-       * Compute the local paths manually as require.resolve() and require.resolve.paths()
-       * cannot be trusted anymore.
-       * @see https://github.com/nodejs/node/issues/33460
-       * @see https://github.com/nodejs/loaders/issues/26
-       */
-      const { root } = parse(process.cwd());
-      let path = process.cwd();
-      const localPaths = [join(path, 'node_modules')];
-      while (path !== root) {
-        path = dirname(path);
-        localPaths.push(join(path, 'node_modules'));
-      }
-      for (const localPath of localPaths) {
-        const pkgPath = join(localPath, pkgName, 'package.json');
-        if (existsSync(pkgPath)) {
-          return require(pkgPath)?.version as string;
-        }
+    }
+    /**
+     * Compute the local paths manually as require.resolve() and require.resolve.paths()
+     * cannot be trusted anymore.
+     * @see https://github.com/nodejs/node/issues/33460
+     * @see https://github.com/nodejs/loaders/issues/26
+     */
+    const { root } = parse(process.cwd());
+    let path = process.cwd();
+    const localPaths = [join(path, 'node_modules')];
+    while (path !== root) {
+      path = dirname(path);
+      localPaths.push(join(path, 'node_modules'));
+    }
+    for (const localPath of localPaths) {
+      const pkgPath = join(localPath, pkgName, 'package.json');
+      if (existsSync(pkgPath)) {
+        return require(pkgPath)?.version as string;
       }
     }
     return undefined;

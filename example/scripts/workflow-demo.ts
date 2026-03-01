@@ -14,10 +14,10 @@ async function registerCustomWorkflows() {
   const provider = moduleManager.getProvider();
 
   // 注册所有自定义工作流
-  customWorkflows.forEach((workflow) => {
+  for (const workflow of customWorkflows) {
     provider.registerWorkflow(workflow);
     console.log(`✅ 注册工作流: ${workflow.name} - ${workflow.description}`);
-  });
+  }
 
   console.log('\n📋 所有工作流注册完成\n');
 }
@@ -45,7 +45,7 @@ async function demonstrateCanaryDeployment() {
     console.error('❌ 灰度发布工作流执行失败:', error);
   }
 
-  console.log('\n' + '='.repeat(60) + '\n');
+  console.log(`\n${'='.repeat(60)}\n`);
 }
 
 /**
@@ -71,7 +71,7 @@ async function demonstrateMultiEnvironmentDeploy() {
     console.error('❌ 多环境发布工作流执行失败:', error);
   }
 
-  console.log('\n' + '='.repeat(60) + '\n');
+  console.log(`\n${'='.repeat(60)}\n`);
 }
 
 /**
@@ -96,7 +96,7 @@ async function demonstrateRollbackWorkflow() {
     console.error('❌ 回滚工作流执行失败:', error);
   }
 
-  console.log('\n' + '='.repeat(60) + '\n');
+  console.log(`\n${'='.repeat(60)}\n`);
 }
 
 /**
@@ -133,7 +133,7 @@ async function demonstrateWorkflowValidation() {
     );
   }
 
-  console.log('\n' + '='.repeat(60) + '\n');
+  console.log(`\n${'='.repeat(60)}\n`);
 }
 
 /**
@@ -160,7 +160,7 @@ async function demonstrateConditionalExecution() {
     console.error('❌ 条件执行演示失败:', error);
   }
 
-  console.log('\n' + '='.repeat(60) + '\n');
+  console.log(`\n${'='.repeat(60)}\n`);
 }
 
 /**
@@ -172,25 +172,25 @@ async function listAvailableWorkflows() {
 
   const workflows = moduleManager.listWorkflows();
 
-  workflows.forEach((workflow, index) => {
+  for (const [index, workflow] of workflows.entries()) {
     console.log(`${index + 1}. ${workflow.name}`);
     console.log(`   描述: ${workflow.description || '无描述'}`);
     console.log(`   步骤数: ${workflow.steps.length}`);
 
     if (workflow.options) {
       console.log('   选项:');
-      Object.entries(workflow.options).forEach(([key, option]) => {
+      for (const [key, option] of Object.entries(workflow.options)) {
         const opt = option as any;
         const required = opt.hasValue && !opt.default;
         console.log(
           `     --${key}: ${opt.description || '无描述'} ${required ? '(必需)' : ''}`,
         );
-      });
+      }
     }
     console.log();
-  });
+  }
 
-  console.log('='.repeat(60) + '\n');
+  console.log(`${'='.repeat(60)}\n`);
 }
 
 /**

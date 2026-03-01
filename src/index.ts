@@ -14,6 +14,14 @@ import { printVersionCommand } from './utils';
 import { t } from './utils/i18n';
 import { versionCommands } from './versions';
 
+type LegacyCommandHandler = (argv: any) => Promise<unknown> | unknown;
+
+interface CliArgv {
+  command: string;
+  args: string[];
+  options: Record<string, any>;
+}
+
 function registerBuiltinModules() {
   for (const module of builtinModules) {
     try {
@@ -74,7 +82,7 @@ function printUsage() {
   process.exit(1);
 }
 
-const legacyCommands = {
+const legacyCommands: Record<string, LegacyCommandHandler> = {
   ...userCommands,
   ...bundleCommands,
   ...diffCommands,
@@ -94,7 +102,7 @@ async function run() {
   // Register builtin modules for modular functionality
   registerBuiltinModules();
 
-  const argv = require('cli-arguments').parse(require('../cli.json'));
+  const argv: CliArgv = require('cli-arguments').parse(require('../cli.json'));
   global.NO_INTERACTIVE = argv.options['no-interactive'];
   global.USE_ACC_OSS = argv.options.acc;
 
@@ -127,7 +135,8 @@ async function run() {
     }
     // Try legacy commands first for backward compatibility
     else if (legacyCommands[argv.command]) {
-      await legacyCommands[argv.command](argv);
+      const legacyHandler = legacyCommands[argv.command];
+      await legacyHandler(argv);
     }
     // Fall back to modular commands
     else {

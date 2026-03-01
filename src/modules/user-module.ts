@@ -2,6 +2,51 @@ import { getSession, loadSession } from '../api';
 import type { CLIModule, CommandContext } from '../types';
 import { userCommands } from '../user';
 
+type AuthCheckState = {
+  hasToken?: boolean;
+  validated?: boolean;
+  [key: string]: unknown;
+};
+
+type LoginFlowState = {
+  alreadyLoggedIn?: boolean;
+  loginSuccess?: boolean;
+  validationSuccess?: boolean;
+  loginError?: string;
+  [key: string]: unknown;
+};
+
+function toAuthCheckState(previousResult: unknown): AuthCheckState {
+  if (previousResult && typeof previousResult === 'object') {
+    return previousResult as AuthCheckState;
+  }
+  return {};
+}
+
+function toLoginFlowState(previousResult: unknown): LoginFlowState {
+  if (previousResult && typeof previousResult === 'object') {
+    return previousResult as LoginFlowState;
+  }
+  return {};
+}
+
+function getBooleanOption(
+  options: Record<string, unknown>,
+  key: string,
+  fallback: boolean,
+): boolean {
+  const value = options[key];
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function getStringOption(
+  options: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = options[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
 export const userModule: CLIModule = {
   name: 'user',
   version: '1.0.0',
@@ -33,21 +78,20 @@ export const userModule: CLIModule = {
               await loadSession();
               const session = getSession();
 
-              if (session && session.token) {
+              if (session?.token) {
                 console.log('✓ Session found in local storage');
                 return {
                   sessionLoaded: true,
                   hasToken: true,
                   session,
                 };
-              } else {
-                console.log('✗ No valid session found in local storage');
-                return {
-                  sessionLoaded: true,
-                  hasToken: false,
-                  session: null,
-                };
               }
+              console.log('✗ No valid session found in local storage');
+              return {
+                sessionLoaded: true,
+                hasToken: false,
+                session: null,
+              };
             } catch (error) {
               console.log(
                 '✗ Failed to load session:',
@@ -65,11 +109,15 @@ export const userModule: CLIModule = {
         {
           name: 'validate-session',
           description: 'Validate session by calling API',
-          execute: async (context: CommandContext, previousResult: any) => {
-            if (!previousResult.hasToken) {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
+            const state = toAuthCheckState(previousResult);
+            if (!state.hasToken) {
               console.log('No token available, skipping validation');
               return {
-                ...previousResult,
+                ...state,
                 validated: false,
                 reason: 'No token available',
               };
@@ -81,7 +129,7 @@ export const userModule: CLIModule = {
               await userCommands.me();
               console.log('✓ Session is valid');
               return {
-                ...previousResult,
+                ...state,
                 validated: true,
                 reason: 'Session validated successfully',
               };
@@ -91,7 +139,7 @@ export const userModule: CLIModule = {
                 error instanceof Error ? error.message : 'Unknown error',
               );
               return {
-                ...previousResult,
+                ...state,
                 validated: false,
                 reason:
                   error instanceof Error ? error.message : 'Unknown error',
@@ -102,11 +150,15 @@ export const userModule: CLIModule = {
         {
           name: 'get-user-info',
           description: 'Get current user information',
-          execute: async (context: CommandContext, previousResult: any) => {
-            if (!previousResult.validated) {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
+            const state = toAuthCheckState(previousResult);
+            if (!state.validated) {
               console.log('Session not valid, cannot get user info');
               return {
-                ...previousResult,
+                ...state,
                 userInfo: null,
                 reason: 'Session not valid',
               };
@@ -116,11 +168,19 @@ export const userModule: CLIModule = {
 
             try {
               const { get } = await import('../api');
-              const userInfo = await get('/user/me');
+              const userInfo = (await get('/user/me')) as Record<
+                string,
+                unknown
+              >;
 
               console.log('✓ User information retrieved successfully');
 
-              if (context.options.showDetails !== false) {
+              const showDetails = getBooleanOption(
+                context.options,
+                'showDetails',
+                true,
+              );
+              if (showDetails) {
                 console.log('\n=== User Information ===');
                 for (const [key, value] of Object.entries(userInfo)) {
                   if (key !== 'ok') {
@@ -131,7 +191,7 @@ export const userModule: CLIModule = {
               }
 
               return {
-                ...previousResult,
+                ...state,
                 userInfo,
                 reason: 'User info retrieved successfully',
               };
@@ -141,7 +201,7 @@ export const userModule: CLIModule = {
                 error instanceof Error ? error.message : 'Unknown error',
               );
               return {
-                ...previousResult,
+                ...state,
                 userInfo: null,
                 reason:
                   error instanceof Error ? error.message : 'Unknown error',
@@ -152,11 +212,15 @@ export const userModule: CLIModule = {
         {
           name: 'handle-auth-failure',
           description: 'Handle authentication failure',
-          execute: async (context: CommandContext, previousResult: any) => {
-            if (previousResult.validated) {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
+            const state = toAuthCheckState(previousResult);
+            if (state.validated) {
               console.log('✓ Authentication check completed successfully');
               return {
-                ...previousResult,
+                ...state,
                 authCheckComplete: true,
                 status: 'authenticated',
               };
@@ -164,13 +228,18 @@ export const userModule: CLIModule = {
 
             console.log('✗ Authentication check failed');
 
-            if (context.options.autoLogin) {
+            const autoLogin = getBooleanOption(
+              context.options,
+              'autoLogin',
+              false,
+            );
+            if (autoLogin) {
               console.log('Attempting automatic login...');
               try {
                 await userCommands.login({ args: [] });
                 console.log('✓ Automatic login successful');
                 return {
-                  ...previousResult,
+                  ...state,
                   authCheckComplete: true,
                   status: 'auto-logged-in',
                   autoLoginSuccess: true,
@@ -181,7 +250,7 @@ export const userModule: CLIModule = {
                   error instanceof Error ? error.message : 'Unknown error',
                 );
                 return {
-                  ...previousResult,
+                  ...state,
                   authCheckComplete: true,
                   status: 'failed',
                   autoLoginSuccess: false,
@@ -192,7 +261,7 @@ export const userModule: CLIModule = {
             } else {
               console.log('Please run login command to authenticate');
               return {
-                ...previousResult,
+                ...state,
                 authCheckComplete: true,
                 status: 'unauthenticated',
                 suggestion: 'Run login command to authenticate',
@@ -224,7 +293,7 @@ export const userModule: CLIModule = {
               await loadSession();
               const session = getSession();
 
-              if (session && session.token) {
+              if (session?.token) {
                 try {
                   await userCommands.me();
                   console.log('✓ User is already logged in');
@@ -268,11 +337,15 @@ export const userModule: CLIModule = {
         {
           name: 'perform-login',
           description: 'Perform user login',
-          execute: async (context: CommandContext, previousResult: any) => {
-            if (previousResult.alreadyLoggedIn) {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
+            const state = toLoginFlowState(previousResult);
+            if (state.alreadyLoggedIn) {
               console.log('Skipping login - user already authenticated');
               return {
-                ...previousResult,
+                ...state,
                 loginPerformed: false,
                 loginSuccess: true,
               };
@@ -281,19 +354,21 @@ export const userModule: CLIModule = {
             console.log('Performing login...');
 
             try {
-              const loginArgs = [];
-              if (context.options.email) {
-                loginArgs.push(context.options.email);
+              const loginArgs: string[] = [];
+              const email = getStringOption(context.options, 'email');
+              if (email) {
+                loginArgs.push(email);
               }
-              if (context.options.password) {
-                loginArgs.push(context.options.password);
+              const password = getStringOption(context.options, 'password');
+              if (password) {
+                loginArgs.push(password);
               }
 
               await userCommands.login({ args: loginArgs });
               console.log('✓ Login successful');
 
               return {
-                ...previousResult,
+                ...state,
                 loginPerformed: true,
                 loginSuccess: true,
               };
@@ -303,7 +378,7 @@ export const userModule: CLIModule = {
                 error instanceof Error ? error.message : 'Unknown error',
               );
               return {
-                ...previousResult,
+                ...state,
                 loginPerformed: true,
                 loginSuccess: false,
                 loginError:
@@ -315,23 +390,29 @@ export const userModule: CLIModule = {
         {
           name: 'validate-login',
           description: 'Validate login by getting user info',
-          execute: async (context: CommandContext, previousResult: any) => {
-            if (
-              !previousResult.loginSuccess &&
-              !previousResult.alreadyLoggedIn
-            ) {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
+            const state = toLoginFlowState(previousResult);
+            if (!state.loginSuccess && !state.alreadyLoggedIn) {
               console.log('Login failed, skipping validation');
               return {
-                ...previousResult,
+                ...state,
                 validationPerformed: false,
                 validationSuccess: false,
               };
             }
 
-            if (context.options.validateAfterLogin === false) {
+            const validateAfterLogin = getBooleanOption(
+              context.options,
+              'validateAfterLogin',
+              true,
+            );
+            if (!validateAfterLogin) {
               console.log('Skipping validation as requested');
               return {
-                ...previousResult,
+                ...state,
                 validationPerformed: false,
                 validationSuccess: true,
               };
@@ -344,7 +425,7 @@ export const userModule: CLIModule = {
               console.log('✓ Login validation successful');
 
               return {
-                ...previousResult,
+                ...state,
                 validationPerformed: true,
                 validationSuccess: true,
                 userInfo,
@@ -355,7 +436,7 @@ export const userModule: CLIModule = {
                 error instanceof Error ? error.message : 'Unknown error',
               );
               return {
-                ...previousResult,
+                ...state,
                 validationPerformed: true,
                 validationSuccess: false,
                 validationError:
@@ -367,34 +448,35 @@ export const userModule: CLIModule = {
         {
           name: 'login-summary',
           description: 'Provide login flow summary',
-          execute: async (context: CommandContext, previousResult: any) => {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
+            const state = toLoginFlowState(previousResult);
             console.log('\n=== Login Flow Summary ===');
 
-            if (previousResult.alreadyLoggedIn) {
+            if (state.alreadyLoggedIn) {
               console.log('Status: Already logged in');
               console.log('Session: Valid');
-            } else if (previousResult.loginSuccess) {
+            } else if (state.loginSuccess) {
               console.log('Status: Login successful');
-              if (previousResult.validationSuccess) {
+              if (state.validationSuccess) {
                 console.log('Validation: Passed');
               } else {
                 console.log('Validation: Failed');
               }
             } else {
               console.log('Status: Login failed');
-              console.log(
-                'Error:',
-                previousResult.loginError || 'Unknown error',
-              );
+              console.log('Error:', state.loginError || 'Unknown error');
             }
 
             console.log('==========================\n');
 
             return {
-              ...previousResult,
+              ...state,
               flowComplete: true,
               finalStatus:
-                previousResult.alreadyLoggedIn || previousResult.loginSuccess
+                state.alreadyLoggedIn || state.loginSuccess
                   ? 'success'
                   : 'failed',
             };

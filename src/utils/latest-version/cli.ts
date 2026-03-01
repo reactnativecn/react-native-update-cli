@@ -122,13 +122,13 @@ const drawBox = (
   );
 
   console.log(color(`┌${'─'.repeat(maxLineWidth + horizontalPadding * 2)}┐`));
-  lines.forEach((row) => {
+  for (const row of lines) {
     const padding = ' '.repeat(horizontalPadding);
     const fullRow = `${row}${' '.repeat(maxLineWidth - strip(row).length)}`;
     console.log(
       `${color('│')}${padding}${reset(fullRow)}${padding}${color('│')}`,
     );
-  });
+  }
   console.log(color(`└${'─'.repeat(maxLineWidth + horizontalPadding * 2)}┘`));
 };
 
@@ -191,15 +191,15 @@ const getTableColumns = (rows: TableRow[]): TableColumn[] => {
       items: [],
     },
   ];
-  rows.forEach((row) => {
-    columns.forEach((column) => {
+  for (const row of rows) {
+    for (const column of columns) {
       column.maxLength = Math.max(
         column.label.length,
         column.maxLength,
         row[column.attrName].length || 0,
       );
-    });
-  });
+    }
+  }
   return columns;
 };
 
@@ -217,13 +217,16 @@ const getTableRows = (updates: LatestVersionPackage[]): TableRow[] => {
     const getGroup = (a?: string, b?: string): TableRowGroup => {
       if (b && semverMajor(b) === 0) {
         return 'majorVersionZero';
-      } else if (a && b) {
+      }
+      if (a && b) {
         const releaseType = semverDiff(a, b) ?? '';
         if (['major', 'premajor', 'prerelease'].includes(releaseType)) {
           return 'major';
-        } else if (['minor', 'preminor'].includes(releaseType)) {
+        }
+        if (['minor', 'preminor'].includes(releaseType)) {
           return 'minor';
-        } else if (['patch', 'prepatch'].includes(releaseType)) {
+        }
+        if (['patch', 'prepatch'].includes(releaseType)) {
           return 'patch';
         }
       }
@@ -236,7 +239,7 @@ const getTableRows = (updates: LatestVersionPackage[]): TableRow[] => {
       wanted?: string,
     ) =>
       all.push({
-        name: ' ' + name,
+        name: ` ${name}`,
         location,
         installed: installed ?? 'unknown',
         latest: latest ?? 'unknown',
@@ -368,21 +371,20 @@ const checkVersions = async (
   skipMissing: boolean,
   options: LatestVersionOptions = { useCache: true },
 ): Promise<void> => {
-  const ora = (await import('ora')).default;
-  const spinner = ora({ text: cyan('Checking versions...') });
-  spinner.start();
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore
-  let latestVersionPackages: LatestVersionPackage[] = await latestVersion(
-    packages,
-    options,
-  );
+  console.log(cyan('Checking versions...'));
+  let latestVersionPackages: LatestVersionPackage[];
+  if (typeof packages === 'string') {
+    latestVersionPackages = [await latestVersion(packages, options)];
+  } else if (Array.isArray(packages)) {
+    latestVersionPackages = await latestVersion(packages, options);
+  } else {
+    latestVersionPackages = await latestVersion(packages, options);
+  }
   if (skipMissing) {
     latestVersionPackages = latestVersionPackages.filter(
       (pkg) => pkg.local ?? pkg.globalNpm ?? pkg.globalYarn,
     );
   }
-  spinner.stop();
   displayTable(latestVersionPackages);
 };
 

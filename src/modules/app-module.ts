@@ -1,5 +1,53 @@
-import { appCommands } from '../app';
-import type { CLIModule, CommandContext } from '../types';
+import { appCommands, listApp } from '../app';
+import type { CLIModule, CommandContext, Platform } from '../types';
+
+type WorkflowApp = {
+  id: string;
+  name: string;
+  platform: string;
+  version: string;
+  status: 'active' | 'inactive';
+};
+
+type AppAnalysis = {
+  totalApps: number;
+  activeApps: number;
+  inactiveApps: number;
+  platformDistribution: Record<Platform, number>;
+  issues: string[];
+};
+
+const allPlatforms: Platform[] = ['ios', 'android', 'harmony'];
+const emptyAppsData: Record<Platform, WorkflowApp[]> = {
+  ios: [],
+  android: [],
+  harmony: [],
+};
+
+type AppWorkflowState = Record<string, unknown>;
+
+function isPlatform(value: unknown): value is Platform {
+  return value === 'ios' || value === 'android' || value === 'harmony';
+}
+
+function normalizePlatformOption(value: unknown): Platform | '' {
+  return isPlatform(value) ? value : '';
+}
+
+function getStringOption(
+  options: Record<string, unknown>,
+  key: string,
+): string {
+  const value = options[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function toWorkflowState(previousResult: unknown): AppWorkflowState {
+  if (previousResult && typeof previousResult === 'object') {
+    return previousResult as AppWorkflowState;
+  }
+  return {};
+}
 
 export const appModule: CLIModule = {
   name: 'app',
@@ -17,12 +65,14 @@ export const appModule: CLIModule = {
           description: 'Create the app',
           execute: async (context: CommandContext) => {
             console.log('Creating app in workflow');
-            const { name, downloadUrl, platform } = context.options;
+            const name = getStringOption(context.options, 'name');
+            const downloadUrl = getStringOption(context.options, 'downloadUrl');
+            const platform = normalizePlatformOption(context.options.platform);
             await appCommands.createApp({
               options: {
-                name: name || '',
-                downloadUrl: downloadUrl || '',
-                platform: platform || '',
+                name,
+                downloadUrl,
+                platform,
               },
             });
             return { appCreated: true };
@@ -31,14 +81,18 @@ export const appModule: CLIModule = {
         {
           name: 'select',
           description: 'Select the created app',
-          execute: async (context: CommandContext, previousResult: any) => {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
             console.log('Selecting app in workflow');
-            const { platform } = context.options;
+            const state = toWorkflowState(previousResult);
+            const platform = normalizePlatformOption(context.options.platform);
             await appCommands.selectApp({
               args: [],
-              options: { platform: platform || '' },
+              options: { platform },
             });
-            return { ...previousResult, appSelected: true };
+            return { ...state, appSelected: true };
           },
         },
       ],
@@ -52,9 +106,9 @@ export const appModule: CLIModule = {
           description: 'List all apps',
           execute: async (context: CommandContext) => {
             console.log('Listing all apps');
-            const { platform } = context.options;
+            const platform = normalizePlatformOption(context.options.platform);
             await appCommands.apps({
-              options: { platform: platform || '' },
+              options: { platform },
             });
             return { appsListed: true };
           },
@@ -62,14 +116,18 @@ export const appModule: CLIModule = {
         {
           name: 'select-target-app',
           description: 'Select target app for operations',
-          execute: async (context: CommandContext, previousResult: any) => {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
             console.log('Selecting target app');
-            const { platform } = context.options;
+            const state = toWorkflowState(previousResult);
+            const platform = normalizePlatformOption(context.options.platform);
             await appCommands.selectApp({
               args: [],
-              options: { platform: platform || '' },
+              options: { platform },
             });
-            return { ...previousResult, targetAppSelected: true };
+            return { ...state, targetAppSelected: true };
           },
         },
       ],
@@ -84,50 +142,70 @@ export const appModule: CLIModule = {
           execute: async (context: CommandContext) => {
             console.log('🔍 Scanning apps on all platforms...');
 
-            const platforms = ['ios', 'android', 'harmony'];
-            const appsData = {};
+            const appsData: Record<Platform, WorkflowApp[]> = {
+              ios: [],
+              android: [],
+              harmony: [],
+            };
 
-            for (const platform of platforms) {
+            for (const platform of allPlatforms) {
               console.log(`  Scanning ${platform} platform...`);
 
-              // Simulate getting app list
-              await new Promise((resolve) => setTimeout(resolve, 500));
-
-              const appCount = Math.floor(Math.random() * 5) + 1;
-              const apps = Array.from({ length: appCount }, (_, i) => ({
-                id: `${platform}_app_${i + 1}`,
-                name: `App ${i + 1}`,
-                platform,
-                version: `1.${i}.0`,
-                status: Math.random() > 0.2 ? 'active' : 'inactive',
-              }));
-
-              appsData[platform] = apps;
-              console.log(`    ✅ Found ${appCount} apps`);
+              try {
+                const rawApps = await listApp(platform);
+                const apps = rawApps.map((app, index) => ({
+                  id: String(app.id ?? `${platform}-app-${index + 1}`),
+                  name: app.name ?? `App ${index + 1}`,
+                  platform: app.platform ?? platform,
+                  version:
+                    typeof (app as { version?: unknown }).version === 'string'
+                      ? ((app as { version?: string }).version ?? 'unknown')
+                      : 'unknown',
+                  status:
+                    (app as { status?: unknown }).status === 'inactive'
+                      ? ('inactive' as const)
+                      : ('active' as const),
+                }));
+                appsData[platform] = apps;
+                console.log(`    ✅ Found ${apps.length} apps`);
+              } catch (error) {
+                appsData[platform] = [];
+                console.warn(`    ⚠️ Failed to scan ${platform}:`, error);
+              }
             }
 
             console.log('✅ Platform scanning completed');
 
-            return { platforms, appsData, scanned: true };
+            return { platforms: allPlatforms, appsData, scanned: true };
           },
         },
         {
           name: 'analyze-apps',
           description: 'Analyze app status',
-          execute: async (context: CommandContext, previousResult: any) => {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
             console.log('📊 Analyzing app status...');
 
-            const { appsData } = previousResult;
-            const analysis = {
+            const state = toWorkflowState(previousResult);
+            const appsData =
+              (state.appsData as Record<Platform, WorkflowApp[]> | undefined) ??
+              emptyAppsData;
+            const analysis: AppAnalysis = {
               totalApps: 0,
               activeApps: 0,
               inactiveApps: 0,
-              platformDistribution: {},
+              platformDistribution: {
+                ios: 0,
+                android: 0,
+                harmony: 0,
+              },
               issues: [],
             };
 
-            for (const [platform, apps] of Object.entries(appsData)) {
-              const platformApps = apps as any[];
+            for (const platform of allPlatforms) {
+              const platformApps = appsData[platform] ?? [];
               analysis.totalApps += platformApps.length;
               analysis.platformDistribution[platform] = platformApps.length;
 
@@ -150,20 +228,30 @@ export const appModule: CLIModule = {
 
             if (analysis.issues.length > 0) {
               console.log('⚠️ Issues found:');
-              analysis.issues.forEach((issue) => console.log(`    - ${issue}`));
+              for (const issue of analysis.issues) {
+                console.log(`    - ${issue}`);
+              }
             }
 
-            return { ...previousResult, analysis };
+            return { ...state, analysis };
           },
         },
         {
           name: 'optimize-apps',
           description: 'Optimize app configuration',
-          execute: async (context: CommandContext, previousResult: any) => {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
             console.log('⚡ Optimizing app configuration...');
 
-            const { analysis } = previousResult;
-            const optimizations = [];
+            const state = toWorkflowState(previousResult);
+            const analysis = state.analysis as AppAnalysis | undefined;
+            if (!analysis) {
+              console.log('  No analysis data, skip optimization');
+              return { ...state, optimizations: [], optimized: false };
+            }
+            const optimizations: string[] = [];
 
             if (analysis.inactiveApps > 0) {
               console.log('  Handling inactive apps...');
@@ -175,16 +263,14 @@ export const appModule: CLIModule = {
               optimizations.push('Create app groups');
             }
 
-            // Simulate optimization process
             for (const optimization of optimizations) {
               console.log(`    Executing: ${optimization}...`);
-              await new Promise((resolve) => setTimeout(resolve, 800));
               console.log(`    ✅ ${optimization} completed`);
             }
 
             console.log('✅ App optimization completed');
 
-            return { ...previousResult, optimizations, optimized: true };
+            return { ...state, optimizations, optimized: true };
           },
         },
       ],

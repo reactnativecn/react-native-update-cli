@@ -18,17 +18,14 @@ export const bundleModule: CLIModule = {
           execute: async (context: CommandContext) => {
             console.log('🔍 Detecting base version...');
 
-            const { baseVersion, platform } = context.options;
+            const { baseVersion } = context.options;
 
             if (baseVersion) {
               console.log(`✅ Using specified base version: ${baseVersion}`);
               return { baseVersion, specified: true };
             }
 
-            console.log('Auto detecting latest version...');
-            await new Promise((resolve) => setTimeout(resolve, 800));
-
-            const autoDetectedVersion = `v${Math.floor(Math.random() * 3) + 1}.${Math.floor(Math.random() * 10)}.${Math.floor(Math.random() * 10)}`;
+            const autoDetectedVersion = 'latest';
 
             console.log(
               `✅ Auto detected base version: ${autoDetectedVersion}`,
@@ -40,8 +37,15 @@ export const bundleModule: CLIModule = {
         {
           name: 'build-current-version',
           description: 'Build current version',
-          execute: async (context: CommandContext, previousResult: any) => {
+          execute: async (
+            context: CommandContext,
+            previousResult?: unknown,
+          ) => {
             console.log('🏗️ Building current version...');
+            const state =
+              previousResult && typeof previousResult === 'object'
+                ? (previousResult as Record<string, unknown>)
+                : {};
 
             const {
               platform,
@@ -64,7 +68,7 @@ export const bundleModule: CLIModule = {
             console.log(`  Source maps: ${sourcemap}`);
 
             try {
-              const buildOptions: any = {
+              const buildOptions: Record<string, unknown> = {
                 platform,
                 dev,
                 sourcemap,
@@ -86,11 +90,17 @@ export const bundleModule: CLIModule = {
                 options: buildOptions,
               });
 
+              const bundlePath =
+                typeof output === 'string'
+                  ? output
+                  : '${tempDir}/output/${platform}.${time}.ppk';
               const currentBuild = {
-                version: `v${Math.floor(Math.random() * 3) + 2}.0.0`,
+                version:
+                  typeof state.baseVersion === 'string'
+                    ? state.baseVersion
+                    : 'current',
                 platform,
-                bundlePath: `./build/current_${platform}.ppk`,
-                size: Math.floor(Math.random() * 15) + 10,
+                bundlePath,
                 buildTime: Date.now(),
               };
 
@@ -98,7 +108,7 @@ export const bundleModule: CLIModule = {
                 `✅ Current version build completed: ${currentBuild.version}`,
               );
 
-              return { ...previousResult, currentBuild };
+              return { ...state, currentBuild };
             } catch (error) {
               console.error('❌ Current version build failed:', error);
               throw error;

@@ -16,16 +16,23 @@ import type {
 export class CLIProviderImpl implements CLIProvider {
   private workflows: Map<string, CustomWorkflow> = new Map();
   private session?: Session;
+  private sessionInitPromise?: Promise<void>;
 
-  constructor() {
-    this.init();
-  }
+  private async ensureInitialized(): Promise<void> {
+    if (this.session) {
+      return;
+    }
 
-  private async init() {
-    try {
-      await loadSession();
-      this.session = getSession();
-    } catch (error) {}
+    if (!this.sessionInitPromise) {
+      this.sessionInitPromise = (async () => {
+        await loadSession();
+        this.session = getSession();
+      })().finally(() => {
+        this.sessionInitPromise = undefined;
+      });
+    }
+
+    await this.sessionInitPromise;
   }
 
   async bundle(options: BundleOptions): Promise<CommandResult> {
@@ -66,6 +73,7 @@ export class CLIProviderImpl implements CLIProvider {
 
   async publish(options: PublishOptions): Promise<CommandResult> {
     try {
+      await this.ensureInitialized();
       const context: CommandContext = {
         args: [],
         options: {
@@ -102,6 +110,7 @@ export class CLIProviderImpl implements CLIProvider {
 
   async upload(options: UploadOptions): Promise<CommandResult> {
     try {
+      await this.ensureInitialized();
       const platform = await this.getPlatform(options.platform);
       const { appId } = await this.getSelectedApp(platform);
 
@@ -156,6 +165,7 @@ export class CLIProviderImpl implements CLIProvider {
 
   async listApps(platform?: Platform): Promise<CommandResult> {
     try {
+      await this.ensureInitialized();
       const resolvedPlatform = await this.getPlatform(platform);
       const { appCommands } = await import('./app');
       await appCommands.apps({ options: { platform: resolvedPlatform } });
@@ -175,6 +185,7 @@ export class CLIProviderImpl implements CLIProvider {
 
   async createApp(name: string, platform: Platform): Promise<CommandResult> {
     try {
+      await this.ensureInitialized();
       const { appCommands } = await import('./app');
       await appCommands.createApp({
         options: {
@@ -199,6 +210,7 @@ export class CLIProviderImpl implements CLIProvider {
 
   async listVersions(appId: string): Promise<CommandResult> {
     try {
+      await this.ensureInitialized();
       const context: CommandContext = {
         args: [],
         options: { appId },
@@ -228,6 +240,7 @@ export class CLIProviderImpl implements CLIProvider {
     updates: Partial<Version>,
   ): Promise<CommandResult> {
     try {
+      await this.ensureInitialized();
       const context: CommandContext = {
         args: [versionId],
         options: {
@@ -259,8 +272,7 @@ export class CLIProviderImpl implements CLIProvider {
   }
 
   async loadSession(): Promise<Session> {
-    await loadSession();
-    this.session = getSession();
+    await this.ensureInitialized();
     if (!this.session) {
       throw new Error('Failed to load session');
     }
@@ -319,6 +331,7 @@ export class CLIProviderImpl implements CLIProvider {
 
   async listPackages(appId?: string): Promise<CommandResult> {
     try {
+      await this.ensureInitialized();
       const context: CommandContext = {
         args: [],
         options: appId ? { appId } : {},

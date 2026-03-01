@@ -3,6 +3,8 @@ import path from 'path';
 import chalk from 'chalk';
 import { satisfies } from 'compare-versions';
 import fs from 'fs-extra';
+import type { Root as ProtobufRoot } from 'protobufjs';
+import { type Entry as YauzlEntry, open as openZipFile } from 'yauzl';
 import pkg from '../../package.json';
 import latestVersion from '../utils/latest-version';
 import AppInfoParser from './app-info-parser';
@@ -12,6 +14,77 @@ import { read } from 'read';
 import { IS_CRESC, tempDir } from './constants';
 import { depVersions } from './dep-versions';
 import { t } from './i18n';
+
+type ApkMetaEntry = {
+  name?: string;
+  value?: string | number | Array<string | number>;
+};
+
+type ParsedApkInfo = {
+  versionName: string;
+  application: {
+    metaData?: ApkMetaEntry[];
+  };
+};
+
+type ParsedIpaInfo = {
+  CFBundleShortVersionString: string;
+};
+
+type ParsedAppMetaInfo = {
+  versionName?: string;
+  pushy_build_time?: number | string;
+};
+
+type AabXmlAttr = {
+  name: string;
+  value: string;
+  compiledItem?: {
+    ref?: {
+      id?: number;
+    };
+    prim?: {
+      intDecimalValue?: number;
+    };
+  };
+};
+
+type AabXmlElement = {
+  name: string;
+  attribute: AabXmlAttr[];
+  child: Array<{ element?: AabXmlElement }>;
+};
+
+type AabXmlNodeObject = {
+  element: AabXmlElement;
+};
+
+type AabResourceEntry = {
+  entryId: number;
+  configValue?: Array<{
+    value?: {
+      item?: {
+        str?: {
+          value?: string;
+        };
+      };
+    };
+  }>;
+};
+
+type AabResourceType = {
+  typeId: number;
+  entry: AabResourceEntry[];
+};
+
+type AabResourcePackage = {
+  packageId: number;
+  type: AabResourceType[];
+};
+
+type AabResourceTableObject = {
+  package: AabResourcePackage[];
+};
 
 export async function question(query: string, password?: boolean) {
   if (NO_INTERACTIVE) {
@@ -24,20 +97,29 @@ export async function question(query: string, password?: boolean) {
   });
 }
 
-export function translateOptions(options: Record<string, string>) {
-  const ret: Record<string, string> = {};
+export function translateOptions<T extends Record<string, unknown>>(
+  options: T,
+): T & Record<string, unknown> {
+  const ret: Record<string, unknown> = {};
   for (const key in options) {
-    const v = options[key];
-    if (typeof v === 'string') {
-      ret[key] = v.replace(
-        /\$\{(\w+)\}/g,
-        (v, n) => options[n] || process.env[n] || v,
-      );
+    const value = options[key];
+    if (typeof value === 'string') {
+      ret[key] = value.replace(/\$\{(\w+)\}/g, (placeholder, name) => {
+        const replacement = options[name] ?? process.env[name];
+        if (
+          typeof replacement === 'string' ||
+          typeof replacement === 'number' ||
+          typeof replacement === 'boolean'
+        ) {
+          return String(replacement);
+        }
+        return placeholder;
+      });
     } else {
-      ret[key] = v;
+      ret[key] = value;
     }
   }
-  return ret;
+  return ret as T & Record<string, unknown>;
 }
 
 export async function getApkInfo(fn: string) {
@@ -60,12 +142,18 @@ export async function getApkInfo(fn: string) {
   if (updateJsonFile) {
     appCredential = JSON.parse(updateJsonFile.toString()).android;
   }
-  const { versionName, application } = await appInfoParser.parse();
+  const { versionName, application } =
+    await appInfoParser.parse<ParsedApkInfo>();
   let buildTime = 0;
   if (Array.isArray(application.metaData)) {
     for (const meta of application.metaData) {
       if (meta.name === 'pushy_build_time') {
-        buildTime = meta.value[0];
+        if (Array.isArray(meta.value)) {
+          const firstValue = meta.value[0];
+          buildTime = Number(firstValue);
+        } else if (meta.value !== undefined) {
+          buildTime = Number(meta.value);
+        }
       }
     }
   }
@@ -96,14 +184,14 @@ export async function getAppInfo(fn: string) {
   }
   const metaJsonFile =
     await appInfoParser.parser.getEntryFromHarmonyApp(/rawfile\/meta.json/);
-  let metaData: Record<string, any> = {};
+  let metaData: ParsedAppMetaInfo = {};
   if (metaJsonFile) {
-    metaData = JSON.parse(metaJsonFile.toString());
+    metaData = JSON.parse(metaJsonFile.toString()) as ParsedAppMetaInfo;
   }
   const { versionName, pushy_build_time } = metaData;
   let buildTime = 0;
   if (pushy_build_time) {
-    buildTime = pushy_build_time;
+    buildTime = Number(pushy_build_time);
   }
   if (buildTime == 0) {
     throw new Error(t('buildTimeNotFound'));
@@ -132,7 +220,7 @@ export async function getIpaInfo(fn: string) {
     appCredential = JSON.parse(updateJsonFile.toString()).ios;
   }
   const { CFBundleShortVersionString: versionName } =
-    await appInfoParser.parse();
+    await appInfoParser.parse<ParsedIpaInfo>();
   let buildTimeTxtBuffer = await appInfoParser.parser.getEntry(
     /payload\/.+?\.app\/pushy_build_time.txt/,
   );
@@ -150,7 +238,7 @@ export async function getIpaInfo(fn: string) {
 }
 
 export async function getAabInfo(fn: string) {
-  const protobuf = require('protobufjs');
+  const protobuf = require('protobufjs') as typeof import('protobufjs');
   const root = await protobuf.load(
     path.join(__dirname, '../../proto/Resources.proto'),
   );
@@ -165,7 +253,7 @@ export async function getAabInfo(fn: string) {
     bytes: String,
     defaults: true,
     arrays: true,
-  });
+  }) as AabXmlNodeObject;
 
   const manifestElement = object.element;
   if (manifestElement.name !== 'manifest') {
@@ -184,18 +272,23 @@ export async function getAabInfo(fn: string) {
 
   // Find application node
   const applicationNode = manifestElement.child.find(
-    (c: any) => c.element && c.element.name === 'application',
+    (child) => child.element?.name === 'application',
   );
-  if (applicationNode) {
-    const metaDataNodes = applicationNode.element.child.filter(
-      (c: any) => c.element && c.element.name === 'meta-data',
+  const applicationElement = applicationNode?.element;
+  if (applicationElement) {
+    const metaDataNodes = applicationElement.child.filter(
+      (child) => child.element?.name === 'meta-data',
     );
     for (const meta of metaDataNodes) {
       let name = '';
       let value = '';
       let resourceId = 0;
 
-      for (const attr of meta.element.attribute) {
+      const metaElement = meta.element;
+      if (!metaElement) {
+        continue;
+      }
+      for (const attr of metaElement.attribute) {
         if (attr.name === 'name') {
           name = attr.value;
         }
@@ -229,19 +322,24 @@ export async function getAabInfo(fn: string) {
 }
 
 async function readZipEntry(fn: string, entryName: string): Promise<Buffer> {
-  const yauzl = require('yauzl');
   return new Promise((resolve, reject) => {
-    yauzl.open(fn, { lazyEntries: true }, (err: any, zipfile: any) => {
-      if (err) return reject(err);
+    openZipFile(fn, { lazyEntries: true }, (err, zipfile) => {
+      if (err || !zipfile) {
+        reject(err ?? new Error('Failed to open zip file'));
+        return;
+      }
       let found = false;
       zipfile.readEntry();
-      zipfile.on('entry', (entry: any) => {
+      zipfile.on('entry', (entry: YauzlEntry) => {
         if (entry.fileName === entryName) {
           found = true;
-          zipfile.openReadStream(entry, (err: any, readStream: any) => {
-            if (err) return reject(err);
-            const chunks: any[] = [];
-            readStream.on('data', (chunk: any) => chunks.push(chunk));
+          zipfile.openReadStream(entry, (streamError, readStream) => {
+            if (streamError || !readStream) {
+              reject(streamError ?? new Error('Failed to read zip entry'));
+              return;
+            }
+            const chunks: Buffer[] = [];
+            readStream.on('data', (chunk: Buffer) => chunks.push(chunk));
             readStream.on('end', () => resolve(Buffer.concat(chunks)));
             readStream.on('error', reject);
           });
@@ -260,7 +358,7 @@ async function readZipEntry(fn: string, entryName: string): Promise<Buffer> {
 async function resolveResource(
   fn: string,
   resourceId: number,
-  root: any,
+  root: ProtobufRoot,
 ): Promise<string | null> {
   const pkgId = (resourceId >> 24) & 0xff;
   const typeId = (resourceId >> 16) & 0xff;
@@ -276,25 +374,26 @@ async function resolveResource(
       bytes: String,
       defaults: true,
       arrays: true,
-    });
+    }) as AabResourceTableObject;
 
     // Find package
-    const pkg = object.package.find((p: any) => p.packageId === pkgId);
+    const pkg = object.package.find((pkgItem) => pkgItem.packageId === pkgId);
     if (!pkg) return null;
 
     // Find type
-    const type = pkg.type.find((t: any) => t.typeId === typeId);
+    const type = pkg.type.find((typeItem) => typeItem.typeId === typeId);
     if (!type) return null;
 
     // Find entry
-    const entry = type.entry.find((e: any) => e.entryId === entryId);
+    const entry = type.entry.find((entryItem) => entryItem.entryId === entryId);
     if (!entry) return null;
 
     // Get value from configValue
     if (entry.configValue && entry.configValue.length > 0) {
-      const val = entry.configValue[0].value;
-      if (val.item?.str) {
-        return val.item.str.value;
+      const val = entry.configValue[0]?.value;
+      const stringValue = val?.item?.str?.value;
+      if (typeof stringValue === 'string') {
+        return stringValue;
       }
     }
   } catch (e) {

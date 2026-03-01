@@ -305,20 +305,20 @@ async function main() {
   try {
     // 1. 构建和发布示例
     await service.buildAndPublish('ios', '1.2.3');
-    console.log('\n' + '='.repeat(50) + '\n');
+    console.log(`\n${'='.repeat(50)}\n`);
 
     // 2. 应用管理示例
     await service.manageApp('ios');
-    console.log('\n' + '='.repeat(50) + '\n');
+    console.log(`\n${'='.repeat(50)}\n`);
 
     // 3. 批量操作示例
     const batchResults = await service.batchOperations();
     console.log('批量操作结果:', batchResults);
-    console.log('\n' + '='.repeat(50) + '\n');
+    console.log(`\n${'='.repeat(50)}\n`);
 
     // 4. 文件上传示例
     await service.uploadExample();
-    console.log('\n' + '='.repeat(50) + '\n');
+    console.log(`\n${'='.repeat(50)}\n`);
 
     // 5. 高级工作流示例
     await demonstrateAdvancedWorkflows();

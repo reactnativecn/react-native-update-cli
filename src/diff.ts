@@ -2,12 +2,29 @@ import path from 'path';
 import * as fs from 'fs-extra';
 import { npm, yarn } from 'global-dirs';
 import { ZipFile as YazlZipFile } from 'yazl';
+import type { CommandContext } from './types';
 import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
 import { t } from './utils/i18n';
 import { enumZipEntries, readEntry } from './utils/zip-entries';
 
 type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
+type EntryMap = Record<string, { crc32: number; fileName: string }>;
+type CrcMap = Record<number, string>;
+type CopyMap = Record<string, string>;
+type PackagePathTransform = (v: string) => string | undefined;
+type DiffTarget =
+  | { kind: 'ppk' }
+  | {
+      kind: 'package';
+      originBundleName: string;
+      transformPackagePath?: PackagePathTransform;
+    };
+type DiffCommandConfig = {
+  diffFnName: string;
+  useHdiff: boolean;
+  target: DiffTarget;
+};
 
 export { enumZipEntries, readEntry };
 
@@ -25,26 +42,28 @@ const loadDiffModule = (pkgName: string): Diff | undefined => {
   return undefined;
 };
 
-let hdiff: Diff | undefined;
-hdiff = (loadDiffModule('node-hdiffpatch') as any)?.diff;
-let bsdiff: Diff | undefined;
-let diff: Diff;
-bsdiff = loadDiffModule('node-bsdiff');
+const hdiff = loadDiffModule('node-hdiffpatch');
+const bsdiff = loadDiffModule('node-bsdiff');
 
-function basename(fn: string) {
+function basename(fn: string): string | undefined {
   const m = /^(.+\/)[^\/]+\/?$/.exec(fn);
   return m?.[1];
 }
 
-async function diffFromPPK(origin: string, next: string, output: string) {
+async function diffFromPPK(
+  origin: string,
+  next: string,
+  output: string,
+  diffFn: Diff,
+) {
   fs.ensureDirSync(path.dirname(output));
 
-  const originEntries = {};
-  const originMap = {};
+  const originEntries: EntryMap = {};
+  const originMap: CrcMap = {};
 
   let originSource: Buffer | undefined;
 
-  await enumZipEntries(origin, (entry, zipFile) => {
+  await enumZipEntries(origin, async (entry, zipFile) => {
     originEntries[entry.fileName] = entry;
     if (!/\/$/.test(entry.fileName)) {
       // isFile
@@ -52,7 +71,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
 
       if (isPPKBundleFileName(entry.fileName)) {
         // This is source.
-        return readEntry(entry, zipFile).then((v) => (originSource = v));
+        originSource = await readEntry(entry, zipFile);
       }
     }
   });
@@ -61,26 +80,25 @@ async function diffFromPPK(origin: string, next: string, output: string) {
     throw new Error(t('bundleFileNotFound'));
   }
 
-  const copies = {};
+  const copies: CopyMap = {};
 
   const zipfile = new YazlZipFile();
 
-  const writePromise = new Promise((resolve, reject) => {
-    zipfile.outputStream.on('error', (err) => {
-      throw err;
-    });
+  const writePromise = new Promise<void>((resolve, reject) => {
+    zipfile.outputStream.on('error', reject);
     zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
       resolve(void 0);
     });
   });
 
-  const addedEntry = {};
+  const addedEntry: Record<string, true> = {};
 
   function addEntry(fn: string) {
     //console.log(fn);
     if (!fn || addedEntry[fn]) {
       return;
     }
+    addedEntry[fn] = true;
     const base = basename(fn);
     if (base) {
       addEntry(base);
@@ -88,9 +106,9 @@ async function diffFromPPK(origin: string, next: string, output: string) {
     zipfile.addEmptyDirectory(fn);
   }
 
-  const newEntries = {};
+  const newEntries: EntryMap = {};
 
-  await enumZipEntries(next, (entry, nextZipfile) => {
+  await enumZipEntries(next, async (entry, nextZipfile) => {
     newEntries[entry.fileName] = entry;
 
     if (/\/$/.test(entry.fileName)) {
@@ -100,14 +118,13 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       }
     } else if (isPPKBundleFileName(entry.fileName)) {
       //console.log('Found bundle');
-      return readEntry(entry, nextZipfile).then((newSource) => {
-        //console.log('Begin diff');
-        zipfile.addBuffer(
-          diff(originSource, newSource),
-          `${entry.fileName}.patch`,
-        );
-        //console.log('End diff');
-      });
+      const newSource = await readEntry(entry, nextZipfile);
+      //console.log('Begin diff');
+      zipfile.addBuffer(
+        diffFn(originSource, newSource),
+        `${entry.fileName}.patch`,
+      );
+      //console.log('End diff');
     } else {
       // If same file.
       const originEntry = originEntries[entry.fileName];
@@ -117,22 +134,31 @@ async function diffFromPPK(origin: string, next: string, output: string) {
       }
 
       // If moved from other place
-      if (originMap[entry.crc32]) {
+      const movedFrom = originMap[entry.crc32];
+      if (movedFrom) {
         const base = basename(entry.fileName);
-        if (!originEntries[base]) {
+        if (base && !originEntries[base]) {
           addEntry(base);
         }
-        copies[entry.fileName] = originMap[entry.crc32];
+        copies[entry.fileName] = movedFrom;
         return;
       }
 
       // New file.
-      addEntry(basename(entry.fileName));
+      const basePath = basename(entry.fileName);
+      if (basePath) {
+        addEntry(basePath);
+      }
 
-      return new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         nextZipfile.openReadStream(entry, (err, readStream) => {
           if (err) {
             return reject(err);
+          }
+          if (!readStream) {
+            return reject(
+              new Error(`Unable to read zip entry: ${entry.fileName}`),
+            );
           }
           zipfile.addReadStream(readStream, entry.fileName);
           readStream.on('end', () => {
@@ -144,7 +170,7 @@ async function diffFromPPK(origin: string, next: string, output: string) {
     }
   });
 
-  const deletes = {};
+  const deletes: Record<string, 1> = {};
 
   for (const k in originEntries) {
     if (!newEntries[k]) {
@@ -166,17 +192,18 @@ async function diffFromPackage(
   origin: string,
   next: string,
   output: string,
+  diffFn: Diff,
   originBundleName: string,
-  transformPackagePath = (v: string) => v,
+  transformPackagePath: (v: string) => string | undefined = (v: string) => v,
 ) {
   fs.ensureDirSync(path.dirname(output));
 
-  const originEntries = {};
-  const originMap = {};
+  const originEntries: Record<string, number> = {};
+  const originMap: CrcMap = {};
 
   let originSource: Buffer | undefined;
 
-  await enumZipEntries(origin, (entry, zipFile) => {
+  await enumZipEntries(origin, async (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
       const fn = transformPackagePath(entry.fileName);
       if (!fn) {
@@ -190,7 +217,7 @@ async function diffFromPackage(
 
       if (fn === originBundleName) {
         // This is source.
-        return readEntry(entry, zipFile).then((v) => (originSource = v));
+        originSource = await readEntry(entry, zipFile);
       }
     }
   });
@@ -199,33 +226,30 @@ async function diffFromPackage(
     throw new Error(t('bundleFileNotFound'));
   }
 
-  const copies = {};
+  const copies: CopyMap = {};
 
   const zipfile = new YazlZipFile();
 
-  const writePromise = new Promise((resolve, reject) => {
-    zipfile.outputStream.on('error', (err) => {
-      throw err;
-    });
+  const writePromise = new Promise<void>((resolve, reject) => {
+    zipfile.outputStream.on('error', reject);
     zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
       resolve(void 0);
     });
   });
 
-  await enumZipEntries(next, (entry, nextZipfile) => {
+  await enumZipEntries(next, async (entry, nextZipfile) => {
     if (/\/$/.test(entry.fileName)) {
       // Directory
       zipfile.addEmptyDirectory(entry.fileName);
     } else if (isPPKBundleFileName(entry.fileName)) {
       //console.log('Found bundle');
-      return readEntry(entry, nextZipfile).then((newSource) => {
-        //console.log('Begin diff');
-        zipfile.addBuffer(
-          diff(originSource, newSource),
-          `${entry.fileName}.patch`,
-        );
-        //console.log('End diff');
-      });
+      const newSource = await readEntry(entry, nextZipfile);
+      //console.log('Begin diff');
+      zipfile.addBuffer(
+        diffFn(originSource, newSource),
+        `${entry.fileName}.patch`,
+      );
+      //console.log('End diff');
     } else {
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
@@ -233,15 +257,21 @@ async function diffFromPackage(
         return;
       }
       // If moved from other place
-      if (originMap[entry.crc32]) {
-        copies[entry.fileName] = originMap[entry.crc32];
+      const movedFrom = originMap[entry.crc32];
+      if (movedFrom) {
+        copies[entry.fileName] = movedFrom;
         return;
       }
 
-      return new Promise((resolve, reject) => {
+      await new Promise<void>((resolve, reject) => {
         nextZipfile.openReadStream(entry, (err, readStream) => {
           if (err) {
             return reject(err);
+          }
+          if (!readStream) {
+            return reject(
+              new Error(`Unable to read zip entry: ${entry.fileName}`),
+            );
           }
           zipfile.addReadStream(readStream, entry.fileName);
           readStream.on('end', () => {
@@ -258,147 +288,151 @@ async function diffFromPackage(
   await writePromise;
 }
 
-function diffArgsCheck(args: string[], options: any, diffFn: string) {
+type DiffCommandOptions = {
+  customDiff?: Diff;
+  [key: string]: any;
+};
+
+function resolveDiffImplementation(
+  useHdiff: boolean,
+  options: DiffCommandOptions,
+): Diff {
+  if (options.customDiff) {
+    return options.customDiff;
+  }
+
+  if (useHdiff) {
+    if (!hdiff) {
+      throw new Error(t('nodeHdiffpatchRequired', { scriptName }));
+    }
+    return hdiff;
+  }
+
+  if (!bsdiff) {
+    throw new Error(t('nodeBsdiffRequired', { scriptName }));
+  }
+  return bsdiff;
+}
+
+function diffArgsCheck(
+  args: string[],
+  options: DiffCommandOptions,
+  diffFnName: string,
+  useHdiff: boolean,
+) {
   const [origin, next] = args;
 
   if (!origin || !next) {
-    console.error(t('usageDiff', { command: diffFn }));
-    process.exit(1);
-  }
-  if (options?.customDiff) {
-    diff = options.customDiff;
-  } else {
-    if (diffFn.startsWith('hdiff')) {
-      if (!hdiff) {
-        console.error(t('nodeHdiffpatchRequired', { scriptName }));
-        process.exit(1);
-      }
-      diff = hdiff;
-    } else {
-      if (!bsdiff) {
-        console.error(t('nodeBsdiffRequired', { scriptName }));
-        process.exit(1);
-      }
-      diff = bsdiff;
-    }
+    throw new Error(t('usageDiff', { command: diffFnName }));
   }
 
+  const diffFn = resolveDiffImplementation(useHdiff, options);
   const { output } = translateOptions({
     ...options,
     tempDir,
   });
+  if (typeof output !== 'string') {
+    throw new Error('Output path is required.');
+  }
 
   return {
     origin,
     next,
+    diffFn,
     realOutput: output.replace(/\$\{time\}/g, `${Date.now()}`),
   };
 }
 
+const transformIpaPackagePath: PackagePathTransform = (v) => {
+  const match = /^Payload\/[^/]+\/(.+)$/.exec(v);
+  return match?.[1];
+};
+
+const createDiffCommand =
+  ({ diffFnName, useHdiff, target }: DiffCommandConfig) =>
+  async ({ args, options }: CommandContext) => {
+    const { origin, next, realOutput, diffFn } = diffArgsCheck(
+      args,
+      options as DiffCommandOptions,
+      diffFnName,
+      useHdiff,
+    );
+
+    if (target.kind === 'ppk') {
+      await diffFromPPK(origin, next, realOutput, diffFn);
+    } else {
+      await diffFromPackage(
+        origin,
+        next,
+        realOutput,
+        diffFn,
+        target.originBundleName,
+        target.transformPackagePath,
+      );
+    }
+
+    console.log(t('diffPackageGenerated', { output: realOutput }));
+  };
+
 export const diffCommands = {
-  async diff({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(args, options, 'diff');
-
-    await diffFromPPK(origin, next, realOutput);
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
-
-  async hdiff({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(args, options, 'hdiff');
-
-    await diffFromPPK(origin, next, realOutput);
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
-
-  async diffFromApk({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(
-      args,
-      options,
-      'diffFromApk',
-    );
-
-    await diffFromPackage(
-      origin,
-      next,
-      realOutput,
-      'assets/index.android.bundle',
-    );
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
-
-  async hdiffFromApk({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(
-      args,
-      options,
-      'hdiffFromApk',
-    );
-
-    await diffFromPackage(
-      origin,
-      next,
-      realOutput,
-      'assets/index.android.bundle',
-    );
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
-
-  async diffFromApp({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(
-      args,
-      options,
-      'diffFromApp',
-    );
-    await diffFromPackage(
-      origin,
-      next,
-      realOutput,
-      'resources/rawfile/bundle.harmony.js',
-    );
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
-
-  async hdiffFromApp({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(
-      args,
-      options,
-      'hdiffFromApp',
-    );
-    await diffFromPackage(
-      origin,
-      next,
-      realOutput,
-      'resources/rawfile/bundle.harmony.js',
-    );
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
-
-  async diffFromIpa({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(
-      args,
-      options,
-      'diffFromIpa',
-    );
-
-    await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
-      const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
-      return m?.[1];
-    });
-
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
-
-  async hdiffFromIpa({ args, options }) {
-    const { origin, next, realOutput } = diffArgsCheck(
-      args,
-      options,
-      'hdiffFromIpa',
-    );
-
-    await diffFromPackage(origin, next, realOutput, 'main.jsbundle', (v) => {
-      const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
-      return m?.[1];
-    });
-
-    console.log(t('diffPackageGenerated', { output: realOutput }));
-  },
+  diff: createDiffCommand({
+    diffFnName: 'diff',
+    useHdiff: false,
+    target: { kind: 'ppk' },
+  }),
+  hdiff: createDiffCommand({
+    diffFnName: 'hdiff',
+    useHdiff: true,
+    target: { kind: 'ppk' },
+  }),
+  diffFromApk: createDiffCommand({
+    diffFnName: 'diffFromApk',
+    useHdiff: false,
+    target: {
+      kind: 'package',
+      originBundleName: 'assets/index.android.bundle',
+    },
+  }),
+  hdiffFromApk: createDiffCommand({
+    diffFnName: 'hdiffFromApk',
+    useHdiff: true,
+    target: {
+      kind: 'package',
+      originBundleName: 'assets/index.android.bundle',
+    },
+  }),
+  diffFromApp: createDiffCommand({
+    diffFnName: 'diffFromApp',
+    useHdiff: false,
+    target: {
+      kind: 'package',
+      originBundleName: 'resources/rawfile/bundle.harmony.js',
+    },
+  }),
+  hdiffFromApp: createDiffCommand({
+    diffFnName: 'hdiffFromApp',
+    useHdiff: true,
+    target: {
+      kind: 'package',
+      originBundleName: 'resources/rawfile/bundle.harmony.js',
+    },
+  }),
+  diffFromIpa: createDiffCommand({
+    diffFnName: 'diffFromIpa',
+    useHdiff: false,
+    target: {
+      kind: 'package',
+      originBundleName: 'main.jsbundle',
+      transformPackagePath: transformIpaPackagePath,
+    },
+  }),
+  hdiffFromIpa: createDiffCommand({
+    diffFnName: 'hdiffFromIpa',
+    useHdiff: true,
+    target: {
+      kind: 'package',
+      originBundleName: 'main.jsbundle',
+      transformPackagePath: transformIpaPackagePath,
+    },
+  }),
 };
