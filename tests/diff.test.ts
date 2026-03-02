@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { npm, yarn } from 'global-dirs';
 import { ZipFile as YazlZipFile } from 'yazl';
 import { diffCommands, enumZipEntries, readEntry } from '../src/diff';
 import type { CommandContext } from '../src/types';
@@ -12,9 +13,9 @@ type ZipContent = {
 };
 
 type DiffContextOptions = {
-  output: string;
-  customDiff: (oldSource?: Buffer, newSource?: Buffer) => Buffer;
-};
+  output?: unknown;
+  customDiff?: (oldSource?: Buffer, newSource?: Buffer) => Buffer;
+} & Record<string, unknown>;
 
 function mkTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -70,6 +71,15 @@ function createContext(
     args,
     options,
   };
+}
+
+function hasDiffModule(pkgName: string): boolean {
+  try {
+    require.resolve(pkgName, { paths: ['.', npm.packages, yarn.packages] });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 describe('diff commands', () => {
@@ -216,5 +226,154 @@ describe('diff commands', () => {
     };
     expect(diffMeta.copies['assets/icon.png']).toBe('');
     expect(diffMeta.copies['assets/new-name.png']).toBe('assets/old-name.png');
+  });
+
+  test('diff supports explicit next directories and avoids duplicate additions', async () => {
+    const originPath = path.join(tempRoot, 'origin-dir.ppk');
+    const nextPath = path.join(tempRoot, 'next-dir.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'dir-diff.ppk');
+
+    await createZip(originPath, {
+      'index.bundlejs': 'old-bundle',
+    });
+    await createZip(nextPath, {
+      'index.bundlejs': 'new-bundle',
+      'extra/': '',
+      'extra/new.txt': 'new-file',
+    });
+
+    await diffCommands.diff(
+      createContext([originPath, nextPath], {
+        output: outputPath,
+        customDiff: () => Buffer.from('patch'),
+      }),
+    );
+
+    const result = await readZipContent(outputPath);
+    const extraDirCount = result.entries.filter(
+      (entry) => entry === 'extra/',
+    ).length;
+    expect(extraDirCount).toBe(1);
+    expect(result.files['extra/new.txt']?.toString('utf-8')).toBe('new-file');
+  });
+
+  test('diffFromApk throws when origin package bundle is missing', async () => {
+    const originPath = path.join(tempRoot, 'origin-missing-bundle.apk');
+    const nextPath = path.join(tempRoot, 'next-for-apk.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'apk-missing-bundle.ppk');
+
+    await createZip(originPath, {
+      'assets/other.txt': 'no-bundle',
+    });
+    await createZip(nextPath, {
+      'index.bundlejs': 'new-bundle',
+    });
+
+    await expect(
+      diffCommands.diffFromApk(
+        createContext([originPath, nextPath], {
+          output: outputPath,
+          customDiff: () => Buffer.from('patch'),
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  test('diffFromApk writes directory entries from next package', async () => {
+    const originPath = path.join(tempRoot, 'origin-dir.apk');
+    const nextPath = path.join(tempRoot, 'next-dir-apk.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'apk-dir-diff.ppk');
+
+    await createZip(originPath, {
+      'assets/index.android.bundle': 'old-bundle',
+    });
+    await createZip(nextPath, {
+      'index.bundlejs': 'new-bundle',
+      'assets/': '',
+      'assets/new.txt': 'new-file',
+    });
+
+    await diffCommands.diffFromApk(
+      createContext([originPath, nextPath], {
+        output: outputPath,
+        customDiff: (oldSource, newSource) =>
+          Buffer.from(
+            `patch:${oldSource?.toString('utf-8')}:${newSource?.toString('utf-8')}`,
+          ),
+      }),
+    );
+
+    const result = await readZipContent(outputPath);
+    expect(result.entries).toContain('assets/');
+    expect(result.files['assets/new.txt']?.toString('utf-8')).toBe('new-file');
+  });
+
+  test('diffFromIpa ignores non-payload files when resolving origin package path', async () => {
+    const originPath = path.join(tempRoot, 'origin-non-payload.ipa');
+    const nextPath = path.join(tempRoot, 'next-non-payload.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'non-payload-diff.ppk');
+
+    await createZip(originPath, {
+      'Random/ignored.txt': 'ignored',
+      'Payload/MyApp.app/main.jsbundle': 'old-bundle',
+      'Payload/MyApp.app/assets/icon.png': 'same-icon',
+    });
+    await createZip(nextPath, {
+      'index.bundlejs': 'new-bundle',
+      'assets/icon.png': 'same-icon',
+    });
+
+    await diffCommands.diffFromIpa(
+      createContext([originPath, nextPath], {
+        output: outputPath,
+        customDiff: () => Buffer.from('patch'),
+      }),
+    );
+
+    const result = await readZipContent(outputPath);
+    const diffMeta = JSON.parse(
+      result.files['__diff.json'].toString('utf-8'),
+    ) as {
+      copies: Record<string, string>;
+    };
+    expect(diffMeta.copies['assets/icon.png']).toBe('');
+  });
+
+  test('diff throws when output option is not string', async () => {
+    await expect(
+      diffCommands.diff(
+        createContext(['origin.ppk', 'next.ppk'], {
+          output: 123,
+          customDiff: () => Buffer.from('patch'),
+        }),
+      ),
+    ).rejects.toThrow('Output path is required.');
+  });
+
+  test('hdiff/diff require engine modules when customDiff is not provided', async () => {
+    const hasHdiff = hasDiffModule('node-hdiffpatch');
+    const hasBsdiff = hasDiffModule('node-bsdiff');
+
+    if (!hasHdiff) {
+      await expect(
+        diffCommands.hdiff(
+          createContext(['origin.ppk', 'next.ppk'], {
+            output: path.join(tempRoot, 'out', 'hdiff.ppk'),
+          }),
+        ),
+      ).rejects.toThrow(/node-hdiffpatch/);
+    }
+
+    if (!hasBsdiff) {
+      await expect(
+        diffCommands.diff(
+          createContext(['origin.ppk', 'next.ppk'], {
+            output: path.join(tempRoot, 'out', 'diff.ppk'),
+          }),
+        ),
+      ).rejects.toThrow(/node-bsdiff/);
+    }
+
+    expect(true).toBe(true);
   });
 });
