@@ -368,7 +368,7 @@ async function compileHermesByteCode(
     );
   }
   if (shouldCleanSourcemap) {
-    fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+    await fs.remove(path.join(outputFolder, `${bundleName}.txt.map`));
   }
 }
 
@@ -407,7 +407,7 @@ async function copyDebugidForSentry(
       },
     );
   }
-  fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+  await fs.remove(path.join(outputFolder, `${bundleName}.txt.map`));
 }
 
 async function uploadSourcemapForSentry(
