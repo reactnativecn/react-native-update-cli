@@ -24,7 +24,9 @@
   "scripts": {
     "build": "rm -rf lib && swc src -d lib --strip-leading-paths && tsc -p tsconfig.build.json",
     "prepublishOnly": "bun scripts/prepublish.ts && bun run build && chmod +x lib/index.js",
-    "lint": "tsc --noEmit && biome check --write ."
+    "lint": "tsc --noEmit && biome check --write .",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov"
   },
   "repository": {
     "type": "git",
