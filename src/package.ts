@@ -50,6 +50,10 @@ type NativeUploadConfig = {
   ) => string | number | undefined;
 };
 
+export function normalizeUploadBuildTime(value: unknown): string {
+  return String(value);
+}
+
 function ensureFileByExt(
   filePath: string | undefined,
   extension: NativeUploadConfig['extension'] | '.aab',
@@ -116,11 +120,12 @@ async function uploadNativePackage(
   const normalizedBuildTime = config.normalizeBuildTime
     ? config.normalizeBuildTime(buildTime)
     : buildTime;
+  const uploadBuildTime = normalizeUploadBuildTime(normalizedBuildTime);
 
   const { id } = await post(`/app/${appId}/package/create`, {
     name: versionName,
     hash,
-    buildTime: normalizedBuildTime,
+    buildTime: uploadBuildTime,
     deps: depVersions,
     commit: await getCommitInfo(),
   });
@@ -129,7 +134,7 @@ async function uploadNativePackage(
     t(config.successKey, {
       id,
       version: versionName,
-      buildTime: normalizedBuildTime,
+      buildTime: uploadBuildTime,
     }),
   );
 }
