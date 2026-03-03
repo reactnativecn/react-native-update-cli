@@ -27,4 +27,5 @@ export { packageModule } from './modules/package-module';
 
 export { loadSession, getSession } from './api';
 export { getPlatform, getSelectedApp } from './app';
+export { diffCommands } from './diff';
 export { question, saveToLocal } from './utils';

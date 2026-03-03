@@ -18,6 +18,16 @@
       "types": "./lib/index.d.ts",
       "require": "./lib/index.js",
       "default": "./lib/index.js"
+    },
+    "./diff": {
+      "types": "./lib/diff.d.ts",
+      "require": "./lib/diff.js",
+      "default": "./lib/diff.js"
+    },
+    "./lib/diff": {
+      "types": "./lib/diff.d.ts",
+      "require": "./lib/diff.js",
+      "default": "./lib/diff.js"
     }
   },
   "files": ["lib", "src", "proto", "cli.json"],
