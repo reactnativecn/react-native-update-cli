@@ -32,6 +32,90 @@ interface GradleConfig {
   enableHermes?: boolean;
 }
 
+const dependencyFields = [
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+] as const;
+
+type ResolvedExpoCli = {
+  cliPath: string;
+  usingExpo: boolean;
+};
+
+export function hasProjectDependency(
+  dependencyName: string,
+  projectRoot = process.cwd(),
+): boolean {
+  try {
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
+    ) as Record<string, unknown>;
+
+    return dependencyFields.some((field) => {
+      const dependencies = packageJson[field];
+      if (typeof dependencies !== 'object' || dependencies === null) {
+        return false;
+      }
+      return dependencyName in dependencies;
+    });
+  } catch {
+    return false;
+  }
+}
+
+export function resolveExpoCli(projectRoot = process.cwd()): ResolvedExpoCli {
+  if (!hasProjectDependency('expo', projectRoot)) {
+    return {
+      cliPath: '',
+      usingExpo: false,
+    };
+  }
+
+  try {
+    const searchPaths = [projectRoot];
+
+    try {
+      const expoPackageJsonPath = require.resolve('expo/package.json', {
+        paths: [projectRoot],
+      });
+      searchPaths.push(path.dirname(expoPackageJsonPath));
+    } catch {
+      // expo 包不存在，忽略
+    }
+
+    const cliPath = require.resolve('@expo/cli', {
+      paths: searchPaths,
+    });
+    const expoCliVersion = JSON.parse(
+      fs.readFileSync(
+        require.resolve('@expo/cli/package.json', {
+          paths: searchPaths,
+        }),
+        'utf8',
+      ),
+    ).version;
+
+    if (!satisfies(expoCliVersion, '>= 0.10.17')) {
+      return {
+        cliPath: '',
+        usingExpo: false,
+      };
+    }
+
+    return {
+      cliPath,
+      usingExpo: true,
+    };
+  } catch {
+    return {
+      cliPath: '',
+      usingExpo: false,
+    };
+  }
+}
+
 export async function runReactNativeBundleCommand({
   bundleName,
   dev,
@@ -65,40 +149,9 @@ export async function runReactNativeBundleCommand({
   let usingExpo = false;
 
   const getExpoCli = () => {
-    try {
-      const searchPaths = [process.cwd()];
-
-      try {
-        const expoPath = require.resolve('expo/package.json', {
-          paths: [process.cwd()],
-        });
-        const expoDir = expoPath.replace(/\/package\.json$/, '');
-        searchPaths.push(expoDir);
-      } catch {
-        // expo 包不存在，忽略
-      }
-
-      cliPath = require.resolve('@expo/cli', {
-        paths: searchPaths,
-      });
-
-      const expoCliVersion = JSON.parse(
-        fs
-          .readFileSync(
-            require.resolve('@expo/cli/package.json', {
-              paths: searchPaths,
-            }),
-          )
-          .toString(),
-      ).version;
-      if (satisfies(expoCliVersion, '>= 0.10.17')) {
-        usingExpo = true;
-      } else {
-        cliPath = '';
-      }
-    } catch {
-      // fallback 到 RN CLI
-    }
+    const resolvedExpoCli = resolveExpoCli();
+    cliPath = resolvedExpoCli.cliPath;
+    usingExpo = resolvedExpoCli.usingExpo;
   };
 
   const getRnCli = () => {
