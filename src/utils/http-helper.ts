@@ -48,7 +48,7 @@ export const ping = async (url: string) => {
         if (!pingFinished) {
           // console.log('ping timeout', url);
         }
-      }, 2000),
+      }, 5000),
     ),
   ]) as Promise<string | null>;
 };
