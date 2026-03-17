@@ -1,4 +1,12 @@
-import { describe, expect, test, mock, afterEach, beforeEach, spyOn } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from 'bun:test';
 import fs from 'fs';
 import { loadSession } from '../src/api';
 
@@ -13,7 +21,9 @@ describe('api.ts loadSession', () => {
 
     // Use spyOn to mock specific fs methods
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
-    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue('{ "invalid": json ');
+    readFileSyncSpy = spyOn(fs, 'readFileSync').mockReturnValue(
+      '{ "invalid": json ',
+    );
   });
 
   afterEach(() => {

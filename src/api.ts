@@ -75,10 +75,25 @@ export const closeSession = () => {
   session = undefined;
 };
 
+function createRequestError(error: unknown, requestUrl: string) {
+  const message =
+    typeof error === 'string'
+      ? error
+      : error instanceof Error
+        ? error.message
+        : String(error);
+  return new Error(`${message}\nURL: ${requestUrl}`);
+}
+
 async function query(url: string, options: fetch.RequestInit) {
   const baseUrl = await getBaseUrl;
   const fullUrl = `${baseUrl}${url}`;
-  const resp = await fetch(fullUrl, options);
+  let resp: fetch.Response;
+  try {
+    resp = await fetch(fullUrl, options);
+  } catch (error) {
+    throw createRequestError(error, fullUrl);
+  }
   const text = await resp.text();
   let json: any;
   try {
@@ -86,11 +101,11 @@ async function query(url: string, options: fetch.RequestInit) {
   } catch (e) {}
 
   if (resp.status !== 200) {
-    const message = json?.message || resp.statusText;
+    const message = json?.message || resp.statusText || `HTTP ${resp.status}`;
     if (resp.status === 401) {
-      throw new Error(t('loginExpired'));
+      throw createRequestError(t('loginExpired'), fullUrl);
     }
-    throw new Error(message);
+    throw createRequestError(message, fullUrl);
   }
   return json;
 }
@@ -195,13 +210,21 @@ export async function uploadFile(fn: string, key?: string) {
   //   contentType: 'application/octet-stream',
   // });
 
-  const res = await fetch(realUrl, {
-    method: 'POST',
-    body: form,
-  });
+  let res: fetch.Response;
+  try {
+    res = await fetch(realUrl, {
+      method: 'POST',
+      body: form,
+    });
+  } catch (error) {
+    throw createRequestError(error, realUrl);
+  }
 
   if (res.status > 299) {
-    throw new Error(`${res.status}: ${res.statusText}`);
+    throw createRequestError(
+      `${res.status}: ${res.statusText || 'Upload failed'}`,
+      realUrl,
+    );
   }
 
   // const body = await response.json();
