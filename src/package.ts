@@ -175,10 +175,11 @@ export async function listPackage(appId: string) {
 
 export async function choosePackage(appId: string) {
   const list = await listPackage(appId);
+  const packageMap = new Map(list?.map((v) => [v.id.toString(), v]));
 
   while (true) {
     const id = await question(t('enterNativePackageId'));
-    const app = list?.find((v) => v.id.toString() === id);
+    const app = packageMap.get(id);
     if (app) {
       return app;
     }
