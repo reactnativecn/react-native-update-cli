@@ -27,13 +27,19 @@ export function assertPlatform(platform: string): Platform {
   return platform as Platform;
 }
 
-export function getSelectedApp(platform: Platform) {
+export async function getSelectedApp(platform: Platform) {
   assertPlatform(platform);
 
-  if (!fs.existsSync('update.json')) {
-    throw new Error(t('appNotSelected', { platform }));
+  let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
+    {};
+  try {
+    updateInfo = JSON.parse(await fs.promises.readFile('update.json', 'utf8'));
+  } catch (e: any) {
+    if (e.code === 'ENOENT') {
+      throw new Error(t('appNotSelected', { platform }));
+    }
+    throw e;
   }
-  const updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
   if (!updateInfo[platform]) {
     throw new Error(t('appNotSelected', { platform }));
   }
@@ -125,10 +131,10 @@ export const appCommands = {
     let updateInfo: Partial<
       Record<Platform, { appId: number; appKey: string }>
     > = {};
-    if (fs.existsSync('update.json')) {
-      try {
-        updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
-      } catch (e) {
+    try {
+      updateInfo = JSON.parse(await fs.promises.readFile('update.json', 'utf8'));
+    } catch (e: any) {
+      if (e.code !== 'ENOENT') {
         console.error(t('failedToParseUpdateJson'));
         throw e;
       }
@@ -138,7 +144,7 @@ export const appCommands = {
       appId: id,
       appKey,
     };
-    fs.writeFileSync(
+    await fs.promises.writeFile(
       'update.json',
       JSON.stringify(updateInfo, null, 4),
       'utf8',
