@@ -12,7 +12,6 @@ import {
 mock.module('tty-table', () => ({
   __esModule: true,
   default: class Table {
-    constructor() {}
     render() { return 'mocked table'; }
   },
 }));
