@@ -40,10 +40,6 @@ export class ModuleManager {
     if (module.init) {
       module.init(this.provider);
     }
-
-    // console.log(
-    //   `Module '${module.name}' (v${module.version}) registered successfully`,
-    // );
   }
 
   unregisterModule(moduleName: string): void {
