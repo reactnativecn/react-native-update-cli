@@ -99,7 +99,7 @@ async function uploadNativePackage(
   const { appId: appIdInPkg, appKey: appKeyInPkg } = info;
   const { appId, appKey } = await getSelectedApp(config.platform);
 
-  if (appIdInPkg && appIdInPkg != appId) {
+  if (appIdInPkg && String(appIdInPkg) !== appId) {
     throw new Error(t(config.appIdMismatchKey, { appIdInPkg, appId }));
   }
 
@@ -330,7 +330,7 @@ export const packageCommands = {
   packages: async ({ options }: { options: { platform: Platform } }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
-    await listPackage(appId);
+    await listPackage(String(appId));
   },
   deletePackage: async ({
     args,
@@ -348,7 +348,7 @@ export const packageCommands = {
 
     if (!appId) {
       const platform = await getPlatform(options.platform);
-      appId = (await getSelectedApp(platform)).appId as string;
+      appId = (await getSelectedApp(platform)).appId;
     }
 
     // If no packageId provided as argument, let user choose from list

@@ -27,7 +27,9 @@ export function assertPlatform(platform: string): Platform {
   return platform as Platform;
 }
 
-export async function getSelectedApp(platform: Platform) {
+export async function getSelectedApp(
+  platform: Platform,
+): Promise<{ appId: string; appKey: string; platform: Platform }> {
   assertPlatform(platform);
 
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
@@ -40,10 +42,15 @@ export async function getSelectedApp(platform: Platform) {
     }
     throw e;
   }
-  if (!updateInfo[platform]) {
+  const info = updateInfo[platform];
+  if (!info) {
     throw new Error(t('appNotSelected', { platform }));
   }
-  return updateInfo[platform];
+  return {
+    appId: String(info.appId),
+    appKey: info.appKey,
+    platform,
+  };
 }
 
 export async function listApp(platform: Platform | '' = '') {

@@ -480,12 +480,12 @@ export const versionCommands = {
   versions: async ({ options }: { options: VersionCommandOptions }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
-    await listVersions(appId);
+    await listVersions(String(appId));
   },
   update: async ({ options }: { options: VersionCommandOptions }) => {
     const platform = await getPlatform(options.platform);
     const appId = options.appId || (await getSelectedApp(platform)).appId;
-    let versionId = options.versionId || (await chooseVersion(appId)).id;
+    let versionId = options.versionId || (await chooseVersion(String(appId))).id;
     if (versionId === 'null') {
       versionId = undefined;
     }
@@ -508,7 +508,7 @@ export const versionCommands = {
       }
     }
 
-    const allPkgs = await getAllPackages(appId);
+    const allPkgs = await getAllPackages(String(appId));
 
     if (!allPkgs) {
       throw new Error(t('noPackagesFound', { appId }));
@@ -558,7 +558,7 @@ export const versionCommands = {
       }
     } else {
       if (!pkgId) {
-        pkgId = (await choosePackage(appId)).id;
+        pkgId = (await choosePackage(String(appId))).id;
       }
 
       if (!pkgId) {
@@ -575,15 +575,15 @@ export const versionCommands = {
     }
 
     await printDepsChangesForPublish({
-      appId,
-      versionId,
+      appId: String(appId),
+      versionId: String(versionId),
       pkgs: pkgsToBind,
       providedVersionDeps: options.versionDeps,
     });
 
     await bindVersionToPackages({
-      appId,
-      versionId,
+      appId: String(appId),
+      versionId: String(versionId),
       pkgs: pkgsToBind,
       rollout,
       dryRun: options.dryRun,
@@ -596,14 +596,14 @@ export const versionCommands = {
   }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
-    const versionId = options.versionId || (await chooseVersion(appId)).id;
+    const versionId = options.versionId || (await chooseVersion(String(appId))).id;
 
     const updateParams: Record<string, string> = {};
     if (options.name) updateParams.name = options.name;
     if (options.description) updateParams.description = options.description;
     if (options.metaInfo) updateParams.metaInfo = options.metaInfo;
 
-    await put(`/app/${appId}/version/${versionId}`, updateParams);
+    await put(`/app/${String(appId)}/version/${versionId}`, updateParams);
     console.log(t('operationSuccess'));
   },
   deleteVersion: async ({
@@ -619,11 +619,11 @@ export const versionCommands = {
 
     let versionId = options.versionId;
     if (!versionId) {
-      versionId = (await chooseVersion(appId as string)).id;
+      versionId = (await chooseVersion(String(appId))).id;
     }
 
     try {
-      await doDelete(`/app/${appId}/version/${versionId}`);
+      await doDelete(`/app/${String(appId)}/version/${versionId}`);
       console.log(t('deleteVersionSuccess', { versionId }));
     } catch (error: any) {
       throw new Error(
