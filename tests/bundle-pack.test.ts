@@ -5,12 +5,25 @@ import path from 'path';
 import { open as openZipFile } from 'yauzl';
 import { packBundle } from '../src/bundle-pack';
 
+const hermesBytecodePrefix = Buffer.from([
+  0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f,
+]);
+const pngPrefix = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+
 function mkTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
-async function listZipEntries(zipPath: string): Promise<string[]> {
+type ZipEntryInfo = {
+  entries: string[];
+  compressionMethods: Record<string, number>;
+};
+
+async function readZipEntryInfo(zipPath: string): Promise<ZipEntryInfo> {
   const entries: string[] = [];
+  const compressionMethods: Record<string, number> = {};
   await new Promise<void>((resolve, reject) => {
     openZipFile(zipPath, { lazyEntries: true }, (error, zipfile) => {
       if (error || !zipfile) {
@@ -20,6 +33,7 @@ async function listZipEntries(zipPath: string): Promise<string[]> {
 
       zipfile.on('entry', (entry) => {
         entries.push(entry.fileName);
+        compressionMethods[entry.fileName] = entry.compressionMethod;
         zipfile.readEntry();
       });
       zipfile.once('end', () => resolve());
@@ -28,7 +42,7 @@ async function listZipEntries(zipPath: string): Promise<string[]> {
       zipfile.readEntry();
     });
   });
-  return entries;
+  return { entries, compressionMethods };
 }
 
 describe('bundle-pack', () => {
@@ -49,7 +63,10 @@ describe('bundle-pack', () => {
     const nestedDir = path.join(sourceDir, 'assets');
     fs.mkdirSync(nestedDir, { recursive: true });
 
-    fs.writeFileSync(path.join(sourceDir, 'index.bundlejs'), 'bundle');
+    fs.writeFileSync(
+      path.join(sourceDir, 'index.bundlejs'),
+      Buffer.concat([hermesBytecodePrefix, Buffer.from('bundle')]),
+    );
     fs.writeFileSync(path.join(sourceDir, 'index.bundlejs.map'), 'ignored-map');
     fs.writeFileSync(
       path.join(sourceDir, 'bundle.harmony.js.map'),
@@ -59,21 +76,40 @@ describe('bundle-pack', () => {
     fs.writeFileSync(path.join(sourceDir, 'ignored.txt.map'), 'ignored-map');
     fs.writeFileSync(path.join(sourceDir, '.DS_Store'), 'ignored');
     fs.writeFileSync(path.join(nestedDir, 'image.png'), 'image-content');
+    fs.writeFileSync(path.join(nestedDir, 'bytecode.hbc'), 'hbc-content');
+    fs.writeFileSync(
+      path.join(nestedDir, 'image-without-extension'),
+      Buffer.concat([pngPrefix, Buffer.from('image-content')]),
+    );
+    fs.writeFileSync(
+      path.join(nestedDir, 'hermes-misnamed.png'),
+      Buffer.concat([hermesBytecodePrefix, Buffer.from('bundle')]),
+    );
 
     const outputZip = path.join(tempRoot, 'dist', 'output.ppk');
     await packBundle(sourceDir, outputZip);
 
     expect(fs.existsSync(outputZip)).toBe(true);
 
-    const entries = await listZipEntries(outputZip);
+    const { entries, compressionMethods } = await readZipEntryInfo(outputZip);
     expect(entries).toContain('index.bundlejs');
     expect(entries).toContain('keep.txt');
     expect(entries).toContain('assets/');
     expect(entries).toContain('assets/image.png');
+    expect(entries).toContain('assets/bytecode.hbc');
+    expect(entries).toContain('assets/image-without-extension');
+    expect(entries).toContain('assets/hermes-misnamed.png');
 
     expect(entries).not.toContain('index.bundlejs.map');
     expect(entries).not.toContain('bundle.harmony.js.map');
     expect(entries).not.toContain('ignored.txt.map');
     expect(entries).not.toContain('.DS_Store');
+
+    expect(compressionMethods['index.bundlejs']).toBe(8);
+    expect(compressionMethods['keep.txt']).toBe(8);
+    expect(compressionMethods['assets/image.png']).toBe(0);
+    expect(compressionMethods['assets/bytecode.hbc']).toBe(8);
+    expect(compressionMethods['assets/image-without-extension']).toBe(0);
+    expect(compressionMethods['assets/hermes-misnamed.png']).toBe(8);
   });
 });

@@ -2,6 +2,7 @@ import path from 'path';
 import * as fs from 'fs-extra';
 import { ZipFile as YazlZipFile } from 'yazl';
 import { t } from './utils/i18n';
+import { zipOptionsForPayloadFile } from './utils/zip-options';
 
 const ignorePackingFileNames = [
   '.',
@@ -32,7 +33,11 @@ export async function packBundle(dir: string, output: string): Promise<void> {
         const fullPath = path.join(root, name);
         const stat = fs.statSync(fullPath);
         if (stat.isFile()) {
-          zipfile.addFile(fullPath, rel + name);
+          zipfile.addFile(
+            fullPath,
+            rel + name,
+            zipOptionsForPayloadFile(fullPath, rel + name),
+          );
         } else if (stat.isDirectory()) {
           addDirectory(fullPath, `${rel}${name}/`);
         }

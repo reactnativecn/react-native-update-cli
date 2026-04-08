@@ -28,6 +28,75 @@ export function readEntry(
   });
 }
 
+export function readEntryPrefix(
+  entry: Entry,
+  zipFile: YauzlZipFile,
+  maxBytes: number,
+): Promise<Buffer> {
+  if (maxBytes <= 0) {
+    return Promise.resolve(Buffer.alloc(0));
+  }
+
+  const buffers: Buffer[] = [];
+  let length = 0;
+
+  return new Promise((resolve, reject) => {
+    zipFile.openReadStream(entry, (err, stream) => {
+      if (err) {
+        return reject(err);
+      }
+      if (!stream) {
+        return reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
+      }
+
+      let settled = false;
+      const cleanup = () => {
+        stream.off('data', onData);
+        stream.off('end', onEnd);
+        stream.off('error', onError);
+      };
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(Buffer.concat(buffers, length));
+      };
+      const onData = (chunk: Buffer) => {
+        const remaining = maxBytes - length;
+        if (remaining <= 0) {
+          finish();
+          stream.destroy();
+          return;
+        }
+
+        const slice =
+          chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
+        buffers.push(slice);
+        length += slice.length;
+        if (length >= maxBytes) {
+          finish();
+          stream.destroy();
+        }
+      };
+      const onEnd = () => finish();
+      const onError = (error: Error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(error);
+      };
+
+      stream.on('data', onData);
+      stream.once('end', onEnd);
+      stream.once('error', onError);
+    });
+  });
+}
+
 export async function enumZipEntries(
   zipFn: string,
   callback: (
