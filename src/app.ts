@@ -4,6 +4,7 @@ import { question } from './utils';
 
 import { doDelete, get, post } from './api';
 import type { Platform } from './types';
+import { updateJson } from './utils/constants';
 import { t } from './utils/i18n';
 
 interface AppSummary {
@@ -30,10 +31,10 @@ export function assertPlatform(platform: string): Platform {
 export function getSelectedApp(platform: Platform) {
   assertPlatform(platform);
 
-  if (!fs.existsSync('update.json')) {
+  if (!fs.existsSync(updateJson)) {
     throw new Error(t('appNotSelected', { platform }));
   }
-  const updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
+  const updateInfo = JSON.parse(fs.readFileSync(updateJson, 'utf8'));
   if (!updateInfo[platform]) {
     throw new Error(t('appNotSelected', { platform }));
   }
@@ -125,9 +126,9 @@ export const appCommands = {
     let updateInfo: Partial<
       Record<Platform, { appId: number; appKey: string }>
     > = {};
-    if (fs.existsSync('update.json')) {
+    if (fs.existsSync(updateJson)) {
       try {
-        updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
+        updateInfo = JSON.parse(fs.readFileSync(updateJson, 'utf8'));
       } catch (e) {
         console.error(t('failedToParseUpdateJson'));
         throw e;
@@ -138,10 +139,10 @@ export const appCommands = {
       appId: id,
       appKey,
     };
-    fs.writeFileSync(
-      'update.json',
-      JSON.stringify(updateInfo, null, 4),
-      'utf8',
-    );
+    fs.writeFileSync(updateJson, JSON.stringify(updateInfo, null, 4), {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    fs.chmodSync(updateJson, 0o600);
   },
 };

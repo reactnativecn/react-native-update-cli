@@ -62,7 +62,8 @@ export const saveSession = () => {
   if (session !== savedSession) {
     const current = session;
     const data = JSON.stringify(current, null, 4);
-    fs.writeFileSync(credentialFile, data, 'utf8');
+    fs.writeFileSync(credentialFile, data, { encoding: 'utf8', mode: 0o600 });
+    fs.chmodSync(credentialFile, 0o600);
     savedSession = current;
   }
 };
