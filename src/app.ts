@@ -112,7 +112,7 @@ export const appCommands = {
     options: { platform: Platform };
   }) => {
     const { platform } = options;
-    const id = args[0] || chooseApp(platform);
+    const id = args[0] || (await chooseApp(platform)).id;
     if (!id) {
       console.log(t('cancelled'));
     }
@@ -139,7 +139,9 @@ export const appCommands = {
       Record<Platform, { appId: number; appKey: string }>
     > = {};
     try {
-      updateInfo = JSON.parse(await fs.promises.readFile('update.json', 'utf8'));
+      updateInfo = JSON.parse(
+        await fs.promises.readFile('update.json', 'utf8'),
+      );
     } catch (e: any) {
       if (e.code !== 'ENOENT') {
         console.error(t('failedToParseUpdateJson'));

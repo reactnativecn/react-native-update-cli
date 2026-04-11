@@ -19,41 +19,12 @@ import {
 } from './utils/zip-options';
 
 type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
-type HpatchCover = {
-  oldPos: number | string | bigint;
-  newPos: number | string | bigint;
-  len: number | string | bigint;
-};
-type HpatchCompatiblePlan = {
-  covers?: HpatchCover[];
-};
-type HdiffWithCoversOptions = {
-  mode?: 'replace' | 'merge' | 'native-coalesce';
-};
 type HdiffModule = {
   diff?: Diff;
-  diffWithCovers?: (
-    oldSource: Buffer,
-    newSource: Buffer,
-    covers: HpatchCover[],
-    options?: HdiffWithCoversOptions,
-  ) => { diff?: Buffer };
 };
 type BsdiffModule = {
   diff?: Diff;
 };
-type ChiffModule = {
-  hpatchCompatiblePlanResult?: (
-    oldSource: Buffer,
-    newSource: Buffer,
-  ) => HpatchCompatiblePlan;
-  hpatchApproximatePlanResult?: (
-    oldSource: Buffer,
-    newSource: Buffer,
-  ) => HpatchCompatiblePlan;
-};
-type ChiffHpatchPolicy = 'off' | 'costed';
-type ChiffHpatchExactPolicy = 'off' | 'on';
 type EntryMap = Record<string, { crc32: number; fileName: string }>;
 type CrcMap = Record<number, string>;
 type CopyMap = Record<string, string>;
@@ -86,121 +57,6 @@ const loadModule = <T>(pkgName: string): T | undefined => {
 
 const hdiff = loadModule<HdiffModule>('node-hdiffpatch');
 const bsdiff = loadModule<BsdiffModule>('node-bsdiff');
-const chiff = loadModule<ChiffModule>('@chiff/node');
-
-// Structured covers are experimental and can be expensive on real Hermes input.
-// Keep native hdiff as the default unless the server explicitly opts in.
-function resolveChiffHpatchPolicy(policy?: unknown): ChiffHpatchPolicy {
-  const value = String(
-    policy ?? process.env.RNU_CHIFF_HPATCH_POLICY ?? 'off',
-  ).toLowerCase();
-  if (
-    value === 'costed' ||
-    value === 'on' ||
-    value === 'true' ||
-    value === '1'
-  ) {
-    return 'costed';
-  }
-  return 'off';
-}
-
-function resolveChiffHpatchMinNativeBytes(value?: unknown): number {
-  const raw = value ?? process.env.RNU_CHIFF_HPATCH_MIN_NATIVE_BYTES ?? 4096;
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return 4096;
-  }
-  return Math.floor(parsed);
-}
-
-function resolveChiffHpatchExactPolicy(policy?: unknown): ChiffHpatchExactPolicy {
-  const value = String(
-    policy ?? process.env.RNU_CHIFF_HPATCH_EXACT_COVERS ?? 'off',
-  ).toLowerCase();
-  if (value === 'on' || value === 'true' || value === '1') {
-    return 'on';
-  }
-  return 'off';
-}
-
-function createChiffAwareHdiff(
-  hdiffModule: HdiffModule,
-  chiffModule: ChiffModule | undefined,
-  policy: ChiffHpatchPolicy,
-  minNativeBytes: number,
-  exactPolicy: ChiffHpatchExactPolicy,
-): Diff {
-  const baseDiff = hdiffModule.diff;
-  if (!baseDiff) {
-    throw new Error(t('nodeHdiffpatchRequired', { scriptName }));
-  }
-
-  if (policy === 'off') {
-    return baseDiff;
-  }
-
-  return (oldSource?: Buffer, newSource?: Buffer) => {
-    const nativeDiff = baseDiff(oldSource, newSource);
-    if (!oldSource || !newSource || !hdiffModule.diffWithCovers) {
-      return nativeDiff;
-    }
-
-    let bestDiff = nativeDiff;
-    const tryDiffWithCovers = (
-      covers: HpatchCover[],
-      mode: 'replace' | 'merge' | 'native-coalesce',
-    ) => {
-      try {
-        const result = hdiffModule.diffWithCovers?.(
-          oldSource,
-          newSource,
-          covers,
-          { mode },
-        );
-        if (
-          Buffer.isBuffer(result?.diff) &&
-          result.diff.length < bestDiff.length
-        ) {
-          bestDiff = result.diff;
-        }
-      } catch {}
-    };
-
-    tryDiffWithCovers([], 'native-coalesce');
-
-    if (nativeDiff.length < minNativeBytes) {
-      return bestDiff;
-    }
-
-    try {
-      const approximatePlan = chiffModule?.hpatchApproximatePlanResult?.(
-        oldSource,
-        newSource,
-      );
-      if (Array.isArray(approximatePlan?.covers)) {
-        tryDiffWithCovers(approximatePlan.covers, 'merge');
-      }
-    } catch {}
-
-    if (
-      exactPolicy === 'off' ||
-      !chiffModule?.hpatchCompatiblePlanResult
-    ) {
-      return bestDiff;
-    }
-
-    try {
-      const plan = chiffModule.hpatchCompatiblePlanResult(oldSource, newSource);
-      if (Array.isArray(plan.covers)) {
-        tryDiffWithCovers(plan.covers, 'replace');
-        tryDiffWithCovers(plan.covers, 'merge');
-      }
-    } catch {}
-
-    return bestDiff;
-  };
-}
 
 function basename(fn: string): string | undefined {
   const m = /^(.+\/)[^\/]+\/?$/.exec(fn);
@@ -473,10 +329,6 @@ async function diffFromPackage(
 type DiffCommandOptions = {
   customDiff?: Diff;
   customHdiffModule?: HdiffModule;
-  customChiffModule?: ChiffModule;
-  chiffHpatchPolicy?: ChiffHpatchPolicy;
-  chiffHpatchMinNativeBytes?: number | string;
-  chiffHpatchExactCovers?: ChiffHpatchExactPolicy | boolean | string | number;
   [key: string]: any;
 };
 
@@ -493,13 +345,7 @@ function resolveDiffImplementation(
     if (!hdiffModule?.diff) {
       throw new Error(t('nodeHdiffpatchRequired', { scriptName }));
     }
-    return createChiffAwareHdiff(
-      hdiffModule,
-      options.customChiffModule ?? chiff,
-      resolveChiffHpatchPolicy(options.chiffHpatchPolicy),
-      resolveChiffHpatchMinNativeBytes(options.chiffHpatchMinNativeBytes),
-      resolveChiffHpatchExactPolicy(options.chiffHpatchExactCovers),
-    );
+    return hdiffModule.diff;
   }
 
   if (!bsdiff?.diff) {

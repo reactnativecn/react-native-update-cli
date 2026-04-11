@@ -1,5 +1,5 @@
-import path from 'path';
 import * as fs from 'fs';
+import path from 'path';
 
 export type ZipEntryOptions = {
   compress?: boolean;
@@ -108,11 +108,7 @@ function hasAlreadyCompressedMagic(bytes: Buffer): boolean {
   if (startsWith(bytes, Buffer.from('ID3', 'ascii'))) {
     return true;
   }
-  if (
-    bytes[0] === 0xff &&
-    bytes.length >= 2 &&
-    (bytes[1] & 0xe0) === 0xe0
-  ) {
+  if (bytes[0] === 0xff && bytes.length >= 2 && (bytes[1] & 0xe0) === 0xe0) {
     return true;
   }
   if (

@@ -98,7 +98,13 @@ async function query(url: string, options: fetch.RequestInit) {
   let json: any;
   try {
     json = JSON.parse(text);
-  } catch (e) {}
+  } catch (e) {
+    if (resp.status === 200 && text) {
+      console.warn(
+        `Warning: API returned 200 with non-JSON body (${text.length} bytes)`,
+      );
+    }
+  }
 
   if (resp.status !== 200) {
     const message = json?.message || resp.statusText || `HTTP ${resp.status}`;

@@ -485,7 +485,8 @@ export const versionCommands = {
   update: async ({ options }: { options: VersionCommandOptions }) => {
     const platform = await getPlatform(options.platform);
     const appId = options.appId || (await getSelectedApp(platform)).appId;
-    let versionId = options.versionId || (await chooseVersion(String(appId))).id;
+    let versionId =
+      options.versionId || (await chooseVersion(String(appId))).id;
     if (versionId === 'null') {
       versionId = undefined;
     }
@@ -498,12 +499,8 @@ export const versionCommands = {
     let rollout: number | undefined = undefined;
 
     if (options.rollout !== undefined) {
-      try {
-        rollout = Number.parseInt(options.rollout);
-      } catch (e) {
-        throw new Error(t('rolloutRangeError'));
-      }
-      if (rollout < 1 || rollout > 100) {
+      rollout = Number.parseInt(options.rollout, 10);
+      if (Number.isNaN(rollout) || rollout < 1 || rollout > 100) {
         throw new Error(t('rolloutRangeError'));
       }
     }
@@ -596,7 +593,8 @@ export const versionCommands = {
   }) => {
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
-    const versionId = options.versionId || (await chooseVersion(String(appId))).id;
+    const versionId =
+      options.versionId || (await chooseVersion(String(appId))).id;
 
     const updateParams: Record<string, string> = {};
     if (options.name) updateParams.name = options.name;

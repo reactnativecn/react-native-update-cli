@@ -15,6 +15,12 @@ export function readEntry(
   const buffers: Buffer[] = [];
   return new Promise((resolve, reject) => {
     zipFile.openReadStream(entry, (err, stream) => {
+      if (err) {
+        return reject(err);
+      }
+      if (!stream) {
+        return reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
+      }
       stream.on('data', (chunk: Buffer) => {
         buffers.push(chunk);
       });
