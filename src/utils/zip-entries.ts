@@ -1,10 +1,10 @@
+import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import * as fs from 'fs-extra';
 import {
   type Entry,
-  type ZipFile as YauzlZipFile,
   open as openZipFile,
+  type ZipFile as YauzlZipFile,
 } from 'yauzl';
 import { t } from './i18n';
 
@@ -56,24 +56,33 @@ export function readEntryPrefix(
       }
 
       let settled = false;
+      let expectedDestroyError: Error | undefined;
       const cleanup = () => {
         stream.off('data', onData);
         stream.off('end', onEnd);
         stream.off('error', onError);
       };
-      const finish = () => {
+      const finish = (destroyStream = false) => {
         if (settled) {
           return;
         }
         settled = true;
-        cleanup();
+        stream.off('data', onData);
+        stream.off('end', onEnd);
+        if (!destroyStream) {
+          stream.off('error', onError);
+        }
         resolve(Buffer.concat(buffers, length));
+
+        if (destroyStream) {
+          expectedDestroyError = new Error('zip entry prefix read complete');
+          stream.destroy(expectedDestroyError);
+        }
       };
       const onData = (chunk: Buffer) => {
         const remaining = maxBytes - length;
         if (remaining <= 0) {
-          finish();
-          stream.destroy();
+          finish(true);
           return;
         }
 
@@ -82,12 +91,15 @@ export function readEntryPrefix(
         buffers.push(slice);
         length += slice.length;
         if (length >= maxBytes) {
-          finish();
-          stream.destroy();
+          finish(true);
         }
       };
       const onEnd = () => finish();
       const onError = (error: Error) => {
+        if (settled && error === expectedDestroyError) {
+          cleanup();
+          return;
+        }
         if (settled) {
           return;
         }
