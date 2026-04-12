@@ -1,6 +1,6 @@
 {
   "files": {
-    "ignore": ["lib"]
+    "includes": ["**", "!**/lib"]
   },
   "linter": {
     "enabled": true,

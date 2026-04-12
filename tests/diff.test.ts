@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import fs from 'fs';
+import { npm, yarn } from 'global-dirs';
 import os from 'os';
 import path from 'path';
-import { npm, yarn } from 'global-dirs';
 import { ZipFile as YazlZipFile } from 'yazl';
 import { diffCommands, enumZipEntries, readEntry } from '../src/diff';
 import type { CommandContext } from '../src/types';
+import { readEntryPrefix } from '../src/utils/zip-entries';
 
 const pngPrefix = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const hermesBytecodePrefix = Buffer.from([
@@ -290,6 +291,23 @@ describe('diff commands', () => {
     ).length;
     expect(extraDirCount).toBe(1);
     expect(result.files['extra/new.txt']?.toString('utf-8')).toBe('new-file');
+  });
+
+  test('readEntryPrefix stops large zip entries without surfacing destroy errors', async () => {
+    const zipPath = path.join(tempRoot, 'large-entry.ppk');
+    const payload = Buffer.alloc(256, 'x');
+    await createZip(zipPath, {
+      'large-entry.bin': payload,
+    });
+
+    let prefix: Buffer | undefined;
+    await enumZipEntries(zipPath, async (entry, zipFile) => {
+      if (entry.fileName === 'large-entry.bin') {
+        prefix = await readEntryPrefix(entry, zipFile, 64);
+      }
+    });
+
+    expect(prefix).toEqual(payload.subarray(0, 64));
   });
 
   test('diffFromApk throws when origin package bundle is missing', async () => {
