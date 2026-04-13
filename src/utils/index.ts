@@ -1,16 +1,15 @@
-import os from 'os';
-import path from 'path';
 import chalk from 'chalk';
 import { satisfies } from 'compare-versions';
 import fs from 'fs-extra';
+import os from 'os';
+import path from 'path';
 import type { Root as ProtobufRoot } from 'protobufjs';
-import { type Entry as YauzlEntry, open as openZipFile } from 'yauzl';
+import { read } from 'read';
+import { open as openZipFile, type Entry as YauzlEntry } from 'yauzl';
 import pkg from '../../package.json';
 import latestVersion from '../utils/latest-version';
 import AppInfoParser from './app-info-parser';
 import { checkPlugins } from './check-plugin';
-
-import { read } from 'read';
 import { IS_CRESC, tempDir } from './constants';
 import { depVersions } from './dep-versions';
 import { t } from './i18n';

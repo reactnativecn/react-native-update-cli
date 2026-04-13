@@ -1,15 +1,15 @@
-import fs from 'fs';
-import path from 'path';
-import util from 'util';
 import filesizeParser from 'filesize-parser';
 import FormData from 'form-data';
+import fs from 'fs';
 import fetch from 'node-fetch';
+import path from 'path';
 import ProgressBar from 'progress';
 import tcpp from 'tcp-ping';
+import util from 'util';
 import { getBaseUrl } from 'utils/http-helper';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
-import { IS_CRESC, credentialFile, pricingPageUrl } from './utils/constants';
+import { credentialFile, IS_CRESC, pricingPageUrl } from './utils/constants';
 import { t } from './utils/i18n';
 
 const tcpPing = util.promisify(tcpp.ping);
@@ -163,7 +163,6 @@ export async function uploadFile(fn: string, key?: string) {
   });
   let realUrl = url;
   if (backupUrl) {
-    // @ts-ignore
     if (global.USE_ACC_OSS) {
       realUrl = backupUrl;
     } else {

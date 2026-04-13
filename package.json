@@ -30,11 +30,19 @@
       "default": "./lib/diff.js"
     }
   },
-  "files": ["lib", "src", "proto", "cli.json"],
+  "files": [
+    "lib",
+    "src",
+    "proto",
+    "cli.json"
+  ],
   "scripts": {
-    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && tsc -p tsconfig.build.json",
-    "prepublishOnly": "bun scripts/prepublish.ts && bun run build && chmod +x lib/index.js",
-    "lint": "tsc --noEmit && biome check --write .",
+    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && bun run typecheck:build",
+    "prepublishOnly": "bun run build && chmod +x lib/index.js",
+    "typecheck": "tsc --noEmit",
+    "typecheck:build": "tsc -p tsconfig.build.json",
+    "lint": "bun run typecheck && biome check .",
+    "lint:fix": "bun run typecheck && biome check --write .",
     "test": "bun test",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov"
   },
@@ -42,7 +50,13 @@
     "type": "git",
     "url": "git+https://github.com/reactnativecn/react-native-update-cli.git"
   },
-  "keywords": ["react-native", "ios", "android", "harmony", "update"],
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "harmony",
+    "update"
+  ],
   "author": "reactnativecn",
   "license": "BSD-3-Clause",
   "bugs": {
@@ -98,5 +112,8 @@
     "@types/yazl": "^2.4.6",
     "typescript": "^6.0.2"
   },
-  "trustedDependencies": ["@biomejs/biome", "@swc/core"]
+  "trustedDependencies": [
+    "@biomejs/biome",
+    "@swc/core"
+  ]
 }

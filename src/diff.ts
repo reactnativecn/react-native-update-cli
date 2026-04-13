@@ -1,6 +1,6 @@
-import path from 'path';
 import * as fs from 'fs-extra';
 import { npm, yarn } from 'global-dirs';
+import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
 import type { CommandContext } from './types';
 import { translateOptions } from './utils';
@@ -59,7 +59,7 @@ const hdiff = loadModule<HdiffModule>('node-hdiffpatch');
 const bsdiff = loadModule<BsdiffModule>('node-bsdiff');
 
 function basename(fn: string): string | undefined {
-  const m = /^(.+\/)[^\/]+\/?$/.exec(fn);
+  const m = /^(.+\/)[^/]+\/?$/.exec(fn);
   return m?.[1];
 }
 

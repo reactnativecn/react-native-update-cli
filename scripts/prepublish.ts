@@ -35,9 +35,18 @@ async function modifyPackageJson({
 }
 
 async function main(): Promise<void> {
-  const version = (await $`git describe --tags --always`.text())
+  const isDryRun =
+    process.env.PUBLISH_DRY_RUN === 'true' ||
+    process.env.npm_config_dry_run === 'true';
+
+  const gitVersion = (await $`git describe --tags --always`.text())
     .replace('v', '')
     .trim();
+  const version = process.env.PUBLISH_VERSION ?? gitVersion;
+
+  if (isDryRun) {
+    console.log(`Dry run publish detected; using version ${version}`);
+  }
   try {
     await modifyPackageJson({ version });
     console.log('✅ Prepublish script completed successfully');

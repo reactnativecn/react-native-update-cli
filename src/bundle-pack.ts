@@ -1,5 +1,5 @@
-import path from 'path';
 import * as fs from 'fs-extra';
+import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
 import { t } from './utils/i18n';
 import { zipOptionsForPayloadFile } from './utils/zip-options';

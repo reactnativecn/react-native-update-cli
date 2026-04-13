@@ -149,13 +149,13 @@ const decodeNullUnicode = (value: string | RegExp) => {
 };
 
 export {
-  isArray,
-  isObject,
-  isPrimitive,
-  isBrowser,
-  mapInfoResource,
+  decodeNullUnicode,
   findApkIconPath,
   findIpaIconPath,
   getBase64FromBuffer,
-  decodeNullUnicode,
+  isArray,
+  isBrowser,
+  isObject,
+  isPrimitive,
+  mapInfoResource,
 };

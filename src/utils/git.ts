@@ -1,6 +1,6 @@
 import fs from 'fs';
-import path from 'path';
 import git from 'isomorphic-git';
+import path from 'path';
 
 export interface CommitInfo {
   hash: string;

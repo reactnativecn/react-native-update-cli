@@ -1,15 +1,14 @@
-import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
-import { question, saveToLocal } from './utils';
-import { t } from './utils/i18n';
-
 import chalk from 'chalk';
 import { satisfies } from 'compare-versions';
 import Table from 'tty-table';
+import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import type { Package, Platform, Version } from './types';
+import { question, saveToLocal } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import { t } from './utils/i18n';
 
 interface VersionCommandOptions {
   appId?: string;
@@ -496,7 +495,7 @@ export const versionCommands = {
     let minPkgVersion = options.minPackageVersion;
     let maxPkgVersion = options.maxPackageVersion;
     let packageVersionRange = options.packageVersionRange;
-    let rollout: number | undefined = undefined;
+    let rollout: number | undefined;
 
     if (options.rollout !== undefined) {
       rollout = Number.parseInt(options.rollout, 10);
@@ -604,11 +603,7 @@ export const versionCommands = {
     await put(`/app/${String(appId)}/version/${versionId}`, updateParams);
     console.log(t('operationSuccess'));
   },
-  deleteVersion: async ({
-    options,
-  }: {
-    options: VersionCommandOptions;
-  }) => {
+  deleteVersion: async ({ options }: { options: VersionCommandOptions }) => {
     let appId = options.appId;
     if (!appId) {
       const platform = await getPlatform(options.platform);

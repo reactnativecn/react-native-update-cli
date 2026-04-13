@@ -1,8 +1,8 @@
 import { spawn, spawnSync } from 'child_process';
-import os from 'os';
-import path from 'path';
 import { satisfies } from 'compare-versions';
 import * as fs from 'fs-extra';
+import os from 'os';
+import path from 'path';
 import { t } from './utils/i18n';
 
 const g2js = require('gradle-to-js/lib/parser');

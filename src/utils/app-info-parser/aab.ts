@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
+import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import fs from 'fs-extra';
 import { open as openZipFile } from 'yauzl';
 import { t } from '../i18n';
 import { ResourceFinder } from './resource-finder';

@@ -5,7 +5,7 @@ const cgbiToPng = require('cgbi-to-png');
 import { findIpaIconPath, getBase64FromBuffer, isBrowser } from './utils';
 import { Zip } from './zip';
 
-const PlistName = /payload\/[^\/]+?.app\/info.plist$/i;
+const PlistName = /payload\/[^/]+?.app\/info.plist$/i;
 const ProvisionName = /payload\/.+?\.app\/embedded.mobileprovision/;
 
 export class IpaParser extends Zip {

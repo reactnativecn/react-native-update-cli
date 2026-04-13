@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { npm, yarn } from 'global-dirs';
 import type {
   Agent,
   RequestOptions as HttpRequestOptions,
@@ -7,13 +8,11 @@ import type {
 import type { RequestOptions as HttpsRequestOptions } from 'https';
 import { homedir } from 'os';
 import { dirname, join, parse, resolve as pathResolve } from 'path';
-import { URL } from 'url';
-import { npm, yarn } from 'global-dirs';
-
 import registryAuthToken from 'registry-auth-token';
 import getRegistryUrl from 'registry-auth-token/registry-url';
 import gt from 'semver/functions/gt';
 import maxSatisfying from 'semver/ranges/max-satisfying';
+import { URL } from 'url';
 
 interface RegistryVersions {
   /**
@@ -486,13 +485,13 @@ const latestVersion: LatestVersion = async (
 
 export type {
   LatestVersion,
+  LatestVersionOptions,
+  LatestVersionPackage,
   Package,
-  PackageRange,
   PackageJson,
   PackageJsonDependencies,
+  PackageRange,
   RegistryVersions,
-  LatestVersionPackage,
   RequestOptions,
-  LatestVersionOptions,
 };
 export default latestVersion;

@@ -1,6 +1,6 @@
+import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import fs from 'fs-extra';
 import Table from 'tty-table';
 import { doDelete, getAllPackages, post, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';

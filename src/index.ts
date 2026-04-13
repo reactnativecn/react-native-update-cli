@@ -146,14 +146,14 @@ async function run() {
   }
 }
 
-export { moduleManager };
 export { CLIProviderImpl } from './provider';
 export type {
-  CLIProvider,
   CLIModule,
+  CLIProvider,
   CommandDefinition,
   CustomWorkflow,
   WorkflowStep,
 } from './types';
+export { moduleManager };
 
 run();
