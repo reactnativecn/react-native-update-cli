@@ -203,10 +203,11 @@ async function diffFromPPK(
   }
 
   //console.log({copies, deletes});
+  const diffManifest = Buffer.from(JSON.stringify({ copies, deletes }));
   zipfile.addBuffer(
-    Buffer.from(JSON.stringify({ copies, deletes })),
+    diffManifest,
     '__diff.json',
-    zipOptionsForManifestEntry(),
+    zipOptionsForManifestEntry(diffManifest.length),
   );
   zipfile.end();
   await writePromise;
@@ -317,10 +318,11 @@ async function diffFromPackage(
     }
   });
 
+  const diffManifest = Buffer.from(JSON.stringify({ copies }));
   zipfile.addBuffer(
-    Buffer.from(JSON.stringify({ copies })),
+    diffManifest,
     '__diff.json',
-    zipOptionsForManifestEntry(),
+    zipOptionsForManifestEntry(diffManifest.length),
   );
   zipfile.end();
   await writePromise;

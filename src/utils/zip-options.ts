@@ -7,6 +7,7 @@ export type ZipEntryOptions = {
 };
 
 export const ZIP_ENTRY_SNIFF_BYTES = 64;
+export const MANIFEST_COMPRESSION_THRESHOLD_BYTES = 256;
 
 const alreadyCompressedExtensions = new Set([
   '.7z',
@@ -136,7 +137,10 @@ export function zipOptionsForPatchEntry(): ZipEntryOptions {
   return { compress: false };
 }
 
-export function zipOptionsForManifestEntry(): ZipEntryOptions {
+export function zipOptionsForManifestEntry(byteLength = 0): ZipEntryOptions {
+  if (byteLength >= MANIFEST_COMPRESSION_THRESHOLD_BYTES) {
+    return { compressionLevel: 9 };
+  }
   return { compress: false };
 }
 

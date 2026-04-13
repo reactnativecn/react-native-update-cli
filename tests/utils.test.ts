@@ -9,6 +9,7 @@ import {
 } from 'bun:test';
 import { translateOptions } from '../src/utils';
 import {
+  MANIFEST_COMPRESSION_THRESHOLD_BYTES,
   zipOptionsForManifestEntry,
   zipOptionsForPatchEntry,
   zipOptionsForPayloadEntry,
@@ -82,8 +83,17 @@ describe('zipOptionsForPatchEntry', () => {
 });
 
 describe('zipOptionsForManifestEntry', () => {
-  test('returns compress false', () => {
+  test('stores small manifests', () => {
     expect(zipOptionsForManifestEntry()).toEqual({ compress: false });
+    expect(
+      zipOptionsForManifestEntry(MANIFEST_COMPRESSION_THRESHOLD_BYTES - 1),
+    ).toEqual({ compress: false });
+  });
+
+  test('compresses manifests at threshold', () => {
+    expect(
+      zipOptionsForManifestEntry(MANIFEST_COMPRESSION_THRESHOLD_BYTES),
+    ).toEqual({ compressionLevel: 9 });
   });
 });
 

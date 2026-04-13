@@ -184,6 +184,46 @@ describe('diff commands', () => {
     expect(diffMeta.deletes['old-only.txt']).toBe(1);
   });
 
+  test('diff compresses large manifest entries', async () => {
+    const originPath = path.join(tempRoot, 'origin-large-manifest.ppk');
+    const nextPath = path.join(tempRoot, 'next-large-manifest.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'large-manifest-diff.ppk');
+    const originEntries: Record<string, string | Buffer> = {
+      'index.bundlejs': 'old-bundle',
+    };
+    const nextEntries: Record<string, string | Buffer> = {
+      'index.bundlejs': 'new-bundle',
+    };
+
+    for (let i = 0; i < 24; i++) {
+      const content = `same-content-${i}`;
+      originEntries[`assets/old/path/asset-${i}.txt`] = content;
+      nextEntries[`assets/new/path/renamed-asset-${i}.txt`] = content;
+    }
+
+    await createZip(originPath, originEntries);
+    await createZip(nextPath, nextEntries);
+
+    await diffCommands.diff(
+      createContext([originPath, nextPath], {
+        output: outputPath,
+        customDiff: () => Buffer.from('patch'),
+      }),
+    );
+
+    const result = await readZipContent(outputPath);
+    expect(result.compressionMethods['__diff.json']).toBe(8);
+
+    const diffMeta = JSON.parse(
+      result.files['__diff.json'].toString('utf-8'),
+    ) as {
+      copies: Record<string, string>;
+    };
+    expect(diffMeta.copies['assets/new/path/renamed-asset-0.txt']).toBe(
+      'assets/old/path/asset-0.txt',
+    );
+  });
+
   test('diff throws when origin bundle file is missing', async () => {
     const originPath = path.join(tempRoot, 'origin-no-bundle.ppk');
     const nextPath = path.join(tempRoot, 'next.ppk');

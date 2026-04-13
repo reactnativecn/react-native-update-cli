@@ -63,7 +63,7 @@
     "fs-extra": "8",
     "global-dirs": "^4.0.0",
     "gradle-to-js": "^2.0.1",
-    "i18next": "^24.2.3",
+    "i18next": "^26.0.4",
     "isomorphic-git": "^1.37.5",
     "isomorphic-unzip": "^1.1.5",
     "node-fetch": "^2.6.1",
@@ -75,7 +75,7 @@
     "registry-auth-token": "^5.1.1",
     "semver": "^7.7.4",
     "tcp-ping": "^0.1.1",
-    "tty-table": "4.2",
+    "tty-table": "5.0",
     "yauzl": "^3.3.0",
     "yazl": "3.3.1"
   },
