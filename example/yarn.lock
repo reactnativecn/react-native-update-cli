@@ -2,10 +2,10 @@
 # yarn lockfile v1
 
 
-"@babel/runtime@^7.26.10":
-  version "7.27.6"
-  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.27.6.tgz#ec4070a04d76bae8ddbb10770ba55714a417b7c6"
-  integrity sha512-vbavdySgbTTrmFE+EsiqUTzlOr5bzlnJtUv9PynGCAKvfQqjIXbvFdumPM/GxMDfyuGMJaJAU6TO4zc1Jf1i8Q==
+"@babel/runtime@^7.29.2":
+  version "7.29.2"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.29.2.tgz#9a6e2d05f4b6692e1801cd4fb176ad823930ed5e"
+  integrity sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==
 
 "@colors/colors@^1.6.0":
   version "1.6.0"
@@ -146,9 +146,9 @@
     undici-types "~6.21.0"
 
 "@xmldom/xmldom@^0.8.8":
-  version "0.8.12"
-  resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.8.12.tgz#cf488a5435fa06c7374ad1449c69cea0f823624b"
-  integrity sha512-9k/gHF6n/pAi/9tqr3m3aqkuiNosYTurLLUtc7xQ9sxB/wm7WPygCv8GYa6mS0fLJEHhqMC1ATYhz++U/lRHqg==
+  version "0.8.13"
+  resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.8.13.tgz#00d1dd940b218dff2e49309d410d8bb212159225"
+  integrity sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==
 
 abort-controller@^3.0.0:
   version "3.0.0"
@@ -865,12 +865,12 @@ hasown@^2.0.2:
   dependencies:
     function-bind "^1.1.2"
 
-i18next@^24.2.3:
-  version "24.2.3"
-  resolved "https://registry.yarnpkg.com/i18next/-/i18next-24.2.3.tgz#3a05f72615cbd7c00d7e348667e2aabef1df753b"
-  integrity sha512-lfbf80OzkocvX7nmZtu7nSTNbrTYR52sLWxPtlXX1zAhVw8WEnFk4puUkCR4B1dNQwbSpEHHHemcZu//7EcB7A==
+i18next@^26.0.4:
+  version "26.0.6"
+  resolved "https://registry.yarnpkg.com/i18next/-/i18next-26.0.6.tgz#558b5e3170249d7d338d7732edb662a4108082a0"
+  integrity sha512-A4U6eCXodIbrhf8EarRurB9/4ebyaurH4+fu4gig9bqxmpSt+fCAFm/GpRQDcN1Xzu/LdFCx4nYHsnM1edIIbg==
   dependencies:
-    "@babel/runtime" "^7.26.10"
+    "@babel/runtime" "^7.29.2"
 
 ieee754@^1.1.13, ieee754@^1.2.1:
   version "1.2.1"
@@ -1334,7 +1334,7 @@ protobufjs@^7.5.4:
     fs-extra "8"
     global-dirs "^4.0.0"
     gradle-to-js "^2.0.1"
-    i18next "^24.2.3"
+    i18next "^26.0.4"
     isomorphic-git "^1.37.5"
     isomorphic-unzip "^1.1.5"
     node-fetch "^2.6.1"
@@ -1346,7 +1346,7 @@ protobufjs@^7.5.4:
     registry-auth-token "^5.1.1"
     semver "^7.7.4"
     tcp-ping "^0.1.1"
-    tty-table "4.2"
+    tty-table "5.0"
     yauzl "^3.3.0"
     yazl "3.3.1"
 
@@ -1692,10 +1692,10 @@ ts-node@^10.9.0:
     v8-compile-cache-lib "^3.0.1"
     yn "3.1.1"
 
-tty-table@4.2:
-  version "4.2.3"
-  resolved "https://registry.yarnpkg.com/tty-table/-/tty-table-4.2.3.tgz#e33eb4007a0a9c976c97c37fa13ba66329a5c515"
-  integrity sha512-Fs15mu0vGzCrj8fmJNP7Ynxt5J7praPXqFN0leZeZBXJwkMxv9cb2D454k1ltrtUSJbZ4yH4e0CynsHLxmUfFA==
+tty-table@5.0:
+  version "5.0.0"
+  resolved "https://registry.yarnpkg.com/tty-table/-/tty-table-5.0.0.tgz#40079895e6ef20886215e5dfa81b7b2bbfb6f343"
+  integrity sha512-WhUmYKqKIGu0pGNAHxSE6hYEatb274MdmynDsNVIpRjfK/aT47cVuWTFkB09wTnZfIY9h4NcjYMvWD0VHzJkjQ==
   dependencies:
     chalk "^4.1.2"
     csv "^5.5.3"
