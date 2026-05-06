@@ -294,33 +294,6 @@
     "release": {
       "description": "Push builded file to server."
     },
-    "diff": {
-      "description": "Create diff patch",
-      "options": {
-        "output": {
-          "default": "${tempDir}/output/diff",
-          "hasValue": true
-        }
-      }
-    },
-    "diffFromApk": {
-      "description": "Create diff patch from a Android package(.apk)",
-      "options": {
-        "output": {
-          "default": "${tempDir}/output/diff-${time}.apk-patch",
-          "hasValue": true
-        }
-      }
-    },
-    "diffFromIpa": {
-      "description": "Create diff patch from a iOS package(.ipa)",
-      "options": {
-        "output": {
-          "default": "${tempDir}/output/diff-${time}.ipa-patch",
-          "hasValue": true
-        }
-      }
-    },
     "hdiff": {
       "description": "Create hdiff patch",
       "options": {

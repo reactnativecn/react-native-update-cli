@@ -197,12 +197,9 @@ Each workflow step contains:
 ### Bundle Module (`bundle`)
 
 - `bundle`: Bundle JavaScript code and optionally publish
-- `diff`: Generate differences between two PPK files
 - `hdiff`: Generate hdiff between two PPK files
-- `diffFromApk`: Generate differences from APK files
 - `hdiffFromApk`: Generate hdiff from APK files
 - `hdiffFromApp`: Generate hdiff from APP files
-- `diffFromIpa`: Generate differences from IPA files
 - `hdiffFromIpa`: Generate hdiff from IPA files
 
 ### Version Module (`version`)
@@ -300,23 +297,23 @@ const bundleResult = await moduleManager.executeCommand('custom-bundle', {
   },
 });
 
-// Generate diff file
-const diffResult = await moduleManager.executeCommand('diff', {
+// Generate hdiff file
+const diffResult = await moduleManager.executeCommand('hdiff', {
   args: [],
   options: {
     origin: './build/v1.0.0.ppk',
     next: './build/v1.1.0.ppk',
-    output: './build/diff.patch',
+    output: './build/hdiff.patch',
   },
 });
 
-// Generate diff from APK files
-const apkDiffResult = await moduleManager.executeCommand('diffFromApk', {
+// Generate hdiff from APK files
+const apkDiffResult = await moduleManager.executeCommand('hdiffFromApk', {
   args: [],
   options: {
     origin: './build/app-v1.0.0.apk',
     next: './build/app-v1.1.0.apk',
-    output: './build/apk-diff.patch',
+    output: './build/apk-hdiff.patch',
   },
 });
 ```

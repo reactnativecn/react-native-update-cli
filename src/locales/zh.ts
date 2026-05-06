@@ -161,8 +161,6 @@ export default {
   deleteVersionError: '删除热更包 {{versionId}} 失败: {{error}}',
   bundleFileNotFound: '未找到 bundle 文件！请使用默认的 bundle 文件名和路径。',
   diffPackageGenerated: '{{- output}} 已生成。',
-  nodeBsdiffRequired:
-    '此功能需要 "node-bsdiff"。请运行 "{{scriptName}} install node-bsdiff" 来安装',
   nodeHdiffpatchRequired:
     '此功能需要 "node-hdiffpatch"。请运行 "{{scriptName}} install node-hdiffpatch" 来安装',
   apkExtracted: 'APK 已提取到 {{output}}',

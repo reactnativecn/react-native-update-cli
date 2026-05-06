@@ -107,7 +107,7 @@ describe('diff commands', () => {
     }
   });
 
-  test('diff generates patch, copy map, delete map and only changed files', async () => {
+  test('hdiff generates patch, copy map, delete map and only changed files', async () => {
     const originPath = path.join(tempRoot, 'origin.ppk');
     const nextPath = path.join(tempRoot, 'next.ppk');
     const outputPath = path.join(tempRoot, 'out', 'diff.ppk');
@@ -135,7 +135,7 @@ describe('diff commands', () => {
       ]),
     });
 
-    await diffCommands.diff(
+    await diffCommands.hdiff(
       createContext([originPath, nextPath], {
         output: outputPath,
         customDiff: (oldSource, newSource) =>
@@ -184,7 +184,7 @@ describe('diff commands', () => {
     expect(diffMeta.deletes['old-only.txt']).toBe(1);
   });
 
-  test('diff compresses large manifest entries', async () => {
+  test('hdiff compresses large manifest entries', async () => {
     const originPath = path.join(tempRoot, 'origin-large-manifest.ppk');
     const nextPath = path.join(tempRoot, 'next-large-manifest.ppk');
     const outputPath = path.join(tempRoot, 'out', 'large-manifest-diff.ppk');
@@ -204,7 +204,7 @@ describe('diff commands', () => {
     await createZip(originPath, originEntries);
     await createZip(nextPath, nextEntries);
 
-    await diffCommands.diff(
+    await diffCommands.hdiff(
       createContext([originPath, nextPath], {
         output: outputPath,
         customDiff: () => Buffer.from('patch'),
@@ -224,7 +224,7 @@ describe('diff commands', () => {
     );
   });
 
-  test('diff throws when origin bundle file is missing', async () => {
+  test('hdiff throws when origin bundle file is missing', async () => {
     const originPath = path.join(tempRoot, 'origin-no-bundle.ppk');
     const nextPath = path.join(tempRoot, 'next.ppk');
     const outputPath = path.join(tempRoot, 'out', 'missing-bundle.ppk');
@@ -237,7 +237,7 @@ describe('diff commands', () => {
     });
 
     await expect(
-      diffCommands.diff(
+      diffCommands.hdiff(
         createContext([originPath, nextPath], {
           output: outputPath,
           customDiff: () => Buffer.from('patch'),
@@ -246,9 +246,9 @@ describe('diff commands', () => {
     ).rejects.toThrow();
   });
 
-  test('diff throws when arguments are missing', async () => {
+  test('hdiff throws when arguments are missing', async () => {
     await expect(
-      diffCommands.diff(
+      diffCommands.hdiff(
         createContext(['only-origin'], {
           output: path.join(tempRoot, 'out', 'invalid.ppk'),
           customDiff: () => Buffer.from('patch'),
@@ -257,7 +257,7 @@ describe('diff commands', () => {
     ).rejects.toThrow();
   });
 
-  test('diffFromIpa applies path transform and produces package-mode copy map', async () => {
+  test('hdiffFromIpa applies path transform and produces package-mode copy map', async () => {
     const originPath = path.join(tempRoot, 'origin.ipa');
     const nextPath = path.join(tempRoot, 'next.ppk');
     const outputPath = path.join(tempRoot, 'out', 'ipa-diff.ppk');
@@ -275,7 +275,7 @@ describe('diff commands', () => {
       'assets/new-file.png': 'new-content',
     });
 
-    await diffCommands.diffFromIpa(
+    await diffCommands.hdiffFromIpa(
       createContext([originPath, nextPath], {
         output: outputPath,
         customDiff: (oldSource, newSource) =>
@@ -304,7 +304,7 @@ describe('diff commands', () => {
     expect(diffMeta.copies['assets/new-name.png']).toBe('assets/old-name.png');
   });
 
-  test('diff supports explicit next directories and avoids duplicate additions', async () => {
+  test('hdiff supports explicit next directories and avoids duplicate additions', async () => {
     const originPath = path.join(tempRoot, 'origin-dir.ppk');
     const nextPath = path.join(tempRoot, 'next-dir.ppk');
     const outputPath = path.join(tempRoot, 'out', 'dir-diff.ppk');
@@ -318,7 +318,7 @@ describe('diff commands', () => {
       'extra/new.txt': 'new-file',
     });
 
-    await diffCommands.diff(
+    await diffCommands.hdiff(
       createContext([originPath, nextPath], {
         output: outputPath,
         customDiff: () => Buffer.from('patch'),
@@ -350,7 +350,7 @@ describe('diff commands', () => {
     expect(prefix).toEqual(payload.subarray(0, 64));
   });
 
-  test('diffFromApk throws when origin package bundle is missing', async () => {
+  test('hdiffFromApk throws when origin package bundle is missing', async () => {
     const originPath = path.join(tempRoot, 'origin-missing-bundle.apk');
     const nextPath = path.join(tempRoot, 'next-for-apk.ppk');
     const outputPath = path.join(tempRoot, 'out', 'apk-missing-bundle.ppk');
@@ -363,7 +363,7 @@ describe('diff commands', () => {
     });
 
     await expect(
-      diffCommands.diffFromApk(
+      diffCommands.hdiffFromApk(
         createContext([originPath, nextPath], {
           output: outputPath,
           customDiff: () => Buffer.from('patch'),
@@ -372,7 +372,7 @@ describe('diff commands', () => {
     ).rejects.toThrow();
   });
 
-  test('diffFromApk writes directory entries from next package', async () => {
+  test('hdiffFromApk writes directory entries from next package', async () => {
     const originPath = path.join(tempRoot, 'origin-dir.apk');
     const nextPath = path.join(tempRoot, 'next-dir-apk.ppk');
     const outputPath = path.join(tempRoot, 'out', 'apk-dir-diff.ppk');
@@ -386,7 +386,7 @@ describe('diff commands', () => {
       'assets/new.txt': 'new-file',
     });
 
-    await diffCommands.diffFromApk(
+    await diffCommands.hdiffFromApk(
       createContext([originPath, nextPath], {
         output: outputPath,
         customDiff: (oldSource, newSource) =>
@@ -401,7 +401,7 @@ describe('diff commands', () => {
     expect(result.files['assets/new.txt']?.toString('utf-8')).toBe('new-file');
   });
 
-  test('diffFromIpa ignores non-payload files when resolving origin package path', async () => {
+  test('hdiffFromIpa ignores non-payload files when resolving origin package path', async () => {
     const originPath = path.join(tempRoot, 'origin-non-payload.ipa');
     const nextPath = path.join(tempRoot, 'next-non-payload.ppk');
     const outputPath = path.join(tempRoot, 'out', 'non-payload-diff.ppk');
@@ -416,7 +416,7 @@ describe('diff commands', () => {
       'assets/icon.png': 'same-icon',
     });
 
-    await diffCommands.diffFromIpa(
+    await diffCommands.hdiffFromIpa(
       createContext([originPath, nextPath], {
         output: outputPath,
         customDiff: () => Buffer.from('patch'),
@@ -432,9 +432,9 @@ describe('diff commands', () => {
     expect(diffMeta.copies['assets/icon.png']).toBe('');
   });
 
-  test('diff throws when output option is not string', async () => {
+  test('hdiff throws when output option is not string', async () => {
     await expect(
-      diffCommands.diff(
+      diffCommands.hdiff(
         createContext(['origin.ppk', 'next.ppk'], {
           output: 123,
           customDiff: () => Buffer.from('patch'),
@@ -443,9 +443,8 @@ describe('diff commands', () => {
     ).rejects.toThrow('Output path is required.');
   });
 
-  test('hdiff/diff require engine modules when customDiff is not provided', async () => {
+  test('hdiff requires engine module when customDiff is not provided', async () => {
     const hasHdiff = hasDiffModule('node-hdiffpatch');
-    const hasBsdiff = hasDiffModule('node-bsdiff');
 
     if (!hasHdiff) {
       await expect(
@@ -455,16 +454,6 @@ describe('diff commands', () => {
           }),
         ),
       ).rejects.toThrow(/node-hdiffpatch/);
-    }
-
-    if (!hasBsdiff) {
-      await expect(
-        diffCommands.diff(
-          createContext(['origin.ppk', 'next.ppk'], {
-            output: path.join(tempRoot, 'out', 'diff.ppk'),
-          }),
-        ),
-      ).rejects.toThrow(/node-bsdiff/);
     }
 
     expect(true).toBe(true);

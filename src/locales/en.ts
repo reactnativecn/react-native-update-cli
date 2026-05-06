@@ -174,8 +174,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   bundleFileNotFound:
     'Bundle file not found! Please use default bundle file name and path.',
   diffPackageGenerated: '{{- output}} generated.',
-  nodeBsdiffRequired:
-    'This function needs "node-bsdiff". Please run "{{scriptName}} install node-bsdiff" to install',
   nodeHdiffpatchRequired:
     'This function needs "node-hdiffpatch". Please run "{{scriptName}} install node-hdiffpatch" to install',
   apkExtracted: 'APK extracted to {{output}}',

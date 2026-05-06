@@ -22,9 +22,6 @@ type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
 type HdiffModule = {
   diff?: Diff;
 };
-type BsdiffModule = {
-  diff?: Diff;
-};
 type EntryMap = Record<string, { crc32: number; fileName: string }>;
 type CrcMap = Record<number, string>;
 type CopyMap = Record<string, string>;
@@ -38,7 +35,6 @@ type DiffTarget =
     };
 type DiffCommandConfig = {
   diffFnName: string;
-  useHdiff: boolean;
   target: DiffTarget;
 };
 
@@ -56,7 +52,6 @@ const loadModule = <T>(pkgName: string): T | undefined => {
 };
 
 const hdiff = loadModule<HdiffModule>('node-hdiffpatch');
-const bsdiff = loadModule<BsdiffModule>('node-bsdiff');
 
 function basename(fn: string): string | undefined {
   const m = /^(.+\/)[^/]+\/?$/.exec(fn);
@@ -334,33 +329,22 @@ type DiffCommandOptions = {
   [key: string]: any;
 };
 
-function resolveDiffImplementation(
-  useHdiff: boolean,
-  options: DiffCommandOptions,
-): Diff {
+function resolveDiffImplementation(options: DiffCommandOptions): Diff {
   if (options.customDiff) {
     return options.customDiff;
   }
 
-  if (useHdiff) {
-    const hdiffModule = options.customHdiffModule ?? hdiff;
-    if (!hdiffModule?.diff) {
-      throw new Error(t('nodeHdiffpatchRequired', { scriptName }));
-    }
-    return hdiffModule.diff;
+  const hdiffModule = options.customHdiffModule ?? hdiff;
+  if (!hdiffModule?.diff) {
+    throw new Error(t('nodeHdiffpatchRequired', { scriptName }));
   }
-
-  if (!bsdiff?.diff) {
-    throw new Error(t('nodeBsdiffRequired', { scriptName }));
-  }
-  return bsdiff.diff;
+  return hdiffModule.diff;
 }
 
 function diffArgsCheck(
   args: string[],
   options: DiffCommandOptions,
   diffFnName: string,
-  useHdiff: boolean,
 ) {
   const [origin, next] = args;
 
@@ -368,7 +352,7 @@ function diffArgsCheck(
     throw new Error(t('usageDiff', { command: diffFnName }));
   }
 
-  const diffFn = resolveDiffImplementation(useHdiff, options);
+  const diffFn = resolveDiffImplementation(options);
   const { output } = translateOptions({
     ...options,
     tempDir,
@@ -391,13 +375,12 @@ const transformIpaPackagePath: PackagePathTransform = (v) => {
 };
 
 const createDiffCommand =
-  ({ diffFnName, useHdiff, target }: DiffCommandConfig) =>
+  ({ diffFnName, target }: DiffCommandConfig) =>
   async ({ args, options }: CommandContext) => {
     const { origin, next, realOutput, diffFn } = diffArgsCheck(
       args,
       options as DiffCommandOptions,
       diffFnName,
-      useHdiff,
     );
 
     if (target.kind === 'ppk') {
@@ -417,60 +400,26 @@ const createDiffCommand =
   };
 
 export const diffCommands = {
-  diff: createDiffCommand({
-    diffFnName: 'diff',
-    useHdiff: false,
-    target: { kind: 'ppk' },
-  }),
   hdiff: createDiffCommand({
     diffFnName: 'hdiff',
-    useHdiff: true,
     target: { kind: 'ppk' },
-  }),
-  diffFromApk: createDiffCommand({
-    diffFnName: 'diffFromApk',
-    useHdiff: false,
-    target: {
-      kind: 'package',
-      originBundleName: 'assets/index.android.bundle',
-    },
   }),
   hdiffFromApk: createDiffCommand({
     diffFnName: 'hdiffFromApk',
-    useHdiff: true,
     target: {
       kind: 'package',
       originBundleName: 'assets/index.android.bundle',
-    },
-  }),
-  diffFromApp: createDiffCommand({
-    diffFnName: 'diffFromApp',
-    useHdiff: false,
-    target: {
-      kind: 'package',
-      originBundleName: 'resources/rawfile/bundle.harmony.js',
     },
   }),
   hdiffFromApp: createDiffCommand({
     diffFnName: 'hdiffFromApp',
-    useHdiff: true,
     target: {
       kind: 'package',
       originBundleName: 'resources/rawfile/bundle.harmony.js',
     },
   }),
-  diffFromIpa: createDiffCommand({
-    diffFnName: 'diffFromIpa',
-    useHdiff: false,
-    target: {
-      kind: 'package',
-      originBundleName: 'main.jsbundle',
-      transformPackagePath: transformIpaPackagePath,
-    },
-  }),
   hdiffFromIpa: createDiffCommand({
     diffFnName: 'hdiffFromIpa',
-    useHdiff: true,
     target: {
       kind: 'package',
       originBundleName: 'main.jsbundle',
