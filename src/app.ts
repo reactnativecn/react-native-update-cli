@@ -87,19 +87,53 @@ export async function chooseApp(platform: Platform) {
   }
 }
 
+async function selectApp({
+  args,
+  options,
+}: {
+  args: string[];
+  options: { platform?: Platform | '' };
+}) {
+  const platform = await getPlatform(options.platform);
+  const id = args[0]
+    ? Number.parseInt(args[0], 10)
+    : (await chooseApp(platform)).id;
+
+  let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
+    {};
+  try {
+    updateInfo = JSON.parse(await fs.promises.readFile('update.json', 'utf8'));
+  } catch (e: any) {
+    if (e.code !== 'ENOENT') {
+      console.error(t('failedToParseUpdateJson'));
+      throw e;
+    }
+  }
+  const { appKey } = await get(`/app/${id}`);
+  updateInfo[platform] = {
+    appId: id,
+    appKey,
+  };
+  await fs.promises.writeFile(
+    'update.json',
+    JSON.stringify(updateInfo, null, 4),
+    'utf8',
+  );
+}
+
 export const appCommands = {
-  createApp: async function ({
+  createApp: async ({
     options,
   }: {
     options: { name: string; downloadUrl: string; platform?: Platform | '' };
-  }) {
+  }) => {
     const name = options.name || (await question(t('appNameQuestion')));
     const { downloadUrl } = options;
     const platform = await getPlatform(options.platform);
     const { id } = await post('/app/create', { name, platform, downloadUrl });
     console.log(t('createAppSuccess', { id }));
-    await this.selectApp({
-      args: [id],
+    await selectApp({
+      args: [String(id)],
       options: { platform },
     });
   },
@@ -122,40 +156,5 @@ export const appCommands = {
     const { platform = '' } = options;
     await listApp(platform);
   },
-  selectApp: async ({
-    args,
-    options,
-  }: {
-    args: string[];
-    options: { platform?: Platform | '' };
-  }) => {
-    const platform = await getPlatform(options.platform);
-    const id = args[0]
-      ? Number.parseInt(args[0])
-      : (await chooseApp(platform)).id;
-
-    let updateInfo: Partial<
-      Record<Platform, { appId: number; appKey: string }>
-    > = {};
-    try {
-      updateInfo = JSON.parse(
-        await fs.promises.readFile('update.json', 'utf8'),
-      );
-    } catch (e: any) {
-      if (e.code !== 'ENOENT') {
-        console.error(t('failedToParseUpdateJson'));
-        throw e;
-      }
-    }
-    const { appKey } = await get(`/app/${id}`);
-    updateInfo[platform] = {
-      appId: id,
-      appKey,
-    };
-    await fs.promises.writeFile(
-      'update.json',
-      JSON.stringify(updateInfo, null, 4),
-      'utf8',
-    );
-  },
+  selectApp,
 };
