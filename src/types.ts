@@ -92,31 +92,6 @@ export interface UploadOptions {
   version?: string;
 }
 
-export interface WorkflowStep {
-  name: string;
-  description?: string;
-  execute: (
-    context: CommandContext,
-    previousResult?: unknown,
-  ) => Promise<unknown>;
-  condition?: (context: CommandContext) => boolean;
-}
-
-export interface CustomWorkflow {
-  name: string;
-  description?: string;
-  steps: WorkflowStep[];
-  validate?: (context: CommandContext) => boolean;
-  options?: Record<
-    string,
-    {
-      hasValue?: boolean;
-      default?: unknown;
-      description?: string;
-    }
-  >;
-}
-
 export interface CLIProvider {
   bundle: (options: BundleOptions) => Promise<CommandResult>;
   publish: (options: PublishOptions) => Promise<CommandResult>;
@@ -137,19 +112,12 @@ export interface CLIProvider {
 
   getPlatform: (platform?: Platform) => Promise<Platform>;
   loadSession: () => Promise<Session>;
-
-  registerWorkflow: (workflow: CustomWorkflow) => void;
-  executeWorkflow: (
-    workflowName: string,
-    context: CommandContext,
-  ) => Promise<CommandResult>;
 }
 
 export interface CLIModule {
   name: string;
   version: string;
   commands?: CommandDefinition[];
-  workflows?: CustomWorkflow[];
   init?: (provider: CLIProvider) => void;
   cleanup?: () => void;
 }

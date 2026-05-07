@@ -17,7 +17,7 @@ function hasWorkspaces(dir: string): boolean {
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
       return !!pkg.workspaces;
-    } catch (e) {
+    } catch (_e) {
       // Ignore parsing errors
     }
   }

@@ -5,7 +5,6 @@ import type {
   CLIProvider,
   CommandContext,
   CommandResult,
-  CustomWorkflow,
   Platform,
   PublishOptions,
   Session,
@@ -13,10 +12,11 @@ import type {
   Version,
 } from './types';
 import { runAsCommandResult } from './utils/command-result';
-import { runWorkflow } from './workflow-runner';
+
+const DEFAULT_BUNDLE_OUTPUT =
+  '$' + '{tempDir}/output/$' + '{platform}.$' + '{time}.ppk';
 
 export class CLIProviderImpl implements CLIProvider {
-  private workflows: Map<string, CustomWorkflow> = new Map();
   private session?: Session;
   private sessionInitPromise?: Promise<void>;
 
@@ -83,7 +83,7 @@ export class CLIProviderImpl implements CLIProvider {
           platform: options.platform,
           bundleName: options.bundleName || 'index.bundlejs',
           entryFile: options.entryFile || 'index.js',
-          output: options.output || '${tempDir}/output/${platform}.${time}.ppk',
+          output: options.output || DEFAULT_BUNDLE_OUTPUT,
           sourcemap: options.sourcemap || false,
           taro: options.taro || false,
           expo: options.expo || false,
@@ -236,27 +236,6 @@ export class CLIProviderImpl implements CLIProvider {
       throw new Error('Failed to load session');
     }
     return this.session;
-  }
-
-  registerWorkflow(workflow: CustomWorkflow): void {
-    this.workflows.set(workflow.name, workflow);
-  }
-
-  async executeWorkflow(
-    workflowName: string,
-    context: CommandContext,
-  ): Promise<CommandResult> {
-    return this.runDataCommand(async () => {
-      const workflow = this.workflows.get(workflowName);
-      if (!workflow) {
-        throw new Error(`Workflow '${workflowName}' not found`);
-      }
-      const result = await runWorkflow(workflowName, workflow, context);
-      return {
-        message: `Workflow '${workflowName}' completed successfully`,
-        result,
-      };
-    }, `Workflow '${workflowName}' failed`);
   }
 
   async listPackages(appId?: string): Promise<CommandResult> {

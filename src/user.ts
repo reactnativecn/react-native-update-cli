@@ -20,7 +20,7 @@ export const userCommands = {
     await saveSession();
     console.log(t('welcomeMessage', { name: info.name }));
   },
-  logout: async (context: CommandContext) => {
+  logout: async (_context: CommandContext) => {
     await closeSession();
     console.log(t('loggedOut'));
   },

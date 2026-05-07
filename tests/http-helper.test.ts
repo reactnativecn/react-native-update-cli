@@ -1,13 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  spyOn,
-  test,
-} from 'bun:test';
-import { ping, promiseAny, testUrls } from '../src/utils/http-helper';
+import { describe, expect, test } from 'bun:test';
+import { promiseAny, testUrls } from '../src/utils/http-helper';
 
 describe('promiseAny', () => {
   test('resolves with the first resolved promise', async () => {

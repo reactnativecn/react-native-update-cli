@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  spyOn,
-  test,
-} from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { translateOptions } from '../src/utils';
 import {
   MANIFEST_COMPRESSION_THRESHOLD_BYTES,
@@ -15,11 +7,13 @@ import {
   zipOptionsForPayloadEntry,
 } from '../src/utils/zip-options';
 
+const templateVar = (name: string) => ['$', `{${name}}`].join('');
+
 describe('translateOptions', () => {
   test('replaces template variables from options', () => {
     const options = {
       platform: 'ios',
-      output: '${tempDir}/output/${platform}.ppk',
+      output: `${templateVar('tempDir')}/output/${templateVar('platform')}.ppk`,
       tempDir: '/tmp/test',
     };
     const result = translateOptions(options);
@@ -29,7 +23,7 @@ describe('translateOptions', () => {
   test('falls back to environment variables', () => {
     process.env.TEST_TRANSLATE_VAR = 'env-value';
     const options = {
-      output: '${TEST_TRANSLATE_VAR}/file.ppk',
+      output: `${templateVar('TEST_TRANSLATE_VAR')}/file.ppk`,
     };
     const result = translateOptions(options);
     expect(result.output).toBe('env-value/file.ppk');
@@ -37,11 +31,12 @@ describe('translateOptions', () => {
   });
 
   test('leaves unresolvable placeholders as-is', () => {
+    const unresolvedOutput = `${templateVar('NONEXISTENT_VAR')}/file.ppk`;
     const options = {
-      output: '${NONEXISTENT_VAR}/file.ppk',
+      output: unresolvedOutput,
     };
     const result = translateOptions(options);
-    expect(result.output).toBe('${NONEXISTENT_VAR}/file.ppk');
+    expect(result.output).toBe(unresolvedOutput);
   });
 
   test('passes non-string values through unchanged', () => {
@@ -60,7 +55,7 @@ describe('translateOptions', () => {
     const options = {
       platform: 'android',
       time: '12345',
-      output: '${platform}-${time}.ppk',
+      output: `${templateVar('platform')}-${templateVar('time')}.ppk`,
     };
     const result = translateOptions(options);
     expect(result.output).toBe('android-12345.ppk');
@@ -69,7 +64,7 @@ describe('translateOptions', () => {
   test('handles numeric option values in template', () => {
     const options = {
       version: 42,
-      output: 'v${version}.ppk',
+      output: `v${templateVar('version')}.ppk`,
     };
     const result = translateOptions(options);
     expect(result.output).toBe('v42.ppk');

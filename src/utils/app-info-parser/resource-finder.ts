@@ -74,14 +74,14 @@ export class ResourceFinder {
     while (true) {
       let pos = 0;
       let t = 0;
-      let hs = 0;
+      let _hs = 0;
       let s = 0;
       try {
         pos = bb.offset;
         t = bb.readShort();
-        hs = bb.readShort();
+        _hs = bb.readShort();
         s = bb.readInt();
-      } catch (e) {
+      } catch (_e) {
         break;
       }
       if (t === RES_STRING_POOL_TYPE) {
@@ -231,7 +231,7 @@ export class ResourceFinder {
         if (!bb.remaining()) {
           break;
         }
-      } catch (e) {
+      } catch (_e) {
         break;
       }
     }
@@ -288,7 +288,7 @@ export class ResourceFinder {
         entrySize = bb.readShort();
         entryFlag = bb.readShort();
         entryKey = bb.readInt();
-      } catch (e) {
+      } catch (_e) {
         break;
       }
 

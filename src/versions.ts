@@ -279,7 +279,7 @@ async function printDepsChangesForPublish({
 }
 
 async function showVersion(appId: string, offset: number) {
-  const { data, count } = await get(`/app/${appId}/version/list`);
+  const { data } = await get(`/app/${appId}/version/list`);
   console.log(t('offset', { offset }));
   for (const version of data) {
     const pkgCount = version.packages?.length || 0;
@@ -411,7 +411,7 @@ export const versionCommands = {
     const fn = args[0];
     const { name, description, metaInfo } = options;
 
-    if (!fn || !fn.endsWith('.ppk')) {
+    if (!fn?.endsWith('.ppk')) {
       throw new Error(t('publishUsage'));
     }
 

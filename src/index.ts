@@ -50,18 +50,8 @@ function printUsage() {
   }
 
   console.log('');
-  console.log('Available workflows:');
-  const workflows = moduleManager.listWorkflows();
-  for (const workflow of workflows) {
-    console.log(
-      `  ${workflow.name}: ${workflow.description || 'No description'}`,
-    );
-  }
-
-  console.log('');
   console.log('Special commands:');
-  console.log('  list: List all available commands and workflows');
-  console.log('  workflow <name>: Execute a specific workflow');
+  console.log('  list: List all available commands');
   console.log('  help: Show this help message');
 
   console.log('');
@@ -109,18 +99,6 @@ async function run() {
       printUsage();
     } else if (argv.command === 'list') {
       moduleManager.listAll();
-    } else if (argv.command === 'workflow') {
-      const workflowName = argv.args[0];
-      if (!workflowName) {
-        console.error('Workflow name is required');
-        process.exit(1);
-      }
-      const result = await moduleManager.executeWorkflow(workflowName, context);
-      if (!result.success) {
-        console.error('Workflow execution failed:', result.error);
-        process.exit(1);
-      }
-      console.log('Workflow completed successfully:', result.data);
     }
     // Try legacy commands first for backward compatibility
     else if (legacyCommands[argv.command]) {
@@ -151,8 +129,6 @@ export type {
   CLIModule,
   CLIProvider,
   CommandDefinition,
-  CustomWorkflow,
-  WorkflowStep,
 } from './types';
 export { moduleManager };
 

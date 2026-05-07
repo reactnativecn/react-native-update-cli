@@ -59,7 +59,7 @@ function ensureFileByExt(
   extension: NativeUploadConfig['extension'] | '.aab',
   usageKey: string,
 ): string {
-  if (!filePath || !filePath.endsWith(extension)) {
+  if (!filePath?.endsWith(extension)) {
     throw new Error(t(usageKey));
   }
   return filePath;
@@ -274,28 +274,28 @@ export const packageCommands = {
   },
   parseApp: async ({ args }: { args: string[] }) => {
     const fn = args[0];
-    if (!fn || !fn.endsWith('.app')) {
+    if (!fn?.endsWith('.app')) {
       throw new Error(t('usageParseApp'));
     }
     console.log(await getAppInfo(fn));
   },
   parseIpa: async ({ args }: { args: string[] }) => {
     const fn = args[0];
-    if (!fn || !fn.endsWith('.ipa')) {
+    if (!fn?.endsWith('.ipa')) {
       throw new Error(t('usageParseIpa'));
     }
     console.log(await getIpaInfo(fn));
   },
   parseApk: async ({ args }: { args: string[] }) => {
     const fn = args[0];
-    if (!fn || !fn.endsWith('.apk')) {
+    if (!fn?.endsWith('.apk')) {
       throw new Error(t('usageParseApk'));
     }
     console.log(await getApkInfo(fn));
   },
   parseAab: async ({ args }: { args: string[] }) => {
     const fn = args[0];
-    if (!fn || !fn.endsWith('.aab')) {
+    if (!fn?.endsWith('.aab')) {
       throw new Error(t('usageParseAab'));
     }
     console.log(await getAabInfo(fn));
@@ -333,10 +333,8 @@ export const packageCommands = {
     await listPackage(String(appId));
   },
   deletePackage: async ({
-    args,
     options,
   }: {
-    args: string[];
     options: {
       appId?: string;
       packageId?: string;

@@ -95,7 +95,7 @@ describe('package helper logic', () => {
     filePath: string | undefined,
     extension: string,
   ): string {
-    if (!filePath || !filePath.endsWith(extension)) {
+    if (!filePath?.endsWith(extension)) {
       throw new Error(`Usage: expected ${extension} file`);
     }
     return filePath;

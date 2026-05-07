@@ -1,14 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  spyOn,
-  test,
-} from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { CLIProviderImpl } from '../src/provider';
-import type { CommandContext, CustomWorkflow } from '../src/types';
 
 describe('CLIProviderImpl', () => {
   let provider: CLIProviderImpl;
@@ -21,103 +12,6 @@ describe('CLIProviderImpl', () => {
 
   afterEach(() => {
     consoleSpy.mockRestore();
-  });
-
-  describe('registerWorkflow and executeWorkflow', () => {
-    test('registers and executes a simple workflow', async () => {
-      const workflow: CustomWorkflow = {
-        name: 'test-wf',
-        description: 'Test workflow',
-        steps: [
-          {
-            name: 'step-1',
-            execute: async () => ({ stepOneResult: true }),
-          },
-          {
-            name: 'step-2',
-            execute: async (_ctx, prev) => ({
-              ...(prev as object),
-              stepTwoResult: true,
-            }),
-          },
-        ],
-      };
-
-      provider.registerWorkflow(workflow);
-
-      const context: CommandContext = { args: [], options: {} };
-      const result = await provider.executeWorkflow('test-wf', context);
-
-      expect(result.success).toBe(true);
-    });
-
-    test('returns error for non-existent workflow', async () => {
-      const context: CommandContext = { args: [], options: {} };
-      const result = await provider.executeWorkflow('nonexistent', context);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('nonexistent');
-    });
-
-    test('executes workflow with conditional steps', async () => {
-      const executedSteps: string[] = [];
-
-      const workflow: CustomWorkflow = {
-        name: 'conditional-wf',
-        steps: [
-          {
-            name: 'always-run',
-            execute: async () => {
-              executedSteps.push('always-run');
-              return { ran: true };
-            },
-          },
-          {
-            name: 'skip-me',
-            condition: () => false,
-            execute: async () => {
-              executedSteps.push('skip-me');
-              return {};
-            },
-          },
-          {
-            name: 'also-run',
-            execute: async () => {
-              executedSteps.push('also-run');
-              return {};
-            },
-          },
-        ],
-      };
-
-      provider.registerWorkflow(workflow);
-
-      const context: CommandContext = { args: [], options: {} };
-      await provider.executeWorkflow('conditional-wf', context);
-
-      expect(executedSteps).toEqual(['always-run', 'also-run']);
-    });
-
-    test('workflow with validation failure returns error', async () => {
-      const workflow: CustomWorkflow = {
-        name: 'validated-wf',
-        validate: () => false,
-        steps: [
-          {
-            name: 'step-1',
-            execute: async () => ({}),
-          },
-        ],
-      };
-
-      provider.registerWorkflow(workflow);
-
-      const context: CommandContext = { args: [], options: {} };
-      const result = await provider.executeWorkflow('validated-wf', context);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('validation');
-    });
   });
 
   describe('getPlatform', () => {

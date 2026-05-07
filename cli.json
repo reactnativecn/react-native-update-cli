@@ -339,15 +339,6 @@
         }
       }
     },
-    "workflow": {
-      "description": "List all workflows",
-      "options": {
-        "output": {
-          "default": "${tempDir}/output/workflow",
-          "hasValue": true
-        }
-      }
-    },
     "install": {
       "description": "Install optional dependencies to the CLI",
       "options": {}

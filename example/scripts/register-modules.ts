@@ -6,7 +6,7 @@ import { customDeployModule } from '../modules/custom-deploy-module';
 
 /**
  * 模块注册和执行示例脚本
- * 演示如何注册自定义模块并执行命令和工作流
+ * 演示如何注册自定义模块并执行命令
  */
 
 async function main() {
@@ -27,15 +27,7 @@ async function main() {
     }
     console.log();
 
-    // 3. 列出所有可用的工作流
-    console.log('🔄 可用工作流列表:');
-    const workflows = moduleManager.listWorkflows();
-    for (const workflow of workflows) {
-      console.log(`  - ${workflow.name}: ${workflow.description || '无描述'}`);
-    }
-    console.log();
-
-    // 4. 执行自定义命令示例
+    // 3. 执行自定义命令示例
     console.log('🎯 执行命令示例:\n');
 
     // 执行开发部署命令
@@ -75,35 +67,6 @@ async function main() {
       },
     );
     console.log('结果:', reportResult);
-    console.log();
-
-    // 5. 执行工作流示例
-    console.log('🔄 执行工作流示例:\n');
-
-    // 执行带统计的部署工作流
-    console.log('--- 执行 deploy-with-analytics 工作流 ---');
-    const analyticsWorkflowResult = await moduleManager.executeWorkflow(
-      'deploy-with-analytics',
-      {
-        args: [],
-        options: {},
-      },
-    );
-    console.log('工作流结果:', analyticsWorkflowResult);
-    console.log();
-
-    // 执行热修复工作流
-    console.log('--- 执行 hotfix-deploy 工作流 ---');
-    const hotfixWorkflowResult = await moduleManager.executeWorkflow(
-      'hotfix-deploy',
-      {
-        args: [],
-        options: {
-          hotfixId: 'HF-2024-001',
-        },
-      },
-    );
-    console.log('工作流结果:', hotfixWorkflowResult);
     console.log();
 
     console.log('🎉 所有示例执行完成!');

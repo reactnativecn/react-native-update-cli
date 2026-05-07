@@ -1,4 +1,4 @@
-import { describe, expect, mock, spyOn, test, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 
 // Mock dependencies before imports
 mock.module('fs-extra', () => ({
@@ -24,31 +24,35 @@ describe('checkPlugins', () => {
         name: 'plugin1',
         bundleParams: { p1: true },
         detect: async () => {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
           return true;
-        }
+        },
       },
       {
         name: 'plugin2',
         bundleParams: { p2: true },
         detect: async () => {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
           return true;
-        }
+        },
       },
       {
         name: 'plugin3',
         bundleParams: { p3: true },
         detect: async () => {
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
           return true;
-        }
-      }
+        },
+      },
     ];
 
     // Replacing the plugins array in plugin-config
     const originalPlugins = [...pluginConfig.plugins];
-    (pluginConfig.plugins as any).splice(0, pluginConfig.plugins.length, ...mockPlugins);
+    (pluginConfig.plugins as any).splice(
+      0,
+      pluginConfig.plugins.length,
+      ...mockPlugins,
+    );
 
     const start = Date.now();
     const result = await checkPlugins();
@@ -62,7 +66,7 @@ describe('checkPlugins', () => {
       sourcemap: false, // default
       p1: true,
       p2: true,
-      p3: true
+      p3: true,
     } as any);
 
     // Now it's concurrent, so we expect around 100ms.
@@ -70,6 +74,10 @@ describe('checkPlugins', () => {
     expect(duration).toBeLessThan(250);
 
     // Restore original plugins
-    (pluginConfig.plugins as any).splice(0, pluginConfig.plugins.length, ...originalPlugins);
+    (pluginConfig.plugins as any).splice(
+      0,
+      pluginConfig.plugins.length,
+      ...originalPlugins,
+    );
   });
 });

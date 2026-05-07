@@ -4,24 +4,14 @@ import type {
   CLIModule,
   CLIProvider,
   CommandContext,
-  CommandResult,
-  CustomWorkflow,
   Platform,
   Session,
 } from '../src/types';
 
-type ProviderStub = CLIProvider & {
-  registeredWorkflows: string[];
-  workflowCalls: string[];
-};
+type ProviderStub = CLIProvider;
 
 function createProviderStub(): ProviderStub {
-  const registeredWorkflows: string[] = [];
-  const workflowCalls: string[] = [];
-
   return {
-    registeredWorkflows,
-    workflowCalls,
     bundle: async () => ({ success: true }),
     publish: async () => ({ success: true }),
     upload: async () => ({ success: true }),
@@ -32,16 +22,6 @@ function createProviderStub(): ProviderStub {
     updateVersion: async () => ({ success: true }),
     getPlatform: async (platform?: Platform) => platform ?? 'ios',
     loadSession: async () => ({ token: 'token' }) as Session,
-    registerWorkflow: (workflow: CustomWorkflow) => {
-      registeredWorkflows.push(workflow.name);
-    },
-    executeWorkflow: async (
-      workflowName: string,
-      _context: CommandContext,
-    ): Promise<CommandResult> => {
-      workflowCalls.push(workflowName);
-      return { success: true, data: { workflowName } };
-    },
   };
 }
 
@@ -50,16 +30,12 @@ function setProvider(manager: ModuleManager, provider: CLIProvider): void {
 }
 
 describe('module-manager', () => {
-  test('registers module commands/workflows and runs init', () => {
+  test('registers module commands and runs init', () => {
     const manager = new ModuleManager();
     const provider = createProviderStub();
     setProvider(manager, provider);
 
     let initCalled = false;
-    const workflow: CustomWorkflow = {
-      name: 'wf-1',
-      steps: [],
-    };
     const module: CLIModule = {
       name: 'mod-1',
       version: '1.0.0',
@@ -69,7 +45,6 @@ describe('module-manager', () => {
           handler: async () => ({ success: true }),
         },
       ],
-      workflows: [workflow],
       init: () => {
         initCalled = true;
       },
@@ -80,8 +55,6 @@ describe('module-manager', () => {
     expect(initCalled).toBe(true);
     expect(manager.listModules().map((item) => item.name)).toEqual(['mod-1']);
     expect(manager.listCommands().map((item) => item.name)).toEqual(['cmd-1']);
-    expect(manager.listWorkflows().map((item) => item.name)).toEqual(['wf-1']);
-    expect(provider.registeredWorkflows).toEqual(['wf-1']);
   });
 
   test('throws when registering duplicate module', () => {
@@ -100,7 +73,7 @@ describe('module-manager', () => {
     );
   });
 
-  test('throws on duplicate command and workflow registration', () => {
+  test('throws on duplicate command registration', () => {
     const manager = new ModuleManager();
 
     manager.registerCommand({
@@ -113,15 +86,6 @@ describe('module-manager', () => {
         handler: async () => ({ success: true }),
       }),
     ).toThrow("Command 'dup-command' is already registered");
-
-    const provider = createProviderStub();
-    setProvider(manager, provider);
-
-    const workflow: CustomWorkflow = { name: 'dup-workflow', steps: [] };
-    manager.registerWorkflow(workflow);
-    expect(() => manager.registerWorkflow(workflow)).toThrow(
-      "Workflow 'dup-workflow' is already registered",
-    );
   });
 
   test('executeCommand calls command handler and returns result', async () => {
@@ -150,22 +114,7 @@ describe('module-manager', () => {
     );
   });
 
-  test('executeWorkflow delegates to provider', async () => {
-    const manager = new ModuleManager();
-    const provider = createProviderStub();
-    setProvider(manager, provider);
-
-    const context: CommandContext = { args: [], options: {} };
-    const result = await manager.executeWorkflow('flow-1', context);
-
-    expect(result).toEqual({
-      success: true,
-      data: { workflowName: 'flow-1' },
-    });
-    expect(provider.workflowCalls).toEqual(['flow-1']);
-  });
-
-  test('unregisterModule removes command/workflow and runs cleanup', async () => {
+  test('unregisterModule removes command and runs cleanup', async () => {
     const manager = new ModuleManager();
     const provider = createProviderStub();
     setProvider(manager, provider);
@@ -180,7 +129,6 @@ describe('module-manager', () => {
           handler: async () => ({ success: true }),
         },
       ],
-      workflows: [{ name: 'cleanup-workflow', steps: [] }],
       cleanup: () => {
         cleaned = true;
       },
@@ -192,7 +140,6 @@ describe('module-manager', () => {
     expect(cleaned).toBe(true);
     expect(manager.listModules()).toHaveLength(0);
     expect(manager.listCommands()).toHaveLength(0);
-    expect(manager.listWorkflows()).toHaveLength(0);
 
     await expect(
       manager.executeCommand('cleanup-command', { args: [], options: {} }),

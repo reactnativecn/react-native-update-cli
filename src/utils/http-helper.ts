@@ -28,7 +28,7 @@ export const ping = async (url: string) => {
     fetch(url, {
       method: 'HEAD',
     })
-      .then(({ status, statusText }) => {
+      .then(({ status }) => {
         pingFinished = true;
         if (status === 200) {
           // console.log('ping success', url);
@@ -37,7 +37,7 @@ export const ping = async (url: string) => {
         // console.log('ping failed', url, status, statusText);
         throw new Error('ping failed');
       })
-      .catch((e) => {
+      .catch((_e) => {
         pingFinished = true;
         // console.log('ping error', url, e);
         throw new Error('ping error');

@@ -88,7 +88,7 @@ export class AabParser extends Zip {
           '--overwrite',
           ...modulesArgs,
         ]);
-      } catch (e) {
+      } catch (_e) {
         // Fallback to npx node-bundletool if bundletool is not in PATH
         // We use -y to avoid interactive prompt for installation
         if (await needsNpxDownload()) {

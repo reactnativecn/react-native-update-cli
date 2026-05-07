@@ -403,7 +403,7 @@ async function resolveResource(
 
 const localDir = path.resolve(os.homedir(), tempDir);
 fs.ensureDirSync(localDir);
-export function saveToLocal(originPath: string, destName: string) {
+export function saveToLocal(_originPath: string, _destName: string) {
   // TODO
   // const destPath = path.join(localDir, destName);
   // fs.ensureDirSync(path.dirname(destPath));

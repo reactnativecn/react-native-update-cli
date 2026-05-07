@@ -5,14 +5,12 @@ import type {
   CommandContext,
   CommandDefinition,
   CommandResult,
-  CustomWorkflow,
 } from './types';
 
 export class ModuleManager {
   private modules: Map<string, CLIModule> = new Map();
   private provider: CLIProvider;
   private commands: Map<string, CommandDefinition> = new Map();
-  private workflows: Map<string, CustomWorkflow> = new Map();
 
   constructor() {
     this.provider = new CLIProviderImpl();
@@ -28,12 +26,6 @@ export class ModuleManager {
     if (module.commands) {
       for (const command of module.commands) {
         this.registerCommand(command);
-      }
-    }
-
-    if (module.workflows) {
-      for (const workflow of module.workflows) {
-        this.registerWorkflow(workflow);
       }
     }
 
@@ -54,12 +46,6 @@ export class ModuleManager {
       }
     }
 
-    if (module.workflows) {
-      for (const workflow of module.workflows) {
-        this.workflows.delete(workflow.name);
-      }
-    }
-
     if (module.cleanup) {
       module.cleanup();
     }
@@ -75,14 +61,6 @@ export class ModuleManager {
     this.commands.set(command.name, command);
   }
 
-  registerWorkflow(workflow: CustomWorkflow): void {
-    if (this.workflows.has(workflow.name)) {
-      throw new Error(`Workflow '${workflow.name}' is already registered`);
-    }
-    this.workflows.set(workflow.name, workflow);
-    this.provider.registerWorkflow(workflow);
-  }
-
   async executeCommand(
     commandName: string,
     context: CommandContext,
@@ -95,23 +73,12 @@ export class ModuleManager {
     return await command.handler(context);
   }
 
-  async executeWorkflow(
-    workflowName: string,
-    context: CommandContext,
-  ): Promise<CommandResult> {
-    return await this.provider.executeWorkflow(workflowName, context);
-  }
-
   getProvider(): CLIProvider {
     return this.provider;
   }
 
   listCommands(): CommandDefinition[] {
     return Array.from(this.commands.values());
-  }
-
-  listWorkflows(): CustomWorkflow[] {
-    return Array.from(this.workflows.values());
   }
 
   listModules(): CLIModule[] {
@@ -126,17 +93,10 @@ export class ModuleManager {
       );
     }
 
-    console.log('\n=== Registered Workflows ===');
-    for (const workflow of this.workflows.values()) {
-      console.log(
-        `  ${workflow.name}: ${workflow.description || 'No description'}`,
-      );
-    }
-
     console.log('\n=== Registered Modules ===');
     for (const module of this.modules.values()) {
       console.log(
-        `  ${module.name} (v${module.version}): ${module.commands?.length || 0} commands, ${module.workflows?.length || 0} workflows`,
+        `  ${module.name} (v${module.version}): ${module.commands?.length || 0} commands`,
       );
     }
   }

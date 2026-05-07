@@ -1,12 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  spyOn,
-  test,
-} from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 
 // We test the exported helper bindVersionToPackages and the internal rollout
 // parsing logic by calling versionCommands.update with mocked API calls.

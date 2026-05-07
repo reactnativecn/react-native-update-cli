@@ -1,7 +1,7 @@
 let currentPackage = null;
 try {
   currentPackage = require(`${process.cwd()}/package.json`);
-} catch (e) {
+} catch (_e) {
   // console.warn('No package.json file were found');
 }
 
@@ -23,7 +23,7 @@ if (currentPackage) {
       });
       const version = require(packageJsonPath).version;
       _depVersions[dep] = version;
-    } catch (e) {}
+    } catch (_e) {}
   }
 }
 

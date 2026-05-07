@@ -71,7 +71,7 @@ const mapInfoResource = (
  * @param info // json info parsed from .apk file
  */
 const findApkIconPath = (info: any) => {
-  if (!info.application.icon || !info.application.icon.splice) {
+  if (!info.application.icon?.splice) {
     return '';
   }
   const rulesMap: Record<string, number> = {
@@ -142,7 +142,7 @@ const getBase64FromBuffer = (buffer: Buffer | string) => {
  */
 const decodeNullUnicode = (value: string | RegExp) => {
   if (typeof value === 'string') {
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: <explanation>
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: strips null unicode padding from decoded strings
     return value.replace(/\u0000/g, '');
   }
   return value;

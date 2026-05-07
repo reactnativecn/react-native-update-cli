@@ -16,13 +16,11 @@ export type {
   CommandContext,
   CommandDefinition,
   CommandResult,
-  CustomWorkflow,
   Package,
   Platform,
   PublishOptions,
   Session,
   UploadOptions,
   Version,
-  WorkflowStep,
 } from './types';
 export { question, saveToLocal } from './utils';
