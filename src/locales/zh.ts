@@ -89,6 +89,7 @@ export default {
   operationSuccess: '操作成功',
   packageIdRequired: '请提供 packageId 或 packageVersion 参数',
   packageUploadSuccess: '已成功上传新热更包（id: {{id}}）',
+  depsChangeWarningTitle: '检测到依赖变化',
   depsChangeSummary:
     '依赖变化：新增 {{added}} 项，移除 {{removed}} 项，版本变更 {{changed}} 项。',
   depsChangeTargetPackage: '目标原生包：{{packageName}} (id: {{packageId}})',

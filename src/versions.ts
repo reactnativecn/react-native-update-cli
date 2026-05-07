@@ -25,6 +25,7 @@ interface VersionCommandOptions {
   rollout?: string;
   dryRun?: boolean;
   versionDeps?: Record<string, string>;
+  warnDepsChanges?: boolean;
 }
 
 type Deps = Record<string, string>;
@@ -193,6 +194,7 @@ function printDepsChangesForPackage({
   ]);
 
   console.log('');
+  console.log(chalk.bgYellow.black.bold(` ${t('depsChangeWarningTitle')} `));
   console.log(
     chalk.yellow(
       t('depsChangeTargetPackage', {
@@ -243,7 +245,7 @@ async function printDepsChangesForPublish({
   pkgs: Package[];
   providedVersionDeps?: Deps;
 }) {
-  if (!versionId || pkgs.length === 0) {
+  if (!versionId || pkgs.length !== 1) {
     return;
   }
 
@@ -464,13 +466,19 @@ export const versionCommands = {
           rollout,
           dryRun,
           versionDeps: depVersions,
+          warnDepsChanges: true,
         },
       });
     } else {
       const q = await question(t('updateNativePackageQuestion'));
       if (q.toLowerCase() === 'y') {
         await this.update({
-          options: { versionId: id, platform, versionDeps: depVersions },
+          options: {
+            versionId: id,
+            platform,
+            versionDeps: depVersions,
+            warnDepsChanges: true,
+          },
         });
       }
     }
@@ -570,12 +578,14 @@ export const versionCommands = {
       }
     }
 
-    await printDepsChangesForPublish({
-      appId: String(appId),
-      versionId: String(versionId),
-      pkgs: pkgsToBind,
-      providedVersionDeps: options.versionDeps,
-    });
+    if (options.warnDepsChanges) {
+      await printDepsChangesForPublish({
+        appId: String(appId),
+        versionId: String(versionId),
+        pkgs: pkgsToBind,
+        providedVersionDeps: options.versionDeps,
+      });
+    }
 
     await bindVersionToPackages({
       appId: String(appId),

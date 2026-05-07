@@ -96,6 +96,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   packageIdRequired: 'Please provide packageId or packageVersion parameter',
   packageUploadSuccess:
     'Successfully uploaded new hot update package (id: {{id}})',
+  depsChangeWarningTitle: 'Dependency changes detected',
   depsChangeSummary:
     'Dependency changes: added {{added}}, removed {{removed}}, changed {{changed}}.',
   depsChangeTargetPackage:
