@@ -106,7 +106,6 @@ describe('versionCommands.publish', () => {
   let uploadFileSpy: ReturnType<typeof spyOn>;
   let postSpy: ReturnType<typeof spyOn>;
   let questionSpy: ReturnType<typeof spyOn>;
-  let saveToLocalSpy: ReturnType<typeof spyOn>;
   let getCommitInfoSpy: ReturnType<typeof spyOn>;
   let updateSpy: ReturnType<typeof spyOn>;
 
@@ -126,7 +125,6 @@ describe('versionCommands.publish', () => {
     const answers = ['name', 'description', '{}', 'y'];
     const questionMock = mock(async () => answers.shift() ?? '');
     questionSpy = spyOn(utils, 'question').mockImplementation(questionMock);
-    saveToLocalSpy = spyOn(utils, 'saveToLocal').mockImplementation(() => {});
     getCommitInfoSpy = spyOn(git, 'getCommitInfo').mockResolvedValue(undefined);
     updateSpy = spyOn(versionCommands, 'update').mockResolvedValue(undefined);
   });
@@ -138,7 +136,6 @@ describe('versionCommands.publish', () => {
     uploadFileSpy.mockRestore();
     postSpy.mockRestore();
     questionSpy.mockRestore();
-    saveToLocalSpy.mockRestore();
     getCommitInfoSpy.mockRestore();
     updateSpy.mockRestore();
   });

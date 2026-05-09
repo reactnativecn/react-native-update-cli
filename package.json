@@ -88,6 +88,9 @@
     "yauzl": "^3.3.0",
     "yazl": "3.3.1"
   },
+  "overrides": {
+    "@xmldom/xmldom": "0.8.13"
+  },
   "engines": {
     "node": ">= 16.6.0"
   },

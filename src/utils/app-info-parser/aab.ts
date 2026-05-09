@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import fs from 'fs-extra';
+import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import { open as openZipFile } from 'yauzl';

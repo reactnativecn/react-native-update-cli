@@ -5,7 +5,7 @@ import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import type { Package, Platform, Version } from './types';
-import { question, saveToLocal } from './utils';
+import { question } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { t } from './utils/i18n';
@@ -433,8 +433,6 @@ export const versionCommands = {
       deps: depVersions,
       commit: await getCommitInfo(),
     });
-    // TODO local diff
-    saveToLocal(fn, `${appId}/ppk/${id}.ppk`);
     console.log(t('packageUploadSuccess', { id }));
 
     const {

@@ -1,4 +1,4 @@
-import fs from 'fs-extra';
+import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import Table from 'tty-table';
@@ -11,7 +11,6 @@ import {
   getAppInfo,
   getIpaInfo,
   question,
-  saveToLocal,
 } from './utils';
 import { AabParser } from './utils/app-info-parser/aab';
 import { depVersions } from './utils/dep-versions';
@@ -129,7 +128,6 @@ async function uploadNativePackage(
     deps: depVersions,
     commit: await getCommitInfo(),
   });
-  saveToLocal(filePath, `${appId}/package/${id}${config.extension}`);
   console.log(
     t(config.successKey, {
       id,

@@ -14,4 +14,4 @@ export type {
   UploadOptions,
   Version,
 } from './types';
-export { question, saveToLocal } from './utils';
+export { question } from './utils';

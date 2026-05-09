@@ -1,7 +1,5 @@
 import chalk from 'chalk';
 import { satisfies } from 'compare-versions';
-import fs from 'fs-extra';
-import os from 'os';
 import path from 'path';
 import type { Root as ProtobufRoot } from 'protobufjs';
 import { read } from 'read';
@@ -10,7 +8,7 @@ import pkg from '../../package.json';
 import latestVersion from '../utils/latest-version';
 import AppInfoParser from './app-info-parser';
 import { checkPlugins } from './check-plugin';
-import { IS_CRESC, tempDir } from './constants';
+import { IS_CRESC } from './constants';
 import { depVersions } from './dep-versions';
 import { t } from './i18n';
 
@@ -399,15 +397,6 @@ async function resolveResource(
     console.warn('Failed to resolve resource:', e);
   }
   return null;
-}
-
-const localDir = path.resolve(os.homedir(), tempDir);
-fs.ensureDirSync(localDir);
-export function saveToLocal(_originPath: string, _destName: string) {
-  // TODO
-  // const destPath = path.join(localDir, destName);
-  // fs.ensureDirSync(path.dirname(destPath));
-  // fs.copyFileSync(originPath, destPath);
 }
 
 async function getLatestVersion(pkgNames: string[]) {
