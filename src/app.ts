@@ -11,8 +11,6 @@ interface AppSummary {
   platform: Platform;
 }
 
-const validPlatforms = ['ios', 'android', 'harmony'] as const;
-
 export async function getPlatform(platform?: string) {
   return assertPlatform(
     platform || (await question(t('platformQuestion'))),
@@ -20,7 +18,7 @@ export async function getPlatform(platform?: string) {
 }
 
 export function assertPlatform(platform: string): Platform {
-  if (!validPlatforms.includes(platform as Platform)) {
+  if (platform !== 'ios' && platform !== 'android' && platform !== 'harmony') {
     throw new Error(t('unsupportedPlatform', { platform }));
   }
   return platform as Platform;
