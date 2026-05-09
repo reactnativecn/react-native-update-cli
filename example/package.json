@@ -1,13 +1,12 @@
 {
   "name": "react-native-update-cli-examples",
   "version": "1.0.0",
-  "description": "React Native Update CLI 自定义模块示例",
+  "description": "React Native Update CLI provider examples",
   "private": true,
   "scripts": {
     "build": "tsc --noEmit --skipLibCheck",
-    "register-modules": "ts-node scripts/register-modules.ts",
     "provider-demo": "ts-node scripts/provider-api-example.ts",
-    "demo:all": "npm run register-modules && npm run provider-demo"
+    "demo:all": "npm run provider-demo"
   },
   "dependencies": {
     "react-native-update-cli": "file:../"
@@ -21,9 +20,8 @@
     "react-native",
     "update",
     "cli",
-    "module",
     "example",
-    "custom"
+    "provider"
   ],
   "author": "reactnativecn",
   "license": "BSD-3-Clause"

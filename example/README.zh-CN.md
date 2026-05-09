@@ -1,17 +1,14 @@
-# 自定义模块示例
+# React Native Update CLI 示例
 
-这个目录包含 React Native Update CLI 自定义模块和命令扩展示例。
+这个目录包含 React Native Update CLI 编程式 Provider API 和命令参数示例。
 
 ## 目录结构
 
 ```text
 example/
-├── modules/
-│   ├── custom-deploy-module.ts
-│   └── analytics-module.ts
 ├── scripts/
-│   ├── register-modules.ts
 │   └── provider-api-example.ts
+├── USAGE_CUSTOM_VERSION.md
 └── README.md
 ```
 
@@ -19,30 +16,15 @@ example/
 
 ```bash
 npm run build
-npx ts-node example/scripts/register-modules.ts
-npx ts-node example/scripts/provider-api-example.ts
-```
-
-## 自定义模块示例
-
-```typescript
-import { moduleManager } from 'react-native-update-cli';
-import { customDeployModule } from './modules/custom-deploy-module';
-
-moduleManager.registerModule(customDeployModule);
-
-await moduleManager.executeCommand('deploy-dev', {
-  args: [],
-  options: { platform: 'ios', force: true },
-});
+npm run provider-demo
 ```
 
 ## Provider API 示例
 
 ```typescript
-import { moduleManager } from 'react-native-update-cli';
+import { CLIProviderImpl } from 'react-native-update-cli';
 
-const provider = moduleManager.getProvider();
+const provider = new CLIProviderImpl();
 
 const bundleResult = await provider.bundle({
   platform: 'ios',
@@ -59,6 +41,4 @@ const publishResult = await provider.publish({
 
 ## 注意事项
 
-- 每个模块都应该有唯一的 `name`。
-- 通过模块注册的每个命令都应该有唯一的 `name`。
-- 命令处理函数返回 `CommandResult`；调用方应先检查 `success` 再消费 `data`。
+Provider 方法返回 `CommandResult`；调用方应先检查 `success` 再消费 `data`。

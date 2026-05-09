@@ -1,13 +1,13 @@
 #!/usr/bin/env ts-node
 
-import { moduleManager } from '../../src/module-manager';
+import { CLIProviderImpl } from '../../src/provider';
 import type { CLIProvider, Platform } from '../../src/types';
 
 class DeploymentService {
   private provider: CLIProvider;
 
   constructor() {
-    this.provider = moduleManager.getProvider();
+    this.provider = new CLIProviderImpl();
   }
 
   async buildAndPublish(platform: Platform, version: string) {

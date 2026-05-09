@@ -45,20 +45,6 @@ export interface CommandResult {
   error?: string;
 }
 
-export interface CommandDefinition {
-  name: string;
-  description?: string;
-  handler: (context: CommandContext) => Promise<CommandResult>;
-  options?: Record<
-    string,
-    {
-      hasValue?: boolean;
-      default?: unknown;
-      description?: string;
-    }
-  >;
-}
-
 export interface BundleOptions {
   dev?: boolean;
   platform?: Platform;
@@ -112,12 +98,4 @@ export interface CLIProvider {
 
   getPlatform: (platform?: Platform) => Promise<Platform>;
   loadSession: () => Promise<Session>;
-}
-
-export interface CLIModule {
-  name: string;
-  version: string;
-  commands?: CommandDefinition[];
-  init?: (provider: CLIProvider) => void;
-  cleanup?: () => void;
 }

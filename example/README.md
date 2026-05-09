@@ -1,19 +1,16 @@
-# Custom Module Examples
+# React Native Update CLI Examples
 
 [中文文档](./README.zh-CN.md)
 
-This directory contains examples for extending React Native Update CLI with custom modules and commands.
+This directory contains examples for using the React Native Update CLI programmatic Provider API and command options.
 
 ## Directory Structure
 
 ```text
 example/
-├── modules/
-│   ├── custom-deploy-module.ts
-│   └── analytics-module.ts
 ├── scripts/
-│   ├── register-modules.ts
 │   └── provider-api-example.ts
+├── USAGE_CUSTOM_VERSION.md
 └── README.md
 ```
 
@@ -21,30 +18,15 @@ example/
 
 ```bash
 npm run build
-npx ts-node example/scripts/register-modules.ts
-npx ts-node example/scripts/provider-api-example.ts
-```
-
-## Custom Module Example
-
-```typescript
-import { moduleManager } from 'react-native-update-cli';
-import { customDeployModule } from './modules/custom-deploy-module';
-
-moduleManager.registerModule(customDeployModule);
-
-await moduleManager.executeCommand('deploy-dev', {
-  args: [],
-  options: { platform: 'ios', force: true },
-});
+npm run provider-demo
 ```
 
 ## Provider API Example
 
 ```typescript
-import { moduleManager } from 'react-native-update-cli';
+import { CLIProviderImpl } from 'react-native-update-cli';
 
-const provider = moduleManager.getProvider();
+const provider = new CLIProviderImpl();
 
 const bundleResult = await provider.bundle({
   platform: 'ios',
@@ -61,6 +43,4 @@ const publishResult = await provider.publish({
 
 ## Notes
 
-- Each module should have a unique `name`.
-- Each command registered through a module should have a unique `name`.
-- Command handlers return `CommandResult`; callers should check `success` before consuming `data`.
+Provider methods return `CommandResult`; callers should check `success` before consuming `data`.

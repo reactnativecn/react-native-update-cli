@@ -10,5 +10,5 @@
     "incremental": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "lib", "example", "scripts", "test-modules.ts"]
+  "exclude": ["node_modules", "lib", "example", "scripts"]
 }
