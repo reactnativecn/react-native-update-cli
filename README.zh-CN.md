@@ -9,7 +9,6 @@ React Native Update 命令行工具，用于打包、上传原生包、发布 OT
 - 统一的 `pushy` / `cresc` CLI 入口
 - 保持既有命令兼容
 - 可用于构建脚本和 CI/CD 的 Provider API
-- 支持通过模块注册自定义命令
 - 提供 TypeScript 类型定义
 
 ## 安装
@@ -32,9 +31,9 @@ npx pushy uploadIpa ./app.ipa
 ## 编程调用
 
 ```typescript
-import { moduleManager } from 'react-native-update-cli';
+import { CLIProviderImpl } from 'react-native-update-cli';
 
-const provider = moduleManager.getProvider();
+const provider = new CLIProviderImpl();
 
 const bundleResult = await provider.bundle({
   platform: 'ios',
@@ -50,56 +49,6 @@ const publishResult = await provider.publish({
   name: 'v1.2.3',
   description: 'Bug fixes and improvements',
   rollout: 100,
-});
-```
-
-## 自定义模块
-
-```typescript
-import type {
-  CLIModule,
-  CommandContext,
-  CommandResult,
-} from 'react-native-update-cli';
-
-export const myCustomModule: CLIModule = {
-  name: 'my-custom',
-  version: '1.0.0',
-  commands: [
-    {
-      name: 'custom-command',
-      description: 'My custom command',
-      handler: async (
-        context: CommandContext,
-      ): Promise<CommandResult> => {
-        return {
-          success: true,
-          data: { options: context.options },
-        };
-      },
-      options: {
-        param: { hasValue: true, description: 'Custom parameter' },
-      },
-    },
-  ],
-  init: () => {
-    console.log('Custom module initialized');
-  },
-  cleanup: () => {
-    console.log('Custom module cleanup');
-  },
-};
-```
-
-```typescript
-import { moduleManager } from 'react-native-update-cli';
-import { myCustomModule } from './my-custom-module';
-
-moduleManager.registerModule(myCustomModule);
-
-const result = await moduleManager.executeCommand('custom-command', {
-  args: [],
-  options: { param: 'value' },
 });
 ```
 

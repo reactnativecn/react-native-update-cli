@@ -331,13 +331,8 @@
       }
     },
     "list": {
-      "description": "List all bundles",
-      "options": {
-        "output": {
-          "default": "${tempDir}/output/list",
-          "hasValue": true
-        }
-      }
+      "description": "List all available commands",
+      "options": {}
     },
     "install": {
       "description": "Install optional dependencies to the CLI",

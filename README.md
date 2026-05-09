@@ -9,7 +9,6 @@ A React Native Update command line tool for bundling, uploading native packages,
 - Single `pushy` / `cresc` CLI entrypoint
 - Backward-compatible command set
 - Programmatic provider API for build scripts and CI/CD
-- Modular command registration for custom extensions
 - TypeScript type definitions
 
 ## Installation
@@ -32,9 +31,9 @@ npx pushy uploadIpa ./app.ipa
 ## Programmatic Usage
 
 ```typescript
-import { moduleManager } from 'react-native-update-cli';
+import { CLIProviderImpl } from 'react-native-update-cli';
 
-const provider = moduleManager.getProvider();
+const provider = new CLIProviderImpl();
 
 const bundleResult = await provider.bundle({
   platform: 'ios',
@@ -50,56 +49,6 @@ const publishResult = await provider.publish({
   name: 'v1.2.3',
   description: 'Bug fixes and improvements',
   rollout: 100,
-});
-```
-
-## Custom Modules
-
-```typescript
-import type {
-  CLIModule,
-  CommandContext,
-  CommandResult,
-} from 'react-native-update-cli';
-
-export const myCustomModule: CLIModule = {
-  name: 'my-custom',
-  version: '1.0.0',
-  commands: [
-    {
-      name: 'custom-command',
-      description: 'My custom command',
-      handler: async (
-        context: CommandContext,
-      ): Promise<CommandResult> => {
-        return {
-          success: true,
-          data: { options: context.options },
-        };
-      },
-      options: {
-        param: { hasValue: true, description: 'Custom parameter' },
-      },
-    },
-  ],
-  init: () => {
-    console.log('Custom module initialized');
-  },
-  cleanup: () => {
-    console.log('Custom module cleanup');
-  },
-};
-```
-
-```typescript
-import { moduleManager } from 'react-native-update-cli';
-import { myCustomModule } from './my-custom-module';
-
-moduleManager.registerModule(myCustomModule);
-
-const result = await moduleManager.executeCommand('custom-command', {
-  args: [],
-  options: { param: 'value' },
 });
 ```
 

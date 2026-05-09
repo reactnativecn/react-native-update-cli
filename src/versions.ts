@@ -403,13 +403,13 @@ export const bindVersionToPackages = async ({
 };
 
 export const versionCommands = {
-  publish: async function ({
+  publish: async ({
     args,
     options,
   }: {
     args: string[];
     options: VersionCommandOptions;
-  }) {
+  }) => {
     const fn = args[0];
     const { name, description, metaInfo } = options;
 
@@ -454,7 +454,7 @@ export const versionCommands = {
       minPackageVersion ||
       maxPackageVersion
     ) {
-      await this.update({
+      await versionCommands.update({
         options: {
           versionId: id,
           platform,
@@ -472,7 +472,7 @@ export const versionCommands = {
     } else {
       const q = await question(t('updateNativePackageQuestion'));
       if (q.toLowerCase() === 'y') {
-        await this.update({
+        await versionCommands.update({
           options: {
             versionId: id,
             platform,

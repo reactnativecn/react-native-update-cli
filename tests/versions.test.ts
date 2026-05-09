@@ -1,10 +1,21 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from 'bun:test';
 
 // We test the exported helper bindVersionToPackages and the internal rollout
 // parsing logic by calling versionCommands.update with mocked API calls.
 
 import * as api from '../src/api';
-import { bindVersionToPackages } from '../src/versions';
+import * as app from '../src/app';
+import * as utils from '../src/utils';
+import * as git from '../src/utils/git';
+import { bindVersionToPackages, versionCommands } from '../src/versions';
 
 describe('bindVersionToPackages', () => {
   let consoleSpy: ReturnType<typeof spyOn>;
@@ -86,6 +97,69 @@ describe('bindVersionToPackages', () => {
 
     const lastCall = consoleSpy.mock.calls[consoleSpy.mock.calls.length - 1];
     expect(lastCall?.[0]).toContain('2');
+  });
+});
+
+describe('versionCommands.publish', () => {
+  let consoleSpy: ReturnType<typeof spyOn>;
+  let getPlatformSpy: ReturnType<typeof spyOn>;
+  let getSelectedAppSpy: ReturnType<typeof spyOn>;
+  let uploadFileSpy: ReturnType<typeof spyOn>;
+  let postSpy: ReturnType<typeof spyOn>;
+  let questionSpy: ReturnType<typeof spyOn>;
+  let saveToLocalSpy: ReturnType<typeof spyOn>;
+  let getCommitInfoSpy: ReturnType<typeof spyOn>;
+  let updateSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+    getPlatformSpy = spyOn(app, 'getPlatform').mockResolvedValue('android');
+    getSelectedAppSpy = spyOn(app, 'getSelectedApp').mockResolvedValue({
+      appId: '100',
+      appKey: 'key',
+      platform: 'android',
+    });
+    uploadFileSpy = spyOn(api, 'uploadFile').mockResolvedValue({
+      hash: 'hash',
+    });
+    postSpy = spyOn(api, 'post').mockResolvedValue({ id: '200' });
+
+    const answers = ['name', 'description', '{}', 'y'];
+    const questionMock = mock(async () => answers.shift() ?? '');
+    questionSpy = spyOn(utils, 'question').mockImplementation(questionMock);
+    saveToLocalSpy = spyOn(utils, 'saveToLocal').mockImplementation(() => {});
+    getCommitInfoSpy = spyOn(git, 'getCommitInfo').mockResolvedValue(undefined);
+    updateSpy = spyOn(versionCommands, 'update').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    getPlatformSpy.mockRestore();
+    getSelectedAppSpy.mockRestore();
+    uploadFileSpy.mockRestore();
+    postSpy.mockRestore();
+    questionSpy.mockRestore();
+    saveToLocalSpy.mockRestore();
+    getCommitInfoSpy.mockRestore();
+    updateSpy.mockRestore();
+  });
+
+  test('can bind after publish when called without object receiver', async () => {
+    const publish = versionCommands.publish;
+
+    await publish({
+      args: ['bundle.ppk'],
+      options: { platform: 'android' },
+    });
+
+    expect(updateSpy).toHaveBeenCalledWith({
+      options: {
+        versionId: '200',
+        platform: 'android',
+        versionDeps: expect.any(Object),
+        warnDepsChanges: true,
+      },
+    });
   });
 });
 

@@ -5,16 +5,13 @@ import { appCommands } from './app';
 import { bundleCommands } from './bundle';
 import { diffCommands } from './diff';
 import { installCommands } from './install';
-import { moduleManager } from './module-manager';
-import { builtinModules } from './modules';
 import { packageCommands } from './package';
-import type { CommandContext } from './types';
 import { userCommands } from './user';
 import { printVersionCommand } from './utils';
 import { t } from './utils/i18n';
 import { versionCommands } from './versions';
 
-type LegacyCommandHandler = (argv: any) => Promise<unknown> | unknown;
+type CliCommandHandler = (argv: any) => Promise<unknown> | unknown;
 
 interface CliArgv {
   command: string;
@@ -22,31 +19,12 @@ interface CliArgv {
   options: Record<string, any>;
 }
 
-function registerBuiltinModules() {
-  for (const module of builtinModules) {
-    try {
-      moduleManager.registerModule(module);
-    } catch (error) {
-      console.error(`Failed to register module ${module.name}:`, error);
-    }
-  }
-}
-
-function printUsage() {
+function printUsage(exitCode = 1) {
   console.log('React Native Update CLI');
   console.log('');
-  console.log('Traditional commands:');
-  for (const name of Object.keys(legacyCommands)) {
-    console.log(`  ${name}: Legacy command`);
-  }
-
-  console.log('');
-  console.log('Modular commands:');
-  const commands = moduleManager.listCommands();
-  for (const command of commands) {
-    console.log(
-      `  ${command.name}: ${command.description || 'No description'}`,
-    );
+  console.log('Commands:');
+  for (const name of Object.keys(commandHandlers)) {
+    console.log(`  ${name}`);
   }
 
   console.log('');
@@ -58,10 +36,10 @@ function printUsage() {
   console.log(
     'Visit `https://github.com/reactnativecn/react-native-update` for document.',
   );
-  process.exit(1);
+  process.exit(exitCode);
 }
 
-const legacyCommands: Record<string, LegacyCommandHandler> = {
+const commandHandlers: Record<string, CliCommandHandler> = {
   ...userCommands,
   ...bundleCommands,
   ...diffCommands,
@@ -78,41 +56,22 @@ async function run() {
     process.exit();
   }
 
-  // Register builtin modules for modular functionality
-  registerBuiltinModules();
-
   const argv: CliArgv = require('cli-arguments').parse(require('../cli.json'));
   global.NO_INTERACTIVE = argv.options['no-interactive'];
   global.USE_ACC_OSS = argv.options.acc;
 
-  const context: CommandContext = {
-    args: argv.args || [],
-    options: argv.options || {},
-  };
-
   try {
     await loadSession();
-    context.session = require('./api').getSession();
 
-    // Handle special modular commands first
     if (argv.command === 'help') {
-      printUsage();
+      printUsage(0);
     } else if (argv.command === 'list') {
-      moduleManager.listAll();
-    }
-    // Try legacy commands first for backward compatibility
-    else if (legacyCommands[argv.command]) {
-      const legacyHandler = legacyCommands[argv.command];
-      await legacyHandler(argv);
-    }
-    // Fall back to modular commands
-    else {
-      const result = await moduleManager.executeCommand(argv.command, context);
-      if (!result.success) {
-        console.error('Command execution failed:', result.error);
-        process.exit(1);
-      }
-      console.log('Command completed successfully:', result.data);
+      printUsage(0);
+    } else if (commandHandlers[argv.command]) {
+      const handler = commandHandlers[argv.command];
+      await handler(argv);
+    } else {
+      throw new Error(`Unknown command: ${argv.command}`);
     }
   } catch (err: any) {
     if (err.status === 401) {
@@ -124,12 +83,12 @@ async function run() {
   }
 }
 
+export { moduleManager } from './module-manager';
 export { CLIProviderImpl } from './provider';
 export type {
   CLIModule,
   CLIProvider,
   CommandDefinition,
 } from './types';
-export { moduleManager };
 
 run();
