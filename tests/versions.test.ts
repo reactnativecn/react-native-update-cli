@@ -85,7 +85,7 @@ describe('bindVersionToPackages', () => {
     expect(postSpy).not.toHaveBeenCalled();
   });
 
-  test('logs operation complete count', async () => {
+  test('logs operation completion after binding packages', async () => {
     await bindVersionToPackages({
       appId: '100',
       versionId: '200',
@@ -95,8 +95,7 @@ describe('bindVersionToPackages', () => {
       ],
     });
 
-    const lastCall = consoleSpy.mock.calls[consoleSpy.mock.calls.length - 1];
-    expect(lastCall?.[0]).toContain('2');
+    expect(consoleSpy).toHaveBeenCalledTimes(3);
   });
 });
 

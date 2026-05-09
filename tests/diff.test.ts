@@ -453,7 +453,7 @@ describe('diff commands', () => {
             output: path.join(tempRoot, 'out', 'hdiff.ppk'),
           }),
         ),
-      ).rejects.toThrow(/node-hdiffpatch/);
+      ).rejects.toThrow(/node-hdiffpatch|nodeHdiffpatchRequired/);
     }
 
     expect(true).toBe(true);

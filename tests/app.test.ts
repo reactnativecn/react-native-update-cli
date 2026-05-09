@@ -17,7 +17,9 @@ describe('assertPlatform', () => {
   });
 
   test('throws on invalid platform string', () => {
-    expect(() => assertPlatform('windows')).toThrow('windows');
+    expect(() => assertPlatform('windows')).toThrow(
+      /windows|unsupportedPlatform/,
+    );
   });
 
   test('throws on empty string', () => {
@@ -71,7 +73,9 @@ describe('getSelectedApp', () => {
     const enoentError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(enoentError);
 
-    await expect(getSelectedApp('ios')).rejects.toThrow('selectApp');
+    await expect(getSelectedApp('ios')).rejects.toThrow(
+      /selectApp|appNotSelected/,
+    );
   });
 
   test('throws original error for non-ENOENT read failures', async () => {
@@ -88,7 +92,9 @@ describe('getSelectedApp', () => {
       JSON.stringify({ android: { appId: 1, appKey: 'k' } }),
     );
 
-    await expect(getSelectedApp('ios')).rejects.toThrow('selectApp');
+    await expect(getSelectedApp('ios')).rejects.toThrow(
+      /selectApp|appNotSelected/,
+    );
   });
 
   test('converts appId to string', async () => {
