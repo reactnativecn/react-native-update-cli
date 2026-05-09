@@ -1,18 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
-
-// Mock dependencies before imports
-mock.module('fs-extra', () => ({
-  default: {
-    access: async () => {},
-  },
-}));
-
-mock.module('i18next', () => ({
-  default: {
-    init: () => {},
-    t: (key: string) => key,
-  },
-}));
+import { describe, expect, test } from 'bun:test';
 
 import { checkPlugins } from '../src/utils/check-plugin';
 import * as pluginConfig from '../src/utils/plugin-config';
