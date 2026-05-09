@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { loadSession } from './api';
-import { appCommands } from './app';
+import { getAppCommands } from './app';
 import { bundleCommands } from './bundle';
 import { diffCommands } from './diff';
 import { installCommands } from './install';
@@ -43,7 +43,7 @@ const commandHandlers: Record<string, CliCommandHandler> = {
   ...userCommands,
   ...bundleCommands,
   ...diffCommands,
-  ...appCommands,
+  ...getAppCommands(),
   ...packageCommands,
   ...versionCommands,
   ...installCommands,

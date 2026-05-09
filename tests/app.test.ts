@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import fs from 'fs';
 import * as api from '../src/api';
-import { appCommands, assertPlatform, getSelectedApp } from '../src/app';
+import { assertPlatform, getAppCommands, getSelectedApp } from '../src/app';
 
 describe('assertPlatform', () => {
   test('accepts ios', () => {
@@ -133,7 +133,7 @@ describe('appCommands.createApp', () => {
     writeFileSpy = spyOn(fs.promises, 'writeFile').mockResolvedValue();
     consoleLogSpy = spyOn(console, 'log').mockImplementation(() => {});
 
-    const createApp = appCommands.createApp;
+    const createApp = getAppCommands().createApp;
     await createApp({
       options: {
         name: 'SmallWOD',

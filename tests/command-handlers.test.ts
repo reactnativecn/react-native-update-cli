@@ -24,15 +24,6 @@ function findThisUsagesInCommandMaps(filePath: string): string[] {
   const errors: string[] = [];
 
   function visitCommandMap(node: ts.Node): void {
-    if (!ts.isVariableDeclaration(node)) {
-      ts.forEachChild(node, visitCommandMap);
-      return;
-    }
-
-    if (!ts.isIdentifier(node.name) || !node.name.text.endsWith('Commands')) {
-      return;
-    }
-
     function scanForThis(child: ts.Node): void {
       if (child.kind === ts.SyntaxKind.ThisKeyword) {
         const { line, character } = sourceFile.getLineAndCharacterOfPosition(
@@ -43,9 +34,27 @@ function findThisUsagesInCommandMaps(filePath: string): string[] {
       ts.forEachChild(child, scanForThis);
     }
 
-    if (node.initializer) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text.endsWith('Commands') &&
+      node.initializer
+    ) {
       scanForThis(node.initializer);
+      return;
     }
+
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name?.text.startsWith('get') &&
+      node.name.text.endsWith('Commands') &&
+      node.body
+    ) {
+      scanForThis(node.body);
+      return;
+    }
+
+    ts.forEachChild(node, visitCommandMap);
   }
 
   visitCommandMap(sourceFile);

@@ -171,8 +171,10 @@ export class CLIProviderImpl implements CLIProvider {
     return this.runMessageCommand(
       async () => {
         const resolvedPlatform = await this.getPlatform(platform);
-        const { appCommands } = await import('./app');
-        await appCommands.apps({ options: { platform: resolvedPlatform } });
+        const { getAppCommands } = await import('./app');
+        await getAppCommands().apps({
+          options: { platform: resolvedPlatform },
+        });
       },
       'Unknown error listing apps',
       'Apps listed successfully',
@@ -182,8 +184,8 @@ export class CLIProviderImpl implements CLIProvider {
   async createApp(name: string, platform: Platform): Promise<CommandResult> {
     return this.runMessageCommand(
       async () => {
-        const { appCommands } = await import('./app');
-        await appCommands.createApp({
+        const { getAppCommands } = await import('./app');
+        await getAppCommands().createApp({
           options: {
             name,
             platform,

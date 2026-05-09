@@ -119,40 +119,42 @@ async function selectApp({
   );
 }
 
-export const appCommands = {
-  createApp: async ({
-    options,
-  }: {
-    options: { name: string; downloadUrl: string; platform?: Platform | '' };
-  }) => {
-    const name = options.name || (await question(t('appNameQuestion')));
-    const { downloadUrl } = options;
-    const platform = await getPlatform(options.platform);
-    const { id } = await post('/app/create', { name, platform, downloadUrl });
-    console.log(t('createAppSuccess', { id }));
-    await selectApp({
-      args: [String(id)],
-      options: { platform },
-    });
-  },
-  deleteApp: async ({
-    args,
-    options,
-  }: {
-    args: string[];
-    options: { platform: Platform };
-  }) => {
-    const { platform } = options;
-    const id = args[0] || (await chooseApp(platform)).id;
-    if (!id) {
-      console.log(t('cancelled'));
-    }
-    await doDelete(`/app/${id}`);
-    console.log(t('operationSuccess'));
-  },
-  apps: async ({ options }: { options: { platform?: Platform | '' } }) => {
-    const { platform = '' } = options;
-    await listApp(platform);
-  },
-  selectApp,
-};
+export function getAppCommands() {
+  return {
+    createApp: async ({
+      options,
+    }: {
+      options: { name: string; downloadUrl: string; platform?: Platform | '' };
+    }) => {
+      const name = options.name || (await question(t('appNameQuestion')));
+      const { downloadUrl } = options;
+      const platform = await getPlatform(options.platform);
+      const { id } = await post('/app/create', { name, platform, downloadUrl });
+      console.log(t('createAppSuccess', { id }));
+      await selectApp({
+        args: [String(id)],
+        options: { platform },
+      });
+    },
+    deleteApp: async ({
+      args,
+      options,
+    }: {
+      args: string[];
+      options: { platform: Platform };
+    }) => {
+      const { platform } = options;
+      const id = args[0] || (await chooseApp(platform)).id;
+      if (!id) {
+        console.log(t('cancelled'));
+      }
+      await doDelete(`/app/${id}`);
+      console.log(t('operationSuccess'));
+    },
+    apps: async ({ options }: { options: { platform?: Platform | '' } }) => {
+      const { platform = '' } = options;
+      await listApp(platform);
+    },
+    selectApp,
+  };
+}
