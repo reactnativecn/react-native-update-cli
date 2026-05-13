@@ -331,6 +331,75 @@ function getHermesOSBin() {
   if (os.platform() === 'linux') return 'linux64-bin';
 }
 
+function getHermesExecutableName() {
+  return os.platform() === 'win32' ? 'hermesc.exe' : 'hermesc';
+}
+
+function dirnameOfPackage(
+  packageJsonPath: string,
+  projectRoot = process.cwd(),
+) {
+  return path.dirname(
+    require.resolve(packageJsonPath, {
+      paths: [projectRoot],
+    }),
+  );
+}
+
+export function resolveHermesCommand(projectRoot = process.cwd()): string {
+  const osBin = getHermesOSBin();
+  if (!osBin) {
+    throw new Error(`Unsupported platform for Hermes: ${os.platform()}`);
+  }
+
+  const executableName = getHermesExecutableName();
+  const candidates: string[] = [];
+
+  try {
+    const rnDir = dirnameOfPackage('react-native/package.json', projectRoot);
+    candidates.push(path.join(rnDir, 'sdks', 'hermesc', osBin, executableName));
+  } catch {
+    // react-native is required for normal RN projects; keep looking so the
+    // final error can include all candidates we were able to infer.
+  }
+
+  try {
+    const hermesCompilerDir = dirnameOfPackage(
+      'hermes-compiler/package.json',
+      projectRoot,
+    );
+    candidates.push(
+      path.join(hermesCompilerDir, 'hermesc', osBin, executableName),
+    );
+  } catch {
+    // RN 0.85+ uses hermes-compiler, older projects may still use other paths.
+  }
+
+  try {
+    const hermesEngineDir = dirnameOfPackage(
+      'hermes-engine/package.json',
+      projectRoot,
+    );
+    candidates.push(
+      path.join(hermesEngineDir, osBin, executableName),
+      path.join(hermesEngineDir, 'hermesc', osBin, executableName),
+    );
+  } catch {
+    // RN 0.70-era projects commonly used hermes-engine; optional for newer RN.
+  }
+
+  const hermesCommand = candidates.find((candidate) =>
+    fs.existsSync(candidate),
+  );
+  if (hermesCommand) {
+    return hermesCommand;
+  }
+
+  throw new Error(
+    `Cannot find hermesc. Tried:\n${candidates.map((candidate) => `- ${candidate}`).join('\n')}`,
+  );
+}
+
 async function checkGradleConfig(): Promise<GradleConfig> {
   let enableHermes = false;
   let crunchPngs: boolean | undefined;
@@ -365,18 +434,7 @@ async function compileHermesByteCode(
   shouldCleanSourcemap: boolean,
 ) {
   console.log(t('hermesEnabledCompiling'));
-  const rnDir = path.dirname(
-    require.resolve('react-native', {
-      paths: [process.cwd()],
-    }),
-  );
-  let hermesPath = path.join(rnDir, `/sdks/hermesc/${getHermesOSBin()}`);
-
-  if (!fs.existsSync(hermesPath)) {
-    hermesPath = `node_modules/hermes-engine/${getHermesOSBin()}`;
-  }
-
-  const hermesCommand = `${hermesPath}/hermesc`;
+  const hermesCommand = resolveHermesCommand();
 
   const args = [
     '-emit-binary',

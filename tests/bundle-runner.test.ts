@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { hasProjectDependency, resolveExpoCli } from '../src/bundle-runner';
+import {
+  hasProjectDependency,
+  resolveExpoCli,
+  resolveHermesCommand,
+} from '../src/bundle-runner';
 
 function mkTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -16,6 +20,16 @@ function writeJson(filePath: string, value: unknown): void {
 function _writeFile(filePath: string, content = ''): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content);
+}
+
+function hermesOSBin(): string {
+  if (os.platform() === 'win32') return 'win64-bin';
+  if (os.platform() === 'darwin') return 'osx-bin';
+  return 'linux64-bin';
+}
+
+function hermesExecutableName(): string {
+  return os.platform() === 'win32' ? 'hermesc.exe' : 'hermesc';
 }
 
 describe('hasProjectDependency', () => {
@@ -116,5 +130,76 @@ describe('resolveExpoCli edge cases', () => {
 
     const resolved = resolveExpoCli(tempRoot);
     expect(resolved.usingExpo).toBe(false);
+  });
+});
+
+describe('resolveHermesCommand', () => {
+  let tempRoot = '';
+
+  beforeEach(() => {
+    tempRoot = mkTempDir('rn-update-hermes-');
+  });
+
+  afterEach(() => {
+    if (tempRoot && fs.existsSync(tempRoot)) {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('resolves hermes-compiler path used by React Native 0.85', () => {
+    const hermesCommand = path.join(
+      tempRoot,
+      'node_modules',
+      'hermes-compiler',
+      'hermesc',
+      hermesOSBin(),
+      hermesExecutableName(),
+    );
+    writeJson(
+      path.join(tempRoot, 'node_modules/hermes-compiler/package.json'),
+      {
+        name: 'hermes-compiler',
+        version: '250829098.0.10',
+      },
+    );
+    _writeFile(hermesCommand);
+
+    expect(resolveHermesCommand(tempRoot)).toBe(hermesCommand);
+  });
+
+  test('keeps compatibility with legacy react-native sdks hermesc path', () => {
+    const hermesCommand = path.join(
+      tempRoot,
+      'node_modules',
+      'react-native',
+      'sdks',
+      'hermesc',
+      hermesOSBin(),
+      hermesExecutableName(),
+    );
+    writeJson(path.join(tempRoot, 'node_modules/react-native/package.json'), {
+      name: 'react-native',
+      version: '0.69.0',
+    });
+    _writeFile(hermesCommand);
+
+    expect(resolveHermesCommand(tempRoot)).toBe(hermesCommand);
+  });
+
+  test('keeps compatibility with legacy hermes-engine package path', () => {
+    const hermesCommand = path.join(
+      tempRoot,
+      'node_modules',
+      'hermes-engine',
+      hermesOSBin(),
+      hermesExecutableName(),
+    );
+    writeJson(path.join(tempRoot, 'node_modules/hermes-engine/package.json'), {
+      name: 'hermes-engine',
+      version: '0.11.0',
+    });
+    _writeFile(hermesCommand);
+
+    expect(resolveHermesCommand(tempRoot)).toBe(hermesCommand);
   });
 });
