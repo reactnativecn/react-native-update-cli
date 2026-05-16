@@ -1,17 +1,12 @@
 import path from 'path';
-import { decodeNullUnicode } from './utils';
-
-const Unzip = require('isomorphic-unzip');
-
 import { enumZipEntries, readEntry } from '../zip-entries';
+import { decodeNullUnicode } from './utils';
 
 export class Zip {
   file: string | File;
-  unzip: any;
 
   constructor(file: string | File) {
     this.file = typeof file === 'string' ? path.resolve(file) : file;
-    this.unzip = new Unzip(this.file);
   }
 
   /**
@@ -24,15 +19,7 @@ export class Zip {
     type: 'buffer' | 'blob' = 'buffer',
   ) {
     const decoded = regexps.map((regex) => decodeNullUnicode(regex));
-    return new Promise<Record<string, Buffer | Blob>>((resolve, reject) => {
-      this.unzip.getBuffer(
-        decoded,
-        { type },
-        (err: Error | null, buffers: Record<string, Buffer | Blob>) => {
-          err ? reject(err) : resolve(buffers);
-        },
-      );
-    });
+    return this.readEntries(decoded, type);
   }
 
   /**
@@ -42,15 +29,9 @@ export class Zip {
    */
   getEntry(regex: RegExp | string, type: 'buffer' | 'blob' = 'buffer') {
     const decoded = decodeNullUnicode(regex);
-    return new Promise<Buffer | Blob | undefined>((resolve, reject) => {
-      this.unzip.getBuffer(
-        [decoded],
-        { type },
-        (err: Error | null, buffers: Record<string, Buffer | Blob>) => {
-          err ? reject(err) : resolve(buffers[decoded as any]);
-        },
-      );
-    });
+    return this.readEntries([decoded], type).then(
+      (buffers) => buffers[decoded as any],
+    );
   }
 
   async getEntryFromHarmonyApp(
@@ -70,5 +51,41 @@ export class Zip {
     } catch (error) {
       console.error('Error in getEntryFromHarmonyApp:', error);
     }
+  }
+
+  private async readEntries(
+    decoded: Array<RegExp | string>,
+    type: 'buffer' | 'blob',
+  ): Promise<Record<string, Buffer | Blob>> {
+    if (typeof this.file !== 'string') {
+      throw new Error('Param error: [file] must be file path in Node.');
+    }
+
+    const buffers: Record<string, Buffer | Blob> = {};
+    await enumZipEntries(this.file, async (entry, zipFile) => {
+      if (entry.fileName.endsWith('/')) {
+        return;
+      }
+
+      const entryName = decodeNullUnicode(entry.fileName).toString();
+      const lowerEntryName = entryName.toLowerCase();
+      const matched = decoded.find((pattern) => {
+        if (typeof pattern === 'string') {
+          return pattern === entryName || pattern === lowerEntryName;
+        }
+        pattern.lastIndex = 0;
+        return pattern.test(lowerEntryName);
+      });
+
+      if (!matched) {
+        return;
+      }
+
+      const buffer = await readEntry(entry, zipFile);
+      buffers[matched as any] =
+        type === 'blob' ? new Blob([buffer as any]) : buffer;
+    });
+
+    return buffers;
   }
 }
