@@ -35,7 +35,7 @@ export function runtimeFetch(
   options?: RuntimeRequestInit,
 ): Promise<RuntimeResponse> {
   const fetchImpl =
-    isBunRuntime && typeof globalThis.fetch === 'function'
+    typeof globalThis.fetch === 'function'
       ? globalThis.fetch.bind(globalThis)
       : nodeFetch;
 
