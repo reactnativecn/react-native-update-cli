@@ -1,6 +1,7 @@
 import { spawnSync } from 'child_process';
 import path from 'path';
 import type { CommandContext } from './types';
+import { getInstallCommand } from './utils/runtime';
 
 export const installCommands = {
   install: async ({ args }: CommandContext) => {
@@ -9,8 +10,9 @@ export const installCommands = {
     }
 
     const cliDir = path.resolve(__dirname, '..');
+    const installCommand = getInstallCommand(args, cliDir);
 
-    spawnSync('npm', ['install', ...args], {
+    spawnSync(installCommand.command, installCommand.args, {
       cwd: cliDir,
       stdio: 'inherit',
       shell: true,

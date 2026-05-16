@@ -1,5 +1,5 @@
-import fetch from 'node-fetch';
 import { defaultEndpoints } from './constants';
+import { runtimeFetch } from './runtime';
 
 // const baseUrl = `http://localhost:9000`;
 // let baseUrl = SERVER.main[0];
@@ -25,7 +25,7 @@ export function promiseAny<T>(promises: Promise<T>[]) {
 export const ping = async (url: string) => {
   let pingFinished = false;
   return Promise.race([
-    fetch(url, {
+    runtimeFetch(url, {
       method: 'HEAD',
     })
       .then(({ status }) => {

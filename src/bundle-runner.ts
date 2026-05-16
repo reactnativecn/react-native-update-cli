@@ -1,9 +1,14 @@
-import { spawn, spawnSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { satisfies } from 'compare-versions';
 import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import { t } from './utils/i18n';
+import {
+  getJavaScriptRuntime,
+  spawnJavaScript,
+  spawnJavaScriptSync,
+} from './utils/runtime';
 
 const g2js = require('gradle-to-js/lib/parser');
 const properties = require('properties');
@@ -242,9 +247,10 @@ export async function runReactNativeBundleCommand({
     reactNativeBundleArgs.push('--config', config);
   }
 
-  const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
+  const jsRuntime = getJavaScriptRuntime();
+  const reactNativeBundleProcess = spawnJavaScript(reactNativeBundleArgs);
   console.log(
-    `Running bundle command: node ${reactNativeBundleArgs.join(' ')}`,
+    `Running bundle command: ${jsRuntime} ${reactNativeBundleArgs.join(' ')}`,
   );
 
   await new Promise<void>((resolve, reject) => {
@@ -463,8 +469,7 @@ async function compileHermesByteCode(
       return;
     }
     console.log(t('composingSourceMap'));
-    spawnSync(
-      'node',
+    spawnJavaScriptSync(
       [
         composerPath,
         path.join(outputFolder, `${bundleName}.txt.map`),
@@ -505,8 +510,7 @@ export async function copyDebugidForSentry(
       return;
     }
     console.log(t('copyingDebugId'));
-    spawnSync(
-      'node',
+    spawnJavaScriptSync(
       [
         copyDebugidPath,
         path.join(outputFolder, `${bundleName}.txt.map`),
@@ -544,8 +548,7 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  spawnSync(
-    'node',
+  spawnJavaScriptSync(
     [sentryCliPath, 'releases', 'set-commits', version, '--auto'],
     {
       stdio: 'inherit',
@@ -554,8 +557,7 @@ export async function uploadSourcemapForSentry(
   console.log(t('sentryReleaseCreated', { version }));
 
   console.log(t('uploadingSourcemap'));
-  spawnSync(
-    'node',
+  spawnJavaScriptSync(
     [
       sentryCliPath,
       'releases',

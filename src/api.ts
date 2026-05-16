@@ -4,15 +4,17 @@ import fs from 'fs';
 import fetch from 'node-fetch';
 import path from 'path';
 import ProgressBar from 'progress';
-import tcpp from 'tcp-ping';
-import util from 'util';
 import { getBaseUrl } from 'utils/http-helper';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
 import { credentialFile, IS_CRESC, pricingPageUrl } from './utils/constants';
 import { t } from './utils/i18n';
-
-const tcpPing = util.promisify(tcpp.ping);
+import {
+  measureTcpLatency,
+  type RuntimeRequestInit,
+  type RuntimeResponse,
+  runtimeFetch,
+} from './utils/runtime';
 
 let session: Session | undefined;
 let savedSession: Session | undefined;
@@ -85,12 +87,12 @@ function createRequestError(error: unknown, requestUrl: string) {
   return new Error(`${message}\nURL: ${requestUrl}`);
 }
 
-async function query(url: string, options: fetch.RequestInit) {
+async function query(url: string, options: RuntimeRequestInit) {
   const baseUrl = await getBaseUrl;
   const fullUrl = `${baseUrl}${url}`;
-  let resp: fetch.Response;
+  let resp: RuntimeResponse;
   try {
-    resp = await fetch(fullUrl, options);
+    resp = await runtimeFetch(fullUrl, options);
   } catch (error) {
     throw createRequestError(error, fullUrl);
   }
@@ -166,13 +168,11 @@ export async function uploadFile(fn: string, key?: string) {
     if (global.USE_ACC_OSS) {
       realUrl = backupUrl;
     } else {
-      const pingResult = await tcpPing({
-        address: url.replace('https://', ''),
+      const latency = await measureTcpLatency(url, {
         attempts: 4,
         timeout: 1000,
       });
-      // console.log({pingResult});
-      if (Number.isNaN(pingResult.avg) || pingResult.avg > 150) {
+      if (!Number.isFinite(latency) || latency > 150) {
         realUrl = backupUrl;
       }
     }

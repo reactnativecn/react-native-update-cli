@@ -9,7 +9,6 @@ mock.module('progress', () => ({
     tick() {}
   },
 }));
-mock.module('tcp-ping', () => ({ default: { ping: () => {} } }));
 mock.module('tty-table', () => {
   const mockTable = () => ({ render: () => '' });
   return { default: mockTable };

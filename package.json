@@ -83,7 +83,6 @@
     "read": "^4.1.0",
     "registry-auth-token": "^5.1.1",
     "semver": "^7.7.4",
-    "tcp-ping": "^0.1.1",
     "tty-table": "5.0",
     "yauzl": "^3.3.0",
     "yazl": "3.3.1"
@@ -105,7 +104,6 @@
     "@types/node-fetch": "^2.6.13",
     "@types/progress": "^2.0.7",
     "@types/semver": "^7.7.1",
-    "@types/tcp-ping": "^0.1.6",
     "@types/yauzl": "^2.10.3",
     "@types/yazl": "^2.4.6",
     "typescript": "^6.0.2"
