@@ -10,6 +10,7 @@ import {
 import fs from 'fs';
 import {
   closeSession,
+  get,
   getApiToken,
   getSession,
   loadSession,
@@ -17,6 +18,7 @@ import {
   saveSession,
   setApiToken,
 } from '../src/api';
+import * as runtime from '../src/utils/runtime';
 
 describe('api.ts session management', () => {
   let originalConsoleError: typeof console.error;
@@ -124,5 +126,91 @@ describe('api.ts token management', () => {
 
     expect(getApiToken()).toBe('env-token-pushy');
     existsSyncSpy.mockRestore();
+  });
+});
+
+describe('api.ts query API methods', () => {
+  let runtimeFetchSpy: ReturnType<typeof spyOn>;
+  let originalConsoleWarn: typeof console.warn;
+  let getBaseUrlSpy: ReturnType<typeof spyOn>;
+  let _httpHelperBaseUrl: any;
+
+  beforeEach(() => {
+    originalConsoleWarn = console.warn;
+    console.warn = mock(() => {});
+  });
+
+  afterEach(() => {
+    console.warn = originalConsoleWarn;
+    runtimeFetchSpy?.mockRestore();
+    getBaseUrlSpy?.mockRestore();
+  });
+
+  test('query throws correctly formatted error on network failure', async () => {
+    runtimeFetchSpy = spyOn(runtime, 'runtimeFetch').mockImplementation(
+      async () => {
+        throw new Error('Network disconnected');
+      },
+    );
+
+    let error: any;
+    try {
+      await get('/test-endpoint');
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeDefined();
+    expect(error.message).toContain('Network disconnected');
+    expect(error.message).toContain('URL:');
+  });
+
+  test('query warns on 200 status with non-JSON body', async () => {
+    const nonJsonText = 'Not a JSON response';
+    runtimeFetchSpy = spyOn(runtime, 'runtimeFetch').mockImplementation(
+      async () =>
+        ({
+          status: 200,
+          statusText: 'OK',
+          text: async () => nonJsonText,
+        }) as any,
+    );
+
+    let _error: any;
+    try {
+      await get('/test-endpoint');
+    } catch (e) {
+      _error = e;
+    }
+
+    expect(console.warn).toHaveBeenCalled();
+    const warnMessage = (console.warn as import('bun:test').Mock<any>).mock
+      .calls[0][0];
+    expect(warnMessage).toContain(
+      'Warning: API returned 200 with non-JSON body',
+    );
+    expect(warnMessage).toContain(String(nonJsonText.length));
+  });
+
+  test('query throws on non-200 HTTP status', async () => {
+    runtimeFetchSpy = spyOn(runtime, 'runtimeFetch').mockImplementation(
+      async () =>
+        ({
+          status: 500,
+          statusText: 'Internal Server Error',
+          text: async () => JSON.stringify({ message: 'Database failure' }),
+        }) as any,
+    );
+
+    let error: any;
+    try {
+      await get('/test-endpoint');
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeDefined();
+    expect(error.message).toContain('Database failure');
+    expect(error.status).toBe(500);
   });
 });
