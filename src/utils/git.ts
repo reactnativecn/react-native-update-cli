@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import git from 'isomorphic-git';
 import path from 'path';
@@ -47,4 +48,12 @@ export async function getCommitInfo(): Promise<CommitInfo | undefined> {
     console.error(error);
     return;
   }
+}
+
+export function getCurrentCommit() {
+  const result = spawnSync('git', ['rev-parse', 'HEAD']);
+  if (result.status !== 0) {
+    throw new Error('Not a git repository');
+  }
+  return result.stdout.toString().trim();
 }
