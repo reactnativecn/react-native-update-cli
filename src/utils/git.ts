@@ -11,6 +11,14 @@ export interface CommitInfo {
   origin: string;
 }
 
+export function getCurrentCommit() {
+  const result = spawnSync('git', ['rev-parse', 'HEAD']);
+  if (result.status !== 0) {
+    throw new Error('Not a git repository');
+  }
+  return result.stdout.toString().trim();
+}
+
 function findGitRoot(dir = process.cwd()) {
   const gitRoot = fs.readdirSync(dir).find((dir) => dir === '.git');
   if (gitRoot) {
@@ -48,12 +56,4 @@ export async function getCommitInfo(): Promise<CommitInfo | undefined> {
     console.error(error);
     return;
   }
-}
-
-export function getCurrentCommit() {
-  const result = spawnSync('git', ['rev-parse', 'HEAD']);
-  if (result.status !== 0) {
-    throw new Error('Not a git repository');
-  }
-  return result.stdout.toString().trim();
 }
