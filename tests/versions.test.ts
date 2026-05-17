@@ -251,28 +251,38 @@ describe('versionCommands.update package range selection', () => {
   });
 
   test('applies minPackageVersion and maxPackageVersion together', async () => {
-    postSpy.mockClear();
+    const appId = 'range-app';
 
     await versionCommands.update({
       options: {
-        appId: '100',
+        appId,
         versionId: '200',
         minPackageVersion: '1.1.0',
         maxPackageVersion: '1.2.0',
       },
     });
 
-    expect(postSpy).toHaveBeenCalledTimes(2);
-    expect(postSpy).toHaveBeenNthCalledWith(1, '/app/100/binding', {
-      versionId: '200',
-      rollout: undefined,
-      packageId: '11',
-    });
-    expect(postSpy).toHaveBeenNthCalledWith(2, '/app/100/binding', {
-      versionId: '200',
-      rollout: undefined,
-      packageId: '12',
-    });
+    const bindingCalls = postSpy.mock.calls.filter(
+      ([url]) => url === `/app/${appId}/binding`,
+    );
+
+    expect(bindingCalls).toHaveLength(2);
+    expect(bindingCalls[0]).toEqual([
+      `/app/${appId}/binding`,
+      {
+        versionId: '200',
+        rollout: undefined,
+        packageId: '11',
+      },
+    ]);
+    expect(bindingCalls[1]).toEqual([
+      `/app/${appId}/binding`,
+      {
+        versionId: '200',
+        rollout: undefined,
+        packageId: '12',
+      },
+    ]);
   });
 
   test('fails instead of prompting for package id in non-interactive mode', async () => {
