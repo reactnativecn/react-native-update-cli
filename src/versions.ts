@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { satisfies } from 'compare-versions';
+import { compare, satisfies } from 'compare-versions';
 import Table from 'tty-table';
 import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
@@ -573,10 +573,10 @@ export const versionCommands = {
       minPkgVersion = minPkgVersion ? String(minPkgVersion).trim() : undefined;
       maxPkgVersion = maxPkgVersion ? String(maxPkgVersion).trim() : undefined;
       pkgsToBind = allPkgs.filter((pkg: Package) => {
-        if (minPkgVersion && !satisfies(pkg.name, `>=${minPkgVersion}`)) {
+        if (minPkgVersion && !compare(pkg.name, minPkgVersion, '>=')) {
           return false;
         }
-        if (maxPkgVersion && !satisfies(pkg.name, `<=${maxPkgVersion}`)) {
+        if (maxPkgVersion && !compare(pkg.name, maxPkgVersion, '<=')) {
           return false;
         }
         return true;
