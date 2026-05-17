@@ -250,15 +250,14 @@ describe('versionCommands.update package range selection', () => {
     postSpy.mockRestore();
   });
 
-  test('applies minPackageVersion and maxPackageVersion together', async () => {
-    const appId = 'range-app';
+  test('applies minPackageVersion as a lower bound', async () => {
+    const appId = 'min-app';
 
     await versionCommands.update({
       options: {
         appId,
         versionId: '200',
         minPackageVersion: '1.1.0',
-        maxPackageVersion: '1.2.0',
       },
     });
 
@@ -266,7 +265,7 @@ describe('versionCommands.update package range selection', () => {
       ([url]) => url === `/app/${appId}/binding`,
     );
 
-    expect(bindingCalls).toHaveLength(2);
+    expect(bindingCalls).toHaveLength(3);
     expect(bindingCalls[0]).toEqual([
       `/app/${appId}/binding`,
       {
@@ -276,6 +275,56 @@ describe('versionCommands.update package range selection', () => {
       },
     ]);
     expect(bindingCalls[1]).toEqual([
+      `/app/${appId}/binding`,
+      {
+        versionId: '200',
+        rollout: undefined,
+        packageId: '12',
+      },
+    ]);
+    expect(bindingCalls[2]).toEqual([
+      `/app/${appId}/binding`,
+      {
+        versionId: '200',
+        rollout: undefined,
+        packageId: '13',
+      },
+    ]);
+  });
+
+  test('applies maxPackageVersion as an upper bound', async () => {
+    const appId = 'max-app';
+
+    await versionCommands.update({
+      options: {
+        appId,
+        versionId: '200',
+        maxPackageVersion: '1.2.0',
+      },
+    });
+
+    const bindingCalls = postSpy.mock.calls.filter(
+      ([url]) => url === `/app/${appId}/binding`,
+    );
+
+    expect(bindingCalls).toHaveLength(3);
+    expect(bindingCalls[0]).toEqual([
+      `/app/${appId}/binding`,
+      {
+        versionId: '200',
+        rollout: undefined,
+        packageId: '10',
+      },
+    ]);
+    expect(bindingCalls[1]).toEqual([
+      `/app/${appId}/binding`,
+      {
+        versionId: '200',
+        rollout: undefined,
+        packageId: '11',
+      },
+    ]);
+    expect(bindingCalls[2]).toEqual([
       `/app/${appId}/binding`,
       {
         versionId: '200',
