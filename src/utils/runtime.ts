@@ -119,6 +119,19 @@ export function detectPackageManager(
   cwd = process.cwd(),
   env: NodeJS.ProcessEnv = process.env,
 ): PackageManager {
+  const lockFiles: Array<[string, PackageManager]> = [
+    ['bun.lock', 'bun'],
+    ['bun.lockb', 'bun'],
+    ['pnpm-lock.yaml', 'pnpm'],
+    ['yarn.lock', 'yarn'],
+    ['package-lock.json', 'npm'],
+  ];
+  for (const [lockFile, manager] of lockFiles) {
+    if (fs.existsSync(path.join(cwd, lockFile))) {
+      return manager;
+    }
+  }
+
   const userAgent = env.npm_config_user_agent ?? '';
   if (userAgent.startsWith('bun/')) {
     return 'bun';
@@ -131,19 +144,6 @@ export function detectPackageManager(
   }
   if (userAgent.startsWith('npm/')) {
     return 'npm';
-  }
-
-  const lockFiles: Array<[string, PackageManager]> = [
-    ['bun.lock', 'bun'],
-    ['bun.lockb', 'bun'],
-    ['pnpm-lock.yaml', 'pnpm'],
-    ['yarn.lock', 'yarn'],
-    ['package-lock.json', 'npm'],
-  ];
-  for (const [lockFile, manager] of lockFiles) {
-    if (fs.existsSync(path.join(cwd, lockFile))) {
-      return manager;
-    }
   }
 
   return isBunRuntime ? 'bun' : 'npm';

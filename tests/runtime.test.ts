@@ -42,6 +42,16 @@ describe('runtime package manager detection', () => {
     expect(detectPackageManager(tempRoot, {})).toBe('pnpm');
   });
 
+  test('prefers project lockfile over current process user agent', () => {
+    fs.writeFileSync(path.join(tempRoot, 'package-lock.json'), '');
+
+    expect(
+      detectPackageManager(tempRoot, {
+        npm_config_user_agent: 'bun/1.3.0 npm/? node/v24',
+      }),
+    ).toBe('npm');
+  });
+
   test('builds bun add command for bun projects', () => {
     fs.writeFileSync(path.join(tempRoot, 'bun.lock'), '');
 

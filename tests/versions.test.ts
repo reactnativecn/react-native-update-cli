@@ -251,6 +251,8 @@ describe('versionCommands.update package range selection', () => {
   });
 
   test('applies minPackageVersion and maxPackageVersion together', async () => {
+    postSpy.mockClear();
+
     await versionCommands.update({
       options: {
         appId: '100',
