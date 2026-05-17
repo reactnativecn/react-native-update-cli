@@ -67,7 +67,6 @@ describe('api.ts session management', () => {
     await expect(loadSession()).rejects.toThrow(SyntaxError);
   });
 
-
   test('loadSession throws when reading credential file fails', async () => {
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     readFileSyncSpy = spyOn(fs, 'readFileSync').mockImplementation(() => {
@@ -76,7 +75,7 @@ describe('api.ts session management', () => {
 
     await expect(loadSession()).rejects.toThrow('Read error');
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to parse file')
+      expect.stringContaining('Failed to parse file'),
     );
   });
   test('replaceSession sets session', () => {
