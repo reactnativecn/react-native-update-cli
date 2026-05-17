@@ -83,8 +83,15 @@ type AabResourceTableObject = {
   package: AabResourcePackage[];
 };
 
+export function isNonInteractive() {
+  const envValue = process.env.NO_INTERACTIVE?.toLowerCase();
+  return (
+    global.NO_INTERACTIVE === true || envValue === 'true' || envValue === '1'
+  );
+}
+
 export async function question(query: string, password?: boolean) {
-  if (NO_INTERACTIVE) {
+  if (isNonInteractive()) {
     return '';
   }
   return read({

@@ -59,13 +59,11 @@
   },
   "homepage": "https://github.com/reactnativecn/react-native-update-cli",
   "dependencies": {
-    "@colors/colors": "^1.6.0",
     "bplist-parser": "^0.3.2",
     "bytebuffer": "^5.0.1",
     "cgbi-to-png": "^1.0.7",
     "chalk": "4",
     "cli-arguments": "^0.2.1",
-    "commander": "^13",
     "compare-versions": "^6.1.1",
     "filesize-parser": "^1.5.1",
     "form-data": "^4.0.5",

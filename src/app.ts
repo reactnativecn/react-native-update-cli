@@ -153,7 +153,7 @@ export function getAppCommands() {
     },
     apps: async ({ options }: { options: { platform?: Platform | '' } }) => {
       const { platform = '' } = options;
-      await listApp(platform);
+      return listApp(platform);
     },
     selectApp,
   };

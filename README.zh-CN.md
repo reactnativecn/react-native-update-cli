@@ -46,6 +46,8 @@ if (!bundleResult.success) {
 }
 
 const publishResult = await provider.publish({
+  filePath: '.pushy/output/ios.ppk',
+  platform: 'ios',
   name: 'v1.2.3',
   description: 'Bug fixes and improvements',
   rollout: 100,
@@ -124,6 +126,8 @@ interface CLIProvider {
 ```
 
 ## 环境变量
+
+`publish` 需要通过 `filePath` 传入已生成的 `.ppk` 文件路径。Provider 的列表方法会把数据放在 `CommandResult.data`，不会进入交互式翻页。
 
 ```bash
 export PUSHY_REGISTRY=https://your-api-endpoint.com

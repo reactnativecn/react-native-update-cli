@@ -8,8 +8,8 @@ import type {
   Platform,
   PublishOptions,
   Session,
+  UpdateVersionOptions,
   UploadOptions,
-  Version,
 } from './types';
 import { runAsCommandResult } from './utils/command-result';
 
@@ -84,6 +84,7 @@ export class CLIProviderImpl implements CLIProvider {
           bundleName: options.bundleName || 'index.bundlejs',
           entryFile: options.entryFile || 'index.js',
           output: options.output || DEFAULT_BUNDLE_OUTPUT,
+          'no-interactive': true,
           sourcemap: options.sourcemap || false,
           taro: options.taro || false,
           expo: options.expo || false,
@@ -103,18 +104,26 @@ export class CLIProviderImpl implements CLIProvider {
   async publish(options: PublishOptions): Promise<CommandResult> {
     return this.runMessageCommand(
       async () => {
-        const context = this.createContext({
-          name: options.name,
-          description: options.description,
-          metaInfo: options.metaInfo,
-          packageId: options.packageId,
-          packageVersion: options.packageVersion,
-          minPackageVersion: options.minPackageVersion,
-          maxPackageVersion: options.maxPackageVersion,
-          packageVersionRange: options.packageVersionRange,
-          rollout: options.rollout,
-          dryRun: options.dryRun || false,
-        });
+        const context = this.createContext(
+          {
+            name: options.name,
+            description: options.description,
+            metaInfo: options.metaInfo,
+            packageId: options.packageId,
+            packageVersion: options.packageVersion,
+            minPackageVersion: options.minPackageVersion,
+            maxPackageVersion: options.maxPackageVersion,
+            packageVersionRange: options.packageVersionRange,
+            platform: options.platform,
+            'no-interactive': true,
+            rollout:
+              options.rollout === undefined
+                ? undefined
+                : String(options.rollout),
+            dryRun: options.dryRun || false,
+          },
+          options.filePath ? [options.filePath] : [],
+        );
 
         const { versionCommands } = await import('./versions');
         await versionCommands.publish(context);
@@ -127,14 +136,16 @@ export class CLIProviderImpl implements CLIProvider {
   async upload(options: UploadOptions): Promise<CommandResult> {
     return this.runMessageCommand(
       async () => {
-        const platform = await this.getPlatform(options.platform);
-        const { appId } = await this.getSelectedApp(platform);
-
         const filePath = options.filePath;
         const fileType = filePath.split('.').pop()?.toLowerCase();
 
         const context = this.createContext(
-          { platform, appId, version: options.version },
+          {
+            platform: options.platform,
+            appId: options.appId,
+            appKey: options.appKey,
+            version: options.version,
+          },
           [filePath],
         );
 
@@ -168,17 +179,12 @@ export class CLIProviderImpl implements CLIProvider {
   }
 
   async listApps(platform?: Platform): Promise<CommandResult> {
-    return this.runMessageCommand(
-      async () => {
-        const resolvedPlatform = await this.getPlatform(platform);
-        const { getAppCommands } = await import('./app');
-        await getAppCommands().apps({
-          options: { platform: resolvedPlatform },
-        });
-      },
-      'Unknown error listing apps',
-      'Apps listed successfully',
-    );
+    return this.runDataCommand(async () => {
+      const { getAppCommands } = await import('./app');
+      return getAppCommands().apps({
+        options: { platform: platform ?? '' },
+      });
+    }, 'Unknown error listing apps');
   }
 
   async createApp(name: string, platform: Platform): Promise<CommandResult> {
@@ -199,26 +205,27 @@ export class CLIProviderImpl implements CLIProvider {
   }
 
   async listVersions(appId: string): Promise<CommandResult> {
-    return this.runMessageCommand(
-      async () => {
-        const context = this.createContext({ appId });
-
-        const { versionCommands } = await import('./versions');
-        await versionCommands.versions(context);
-      },
-      'Unknown error listing versions',
-      'Versions listed successfully',
-    );
+    return this.runDataCommand(async () => {
+      const { fetchVersions } = await import('./versions');
+      return fetchVersions(appId);
+    }, 'Unknown error listing versions');
   }
 
   async updateVersion(
     appId: string,
     versionId: string,
-    updates: Partial<Version>,
+    updates: UpdateVersionOptions,
   ): Promise<CommandResult> {
     return this.runMessageCommand(
       async () => {
-        const context = this.createContext({ appId, ...updates }, [versionId]);
+        const context = this.createContext({
+          appId,
+          versionId,
+          ...updates,
+          'no-interactive': true,
+          rollout:
+            updates.rollout === undefined ? undefined : String(updates.rollout),
+        });
 
         const { versionCommands } = await import('./versions');
         await versionCommands.update(context);

@@ -156,6 +156,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   usageUploadIpa: 'Usage: cresc uploadIpa <ipa file>',
   versionBind:
     'Bound hot update {{version}} to native version {{nativeVersion}} (id: {{id}})',
+  versionIdRequired: 'Please provide versionId in non-interactive mode.',
   welcomeMessage: 'Welcome to Cresc hot update service, {{name}}.',
   versionNameQuestion: 'Enter OTA update name:',
   versionDescriptionQuestion: 'Enter OTA update description:',

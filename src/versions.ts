@@ -5,12 +5,14 @@ import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import type { Package, Platform, Version } from './types';
-import { question } from './utils';
+import { isNonInteractive, question } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { t } from './utils/i18n';
+import { getBooleanOption } from './utils/options';
 
 interface VersionCommandOptions {
+  [key: string]: unknown;
   appId?: string;
   name?: string;
   description?: string;
@@ -22,10 +24,11 @@ interface VersionCommandOptions {
   minPackageVersion?: string;
   maxPackageVersion?: string;
   packageVersionRange?: string;
-  rollout?: string;
+  rollout?: number | string;
   dryRun?: boolean;
   versionDeps?: Record<string, string>;
   warnDepsChanges?: boolean;
+  'no-interactive'?: boolean | string;
 }
 
 type Deps = Record<string, string>;
@@ -280,8 +283,21 @@ async function printDepsChangesForPublish({
   }
 }
 
+const versionPageLimit = 10;
+
+export async function fetchVersions(
+  appId: string,
+  offset = 0,
+  limit = versionPageLimit,
+): Promise<Version[]> {
+  const { data } = await get(
+    `/app/${appId}/version/list?offset=${offset}&limit=${limit}`,
+  );
+  return Array.isArray(data) ? data : [];
+}
+
 async function showVersion(appId: string, offset: number) {
-  const { data } = await get(`/app/${appId}/version/list`);
+  const data = await fetchVersions(appId, offset, versionPageLimit);
   console.log(t('offset', { offset }));
   for (const version of data) {
     const pkgCount = version.packages?.length || 0;
@@ -289,8 +305,8 @@ async function showVersion(appId: string, offset: number) {
     if (pkgCount === 0) {
       packageInfo = 'no package';
     } else {
-      packageInfo = version.packages
-        ?.slice(0, 3)
+      packageInfo = (version.packages ?? [])
+        .slice(0, 3)
         .map((pkg: Package) => pkg.name)
         .join(', ');
       if (pkgCount > 3) {
@@ -308,10 +324,13 @@ async function showVersion(appId: string, offset: number) {
   return data;
 }
 
-async function listVersions(appId: string) {
+async function listVersions(appId: string, interactive = true) {
   let offset = 0;
   while (true) {
-    await showVersion(appId, offset);
+    const data = await showVersion(appId, offset);
+    if (!interactive) {
+      return data;
+    }
     const cmd = await question('page Up/page Down/Begin/Quit(U/D/B/Q)');
     switch (cmd.toLowerCase()) {
       case 'u':
@@ -324,7 +343,9 @@ async function listVersions(appId: string) {
         offset = 0;
         break;
       case 'q':
-        return;
+        return data;
+      case '':
+        return data;
     }
   }
 }
@@ -333,6 +354,9 @@ async function chooseVersion(appId: string) {
   let offset = 0;
   while (true) {
     const data = await showVersion(appId, offset);
+    if (isNonInteractive()) {
+      throw new Error(t('versionIdRequired'));
+    }
     const cmd = await question(
       'Enter versionId or page Up/page Down/Begin(U/D/B)',
     );
@@ -367,7 +391,7 @@ export const bindVersionToPackages = async ({
   dryRun,
 }: {
   appId: string;
-  versionId: string;
+  versionId: string | null;
   pkgs: Package[];
   rollout?: number;
   dryRun?: boolean;
@@ -419,17 +443,24 @@ export const versionCommands = {
 
     const platform = await getPlatform(options.platform);
     const { appId } = await getSelectedApp(platform);
+    const nonInteractive =
+      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
 
     const { hash } = await uploadFile(fn);
 
     const versionName =
-      name || (await question(t('versionNameQuestion'))) || t('unnamed');
+      name ||
+      (nonInteractive ? '' : await question(t('versionNameQuestion'))) ||
+      t('unnamed');
     const { id } = await post(`/app/${appId}/version/create`, {
       name: versionName,
       hash,
       description:
-        description || (await question(t('versionDescriptionQuestion'))),
-      metaInfo: metaInfo || (await question(t('versionMetaInfoQuestion'))),
+        description ??
+        (nonInteractive ? '' : await question(t('versionDescriptionQuestion'))),
+      metaInfo:
+        metaInfo ??
+        (nonInteractive ? '' : await question(t('versionMetaInfoQuestion'))),
       deps: depVersions,
       commit: await getCommitInfo(),
     });
@@ -467,7 +498,7 @@ export const versionCommands = {
           warnDepsChanges: true,
         },
       });
-    } else {
+    } else if (!nonInteractive) {
       const q = await question(t('updateNativePackageQuestion'));
       if (q.toLowerCase() === 'y') {
         await versionCommands.update({
@@ -483,17 +514,37 @@ export const versionCommands = {
     return versionName;
   },
   versions: async ({ options }: { options: VersionCommandOptions }) => {
-    const platform = await getPlatform(options.platform);
-    const { appId } = await getSelectedApp(platform);
-    await listVersions(String(appId));
+    let appId = options.appId;
+    if (!appId) {
+      const platform = await getPlatform(options.platform);
+      appId = (await getSelectedApp(platform)).appId;
+    }
+    const interactive = !(
+      getBooleanOption(options, 'no-interactive', false) || isNonInteractive()
+    );
+    await listVersions(String(appId), interactive);
   },
   update: async ({ options }: { options: VersionCommandOptions }) => {
-    const platform = await getPlatform(options.platform);
-    const appId = options.appId || (await getSelectedApp(platform)).appId;
-    let versionId =
-      options.versionId || (await chooseVersion(String(appId))).id;
+    const nonInteractive =
+      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
+    let appId = options.appId;
+    let platform = options.platform;
+    if (!appId) {
+      platform = await getPlatform(platform);
+      appId = (await getSelectedApp(platform)).appId;
+    } else if (platform) {
+      platform = await getPlatform(platform);
+    }
+
+    let versionId: string | null | undefined = options.versionId;
+    if (!versionId) {
+      if (nonInteractive) {
+        throw new Error(t('versionIdRequired'));
+      }
+      versionId = (await chooseVersion(String(appId))).id;
+    }
     if (versionId === 'null') {
-      versionId = undefined;
+      versionId = null;
     }
 
     let pkgId = options.packageId;
@@ -504,7 +555,7 @@ export const versionCommands = {
     let rollout: number | undefined;
 
     if (options.rollout !== undefined) {
-      rollout = Number.parseInt(options.rollout, 10);
+      rollout = Number.parseInt(String(options.rollout), 10);
       if (Number.isNaN(rollout) || rollout < 1 || rollout > 100) {
         throw new Error(t('rolloutRangeError'));
       }
@@ -518,25 +569,26 @@ export const versionCommands = {
 
     let pkgsToBind: Package[] = [];
 
-    if (minPkgVersion) {
-      minPkgVersion = String(minPkgVersion).trim();
-      pkgsToBind = allPkgs.filter((pkg: Package) =>
-        satisfies(pkg.name, `>=${minPkgVersion}`),
-      );
+    if (minPkgVersion || maxPkgVersion) {
+      minPkgVersion = minPkgVersion ? String(minPkgVersion).trim() : undefined;
+      maxPkgVersion = maxPkgVersion ? String(maxPkgVersion).trim() : undefined;
+      pkgsToBind = allPkgs.filter((pkg: Package) => {
+        if (minPkgVersion && !satisfies(pkg.name, `>=${minPkgVersion}`)) {
+          return false;
+        }
+        if (maxPkgVersion && !satisfies(pkg.name, `<=${maxPkgVersion}`)) {
+          return false;
+        }
+        return true;
+      });
       if (pkgsToBind.length === 0) {
-        throw new Error(
-          t('nativeVersionNotFoundGte', { version: minPkgVersion }),
-        );
-      }
-    } else if (maxPkgVersion) {
-      maxPkgVersion = String(maxPkgVersion).trim();
-      pkgsToBind = allPkgs.filter((pkg: Package) =>
-        satisfies(pkg.name, `<=${maxPkgVersion}`),
-      );
-      if (pkgsToBind.length === 0) {
-        throw new Error(
-          t('nativeVersionNotFoundLte', { version: maxPkgVersion }),
-        );
+        const range = [
+          minPkgVersion && `>=${minPkgVersion}`,
+          maxPkgVersion && `<=${maxPkgVersion}`,
+        ]
+          .filter(Boolean)
+          .join(' ');
+        throw new Error(t('nativeVersionNotFoundMatch', { version: range }));
       }
     } else if (pkgVersion) {
       pkgVersion = pkgVersion.trim();
@@ -560,6 +612,9 @@ export const versionCommands = {
       }
     } else {
       if (!pkgId) {
+        if (nonInteractive) {
+          throw new Error(t('packageIdRequired'));
+        }
         pkgId = (await choosePackage(String(appId))).id;
       }
 
@@ -576,7 +631,7 @@ export const versionCommands = {
       }
     }
 
-    if (options.warnDepsChanges) {
+    if (options.warnDepsChanges && versionId) {
       await printDepsChangesForPublish({
         appId: String(appId),
         versionId: String(versionId),
@@ -598,10 +653,24 @@ export const versionCommands = {
   }: {
     options: VersionCommandOptions;
   }) => {
-    const platform = await getPlatform(options.platform);
-    const { appId } = await getSelectedApp(platform);
-    const versionId =
-      options.versionId || (await chooseVersion(String(appId))).id;
+    const nonInteractive =
+      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
+    let appId = options.appId;
+    let platform = options.platform;
+    if (!appId) {
+      platform = await getPlatform(platform);
+      appId = (await getSelectedApp(platform)).appId;
+    } else if (platform) {
+      await getPlatform(platform);
+    }
+
+    let versionId = options.versionId;
+    if (!versionId) {
+      if (nonInteractive) {
+        throw new Error(t('versionIdRequired'));
+      }
+      versionId = (await chooseVersion(String(appId))).id;
+    }
 
     const updateParams: Record<string, string> = {};
     if (options.name) updateParams.name = options.name;
@@ -612,6 +681,8 @@ export const versionCommands = {
     console.log(t('operationSuccess'));
   },
   deleteVersion: async ({ options }: { options: VersionCommandOptions }) => {
+    const nonInteractive =
+      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
     let appId = options.appId;
     if (!appId) {
       const platform = await getPlatform(options.platform);
@@ -620,6 +691,9 @@ export const versionCommands = {
 
     let versionId = options.versionId;
     if (!versionId) {
+      if (nonInteractive) {
+        throw new Error(t('versionIdRequired'));
+      }
       versionId = (await chooseVersion(String(appId))).id;
     }
 

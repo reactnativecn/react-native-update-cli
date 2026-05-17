@@ -1,6 +1,6 @@
 declare global {
-  var NO_INTERACTIVE: boolean;
-  var USE_ACC_OSS: boolean;
+  var NO_INTERACTIVE: boolean | undefined;
+  var USE_ACC_OSS: boolean | undefined;
 }
 
 export interface Session {
@@ -59,6 +59,8 @@ export interface BundleOptions {
 }
 
 export interface PublishOptions {
+  filePath?: string;
+  platform?: Platform;
   name?: string;
   description?: string;
   metaInfo?: string;
@@ -67,7 +69,7 @@ export interface PublishOptions {
   minPackageVersion?: string;
   maxPackageVersion?: string;
   packageVersionRange?: string;
-  rollout?: number;
+  rollout?: number | string;
   dryRun?: boolean;
 }
 
@@ -75,7 +77,19 @@ export interface UploadOptions {
   platform?: Platform;
   filePath: string;
   appId?: string;
+  appKey?: string;
   version?: string;
+}
+
+export interface UpdateVersionOptions {
+  platform?: Platform;
+  packageId?: string;
+  packageVersion?: string;
+  minPackageVersion?: string;
+  maxPackageVersion?: string;
+  packageVersionRange?: string;
+  rollout?: number | string;
+  dryRun?: boolean;
 }
 
 export interface CLIProvider {
@@ -93,7 +107,7 @@ export interface CLIProvider {
   updateVersion: (
     appId: string,
     versionId: string,
-    updates: Partial<Version>,
+    updates: UpdateVersionOptions,
   ) => Promise<CommandResult>;
 
   getPlatform: (platform?: Platform) => Promise<Platform>;

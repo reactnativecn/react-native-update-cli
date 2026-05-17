@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test';
-import { translateOptions } from '../src/utils';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { isNonInteractive, translateOptions } from '../src/utils';
 import {
   MANIFEST_COMPRESSION_THRESHOLD_BYTES,
   zipOptionsForManifestEntry,
@@ -68,6 +68,29 @@ describe('translateOptions', () => {
     };
     const result = translateOptions(options);
     expect(result.output).toBe('v42.ppk');
+  });
+});
+
+describe('isNonInteractive', () => {
+  const originalNoInteractive = process.env.NO_INTERACTIVE;
+
+  afterEach(() => {
+    if (originalNoInteractive === undefined) {
+      delete process.env.NO_INTERACTIVE;
+    } else {
+      process.env.NO_INTERACTIVE = originalNoInteractive;
+    }
+    global.NO_INTERACTIVE = undefined;
+  });
+
+  test('uses the global CLI flag', () => {
+    global.NO_INTERACTIVE = true;
+    expect(isNonInteractive()).toBe(true);
+  });
+
+  test('uses the NO_INTERACTIVE environment variable', () => {
+    process.env.NO_INTERACTIVE = 'true';
+    expect(isNonInteractive()).toBe(true);
   });
 });
 

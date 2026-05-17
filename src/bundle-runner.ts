@@ -44,6 +44,12 @@ const dependencyFields = [
   'optionalDependencies',
 ] as const;
 
+type SyncProcessResult = {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  error?: Error;
+};
+
 type ResolvedExpoCli = {
   cliPath: string;
   usingExpo: boolean;
@@ -352,6 +358,24 @@ function dirnameOfPackage(
   );
 }
 
+function assertSuccessfulSyncProcess(
+  result: SyncProcessResult,
+  command: string,
+) {
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} failed with ${
+        result.status === null
+          ? `signal ${result.signal}`
+          : `exit code ${result.status}`
+      }`,
+    );
+  }
+}
+
 export function resolveHermesCommand(projectRoot = process.cwd()): string {
   const osBin = getHermesOSBin();
   if (!osBin) {
@@ -459,9 +483,12 @@ async function compileHermesByteCode(
   console.log(
     t('runningHermesc', { command: hermesCommand, args: args.join(' ') }),
   );
-  spawnSync(hermesCommand, args, {
-    stdio: 'ignore',
-  });
+  assertSuccessfulSyncProcess(
+    spawnSync(hermesCommand, args, {
+      stdio: 'ignore',
+    }),
+    hermesCommand,
+  );
   if (sourcemapOutput) {
     const composerPath =
       'node_modules/react-native/scripts/compose-source-maps.js';
@@ -469,17 +496,20 @@ async function compileHermesByteCode(
       return;
     }
     console.log(t('composingSourceMap'));
-    spawnJavaScriptSync(
-      [
-        composerPath,
-        path.join(outputFolder, `${bundleName}.txt.map`),
-        path.join(outputFolder, `${bundleName}.map`),
-        '-o',
-        sourcemapOutput,
-      ],
-      {
-        stdio: 'ignore',
-      },
+    assertSuccessfulSyncProcess(
+      spawnJavaScriptSync(
+        [
+          composerPath,
+          path.join(outputFolder, `${bundleName}.txt.map`),
+          path.join(outputFolder, `${bundleName}.map`),
+          '-o',
+          sourcemapOutput,
+        ],
+        {
+          stdio: 'ignore',
+        },
+      ),
+      composerPath,
     );
   }
   if (shouldCleanSourcemap) {
@@ -510,15 +540,18 @@ export async function copyDebugidForSentry(
       return;
     }
     console.log(t('copyingDebugId'));
-    spawnJavaScriptSync(
-      [
-        copyDebugidPath,
-        path.join(outputFolder, `${bundleName}.txt.map`),
-        path.join(outputFolder, `${bundleName}.map`),
-      ],
-      {
-        stdio: 'ignore',
-      },
+    assertSuccessfulSyncProcess(
+      spawnJavaScriptSync(
+        [
+          copyDebugidPath,
+          path.join(outputFolder, `${bundleName}.txt.map`),
+          path.join(outputFolder, `${bundleName}.map`),
+        ],
+        {
+          stdio: 'ignore',
+        },
+      ),
+      copyDebugidPath,
     );
   }
   fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
@@ -548,29 +581,35 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  spawnJavaScriptSync(
-    [sentryCliPath, 'releases', 'set-commits', version, '--auto'],
-    {
-      stdio: 'inherit',
-    },
+  assertSuccessfulSyncProcess(
+    spawnJavaScriptSync(
+      [sentryCliPath, 'releases', 'set-commits', version, '--auto'],
+      {
+        stdio: 'inherit',
+      },
+    ),
+    sentryCliPath,
   );
   console.log(t('sentryReleaseCreated', { version }));
 
   console.log(t('uploadingSourcemap'));
-  spawnJavaScriptSync(
-    [
-      sentryCliPath,
-      'releases',
-      'files',
-      version,
-      'upload-sourcemaps',
-      '--strip-prefix',
-      path.join(process.cwd(), outputFolder),
-      path.join(outputFolder, bundleName),
-      path.join(outputFolder, `${bundleName}.map`),
-    ],
-    {
-      stdio: 'inherit',
-    },
+  assertSuccessfulSyncProcess(
+    spawnJavaScriptSync(
+      [
+        sentryCliPath,
+        'releases',
+        'files',
+        version,
+        'upload-sourcemaps',
+        '--strip-prefix',
+        path.join(process.cwd(), outputFolder),
+        path.join(outputFolder, bundleName),
+        path.join(outputFolder, `${bundleName}.map`),
+      ],
+      {
+        stdio: 'inherit',
+      },
+    ),
+    sentryCliPath,
   );
 }

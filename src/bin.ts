@@ -19,6 +19,10 @@ interface CliArgv {
   options: Record<string, any>;
 }
 
+function isTruthyEnv(value: string | undefined): boolean {
+  return value === '1' || value?.toLowerCase() === 'true';
+}
+
 function printUsage(exitCode = 1) {
   console.log('React Native Update CLI');
   console.log('');
@@ -57,8 +61,11 @@ async function run() {
   }
 
   const argv: CliArgv = require('cli-arguments').parse(require('../cli.json'));
-  global.NO_INTERACTIVE = argv.options['no-interactive'];
-  global.USE_ACC_OSS = argv.options.acc;
+  global.NO_INTERACTIVE =
+    Boolean(argv.options['no-interactive']) ||
+    isTruthyEnv(process.env.NO_INTERACTIVE);
+  global.USE_ACC_OSS =
+    Boolean(argv.options.acc) || isTruthyEnv(process.env.USE_ACC_OSS);
 
   try {
     await loadSession();

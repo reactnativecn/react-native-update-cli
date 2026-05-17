@@ -182,6 +182,9 @@
         "platform": {
           "hasValue": true
         },
+        "appId": {
+          "hasValue": true
+        },
         "versionId": {
           "hasValue": true
         },
@@ -341,6 +344,9 @@
   },
   "globalOptions": {
     "no-interactive": {
+      "default": false
+    },
+    "acc": {
       "default": false
     }
   }

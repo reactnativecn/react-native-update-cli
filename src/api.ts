@@ -77,14 +77,22 @@ export const closeSession = () => {
   session = undefined;
 };
 
-function createRequestError(error: unknown, requestUrl: string) {
+function createRequestError(
+  error: unknown,
+  requestUrl: string,
+  status?: number,
+) {
   const message =
     typeof error === 'string'
       ? error
       : error instanceof Error
         ? error.message
         : String(error);
-  return new Error(`${message}\nURL: ${requestUrl}`);
+  const requestError = new Error(`${message}\nURL: ${requestUrl}`) as Error & {
+    status?: number;
+  };
+  requestError.status = status;
+  return requestError;
 }
 
 async function query(url: string, options: RuntimeRequestInit) {
@@ -111,9 +119,9 @@ async function query(url: string, options: RuntimeRequestInit) {
   if (resp.status !== 200) {
     const message = json?.message || resp.statusText || `HTTP ${resp.status}`;
     if (resp.status === 401) {
-      throw createRequestError(t('loginExpired'), fullUrl);
+      throw createRequestError(t('loginExpired'), fullUrl, resp.status);
     }
-    throw createRequestError(message, fullUrl);
+    throw createRequestError(message, fullUrl, resp.status);
   }
   return json;
 }

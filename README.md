@@ -46,6 +46,8 @@ if (!bundleResult.success) {
 }
 
 const publishResult = await provider.publish({
+  filePath: '.pushy/output/ios.ppk',
+  platform: 'ios',
   name: 'v1.2.3',
   description: 'Bug fixes and improvements',
   rollout: 100,
@@ -124,6 +126,8 @@ interface CLIProvider {
 ```
 
 ## Environment Variables
+
+`publish` requires a generated `.ppk` path via `filePath`. Provider list methods return data in `CommandResult.data` and do not enter interactive paging.
 
 ```bash
 export PUSHY_REGISTRY=https://your-api-endpoint.com

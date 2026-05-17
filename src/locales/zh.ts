@@ -145,6 +145,7 @@ export default {
   usageUploadIpa: '使用方法: pushy uploadIpa ipa后缀文件',
   versionBind:
     '已将热更包 {{version}} 绑定到原生版本 {{nativeVersion}} (id: {{id}})',
+  versionIdRequired: '非交互模式下请提供 versionId。',
   welcomeMessage: '欢迎使用 pushy 热更新服务，{{name}}。',
   versionNameQuestion: '输入版本名称:',
   versionDescriptionQuestion: '输入版本描述:',

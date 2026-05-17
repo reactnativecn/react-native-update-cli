@@ -18,6 +18,9 @@ import { getCommitInfo } from './utils/git';
 import { t } from './utils/i18n';
 
 type PackageCommandOptions = Record<string, unknown> & {
+  appId?: string;
+  appKey?: string;
+  platform?: Platform;
   version?: string;
   includeAllSplits?: boolean | string;
   splits?: string;
@@ -96,13 +99,19 @@ async function uploadNativePackage(
   const info = await config.getInfo(filePath);
   const { versionName: extractedVersionName, buildTime } = info;
   const { appId: appIdInPkg, appKey: appKeyInPkg } = info;
-  const { appId, appKey } = await getSelectedApp(config.platform);
+  const selectedApp = options.appId
+    ? {
+        appId: String(options.appId),
+        appKey: typeof options.appKey === 'string' ? options.appKey : undefined,
+      }
+    : await getSelectedApp(config.platform);
+  const { appId, appKey } = selectedApp;
 
   if (appIdInPkg && String(appIdInPkg) !== appId) {
     throw new Error(t(config.appIdMismatchKey, { appIdInPkg, appId }));
   }
 
-  if (appKeyInPkg && appKeyInPkg !== appKey) {
+  if (appKeyInPkg && appKey && appKeyInPkg !== appKey) {
     throw new Error(t(config.appKeyMismatchKey, { appKeyInPkg, appKey }));
   }
 
