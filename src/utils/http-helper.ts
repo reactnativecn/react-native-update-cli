@@ -60,7 +60,7 @@ export const testUrls = async (urls?: string[]) => {
   let ret: string | null = null;
   try {
     ret = await promiseAny(urls.map(ping));
-  } catch (e) {
+  } catch (_e) {
     // fallback to urls[0]
   }
   if (ret) {

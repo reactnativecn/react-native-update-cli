@@ -1,5 +1,5 @@
 
-import { describe, expect, test, beforeEach, afterEach, mock } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 
 const runtimeFetchMock = mock(() => Promise.resolve({ status: 200 }));
 mock.module('../src/utils/runtime', () => ({
@@ -62,17 +62,24 @@ describe('testUrls edge cases', () => {
       return Promise.reject(new Error('fail'));
     });
 
-    const result = await testUrls(['http://fail.local', 'http://success.local']);
+    const result = await testUrls([
+      'http://fail.local',
+      'http://success.local',
+    ]);
     expect(result).toBe('http://success.local');
   });
 
   test('Fastest Response: returns the URL that resolves first', async () => {
     runtimeFetchMock.mockImplementation((url: string) => {
       if (url === 'http://fast.local') {
-        return new Promise((resolve) => setTimeout(() => resolve({ status: 200 }), 10));
+        return new Promise((resolve) =>
+        setTimeout(() => resolve({ status: 200 }), 10),
+      );
       }
       if (url === 'http://slow.local') {
-        return new Promise((resolve) => setTimeout(() => resolve({ status: 200 }), 50));
+        return new Promise((resolve) =>
+        setTimeout(() => resolve({ status: 200 }), 50),
+      );
       }
       return Promise.reject(new Error('fail'));
     });
