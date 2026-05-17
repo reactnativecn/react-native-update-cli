@@ -104,7 +104,7 @@ export async function question(query: string, password?: boolean) {
 export function translateOptions<T extends Record<string, unknown>>(
   options: T,
   map?: Record<string, string>,
-): T {
+): T & Record<string, unknown> {
   if (!map) {
     // Existing logic for template replacement if no map is provided
     const ret: Record<string, unknown> = {};
