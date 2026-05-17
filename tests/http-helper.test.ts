@@ -1,4 +1,3 @@
-
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 
 const runtimeFetchMock = mock(() => Promise.resolve({ status: 200 }));
@@ -73,13 +72,13 @@ describe('testUrls edge cases', () => {
     runtimeFetchMock.mockImplementation((url: string) => {
       if (url === 'http://fast.local') {
         return new Promise((resolve) =>
-        setTimeout(() => resolve({ status: 200 }), 10),
-      );
+          setTimeout(() => resolve({ status: 200 }), 10),
+        );
       }
       if (url === 'http://slow.local') {
         return new Promise((resolve) =>
-        setTimeout(() => resolve({ status: 200 }), 50),
-      );
+          setTimeout(() => resolve({ status: 200 }), 50),
+        );
       }
       return Promise.reject(new Error('fail'));
     });
