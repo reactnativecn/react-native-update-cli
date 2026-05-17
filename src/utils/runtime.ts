@@ -98,14 +98,11 @@ export async function measureTcpLatency(
   } = {},
 ): Promise<number> {
   const { host, port } = resolveTcpTarget(input);
-  const latencies: number[] = [];
-
-  for (let i = 0; i < attempts; i++) {
-    const latency = await measureTcpConnectOnce(host, port, timeout);
-    if (Number.isFinite(latency)) {
-      latencies.push(latency);
-    }
-  }
+  const promises = Array.from({ length: attempts }, () =>
+    measureTcpConnectOnce(host, port, timeout),
+  );
+  const results = await Promise.all(promises);
+  const latencies = results.filter(Number.isFinite);
 
   if (latencies.length === 0) {
     return Number.POSITIVE_INFINITY;
