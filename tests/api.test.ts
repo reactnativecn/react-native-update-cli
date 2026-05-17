@@ -67,6 +67,18 @@ describe('api.ts session management', () => {
     await expect(loadSession()).rejects.toThrow(SyntaxError);
   });
 
+
+  test('loadSession throws when reading credential file fails', async () => {
+    existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
+    readFileSyncSpy = spyOn(fs, 'readFileSync').mockImplementation(() => {
+      throw new Error('Read error');
+    });
+
+    await expect(loadSession()).rejects.toThrow('Read error');
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to parse file')
+    );
+  });
   test('replaceSession sets session', () => {
     replaceSession({ token: 'new-token' });
     expect(getSession()?.token).toBe('new-token');
