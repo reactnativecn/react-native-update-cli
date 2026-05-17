@@ -57,7 +57,12 @@ export const testUrls = async (urls?: string[]) => {
   if (!urls?.length) {
     return null;
   }
-  const ret = await promiseAny(urls.map(ping));
+  let ret: string | null = null;
+  try {
+    ret = await promiseAny(urls.map(ping));
+  } catch (e) {
+    // fallback to urls[0]
+  }
   if (ret) {
     return ret;
   }
