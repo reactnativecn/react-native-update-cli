@@ -18,7 +18,10 @@ describe('constants', () => {
     expect(mod.updateJson).toBe('cresc.config.json');
     expect(mod.tempDir).toBe('.cresc.temp');
     expect(mod.pricingPageUrl).toBe('https://cresc.dev/pricing');
-    expect(mod.defaultEndpoints).toEqual(['https://api.cresc.dev', 'https://api.cresc.app']);
+    expect(mod.defaultEndpoints).toEqual([
+      'https://api.cresc.dev',
+      'https://api.cresc.app',
+    ]);
   });
 
   it('should initialize correctly when script is pushy', async () => {
@@ -28,8 +31,13 @@ describe('constants', () => {
     expect(mod.credentialFile).toBe('.update');
     expect(mod.updateJson).toBe('update.json');
     expect(mod.tempDir).toBe('.pushy');
-    expect(mod.pricingPageUrl).toBe('https://pushy.reactnative.cn/pricing.html');
-    expect(mod.defaultEndpoints).toEqual(['https://update.reactnative.cn/api', 'https://update.react-native.cn/api']);
+    expect(mod.pricingPageUrl).toBe(
+      'https://pushy.reactnative.cn/pricing.html',
+    );
+    expect(mod.defaultEndpoints).toEqual([
+      'https://update.reactnative.cn/api',
+      'https://update.react-native.cn/api',
+    ]);
   });
 
   it('should identify PPK bundle file names correctly', async () => {
