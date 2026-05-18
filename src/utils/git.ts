@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import git from 'isomorphic-git';
 import path from 'path';
@@ -8,6 +9,14 @@ export interface CommitInfo {
   author: string;
   timestamp: string;
   origin: string;
+}
+
+export function getCurrentCommit() {
+  const result = spawnSync('git', ['rev-parse', 'HEAD']);
+  if (result.status !== 0) {
+    throw new Error('Not a git repository');
+  }
+  return result.stdout.toString().trim();
 }
 
 function findGitRoot(dir = process.cwd()) {
