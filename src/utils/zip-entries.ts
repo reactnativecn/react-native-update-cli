@@ -143,11 +143,9 @@ export async function enumZipEntries(
               !entry.fileName.endsWith('/') &&
               entry.fileName.toLowerCase().endsWith('.hap')
             ) {
-              const tempDir = path.join(
-                os.tmpdir(),
-                `nested_zip_${Date.now()}`,
+              const tempDir = await fs.mkdtemp(
+                path.join(os.tmpdir(), 'nested_zip_'),
               );
-              await fs.ensureDir(tempDir);
               const tempZipPath = path.join(tempDir, 'temp.zip');
 
               await new Promise((res, rej) => {
