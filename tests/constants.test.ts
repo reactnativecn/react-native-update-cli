@@ -3,10 +3,13 @@ import { describe, expect, it } from 'bun:test';
 const loadConstantsWithArgv = async (argv1: string) => {
   const originalArgv = process.argv;
   process.argv = ['node', argv1];
-  const url = `../src/utils/constants.ts?t=${Date.now()}_${Math.random()}`;
-  const mod = await import(url);
-  process.argv = originalArgv;
-  return mod;
+  try {
+    const url = `../src/utils/constants.ts?t=${Date.now()}_${Math.random()}`;
+    const mod = await import(url);
+    return mod;
+  } finally {
+    process.argv = originalArgv;
+  }
 };
 
 describe('constants', () => {

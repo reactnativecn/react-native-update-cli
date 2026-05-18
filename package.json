@@ -32,8 +32,8 @@
     "cli.json"
   ],
   "scripts": {
-    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && bun run typecheck:build && chmod +x lib/bin.js",
-    "prepublishOnly": "bun run build",
+    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && npm run typecheck:build && chmod +x lib/bin.js",
+    "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "typecheck:build": "tsc -p tsconfig.build.json",
     "lint": "bun run typecheck && biome check .",
