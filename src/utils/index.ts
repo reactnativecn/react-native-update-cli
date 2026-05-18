@@ -103,27 +103,40 @@ export async function question(query: string, password?: boolean) {
 
 export function translateOptions<T extends Record<string, unknown>>(
   options: T,
+  map?: Record<string, string>,
 ): T & Record<string, unknown> {
-  const ret: Record<string, unknown> = {};
-  for (const key in options) {
-    const value = options[key];
-    if (typeof value === 'string') {
-      ret[key] = value.replace(/\$\{(\w+)\}/g, (placeholder, name) => {
-        const replacement = options[name] ?? process.env[name];
-        if (
-          typeof replacement === 'string' ||
-          typeof replacement === 'number' ||
-          typeof replacement === 'boolean'
-        ) {
-          return String(replacement);
-        }
-        return placeholder;
-      });
-    } else {
-      ret[key] = value;
+  if (!map) {
+    // Existing logic for template replacement if no map is provided
+    const ret: Record<string, unknown> = {};
+    for (const key in options) {
+      const value = options[key];
+      if (typeof value === 'string') {
+        ret[key] = value.replace(/\$\{(\w+)\}/g, (placeholder, name) => {
+          const replacement = options[name] ?? process.env[name];
+          if (
+            typeof replacement === 'string' ||
+            typeof replacement === 'number' ||
+            typeof replacement === 'boolean'
+          ) {
+            return String(replacement);
+          }
+          return placeholder;
+        });
+      } else {
+        ret[key] = value;
+      }
+    }
+    return ret as T & Record<string, unknown>;
+  }
+
+  const result: Record<string, unknown> = { ...options };
+  for (const [key, value] of Object.entries(map)) {
+    if (result[key] !== undefined) {
+      result[value] = result[key];
+      delete result[key];
     }
   }
-  return ret as T & Record<string, unknown>;
+  return result as T;
 }
 
 export async function getApkInfo(fn: string) {

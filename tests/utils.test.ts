@@ -69,6 +69,97 @@ describe('translateOptions', () => {
     const result = translateOptions(options);
     expect(result.output).toBe('v42.ppk');
   });
+
+  test('handles boolean values in template', () => {
+    const options = {
+      flag: false,
+      output: `is-false-${templateVar('flag')}.ppk`,
+    };
+    const result = translateOptions(options);
+    expect(result.output).toBe('is-false-false.ppk');
+  });
+
+  test('handles zero numeric values in template', () => {
+    const options = {
+      count: 0,
+      output: `v${templateVar('count')}.ppk`,
+    };
+    const result = translateOptions(options);
+    expect(result.output).toBe('v0.ppk');
+  });
+
+  test('handles empty string values in template', () => {
+    const options = {
+      empty: '',
+      output: `pre-${templateVar('empty')}-post.ppk`,
+    };
+    const result = translateOptions(options);
+    expect(result.output).toBe('pre--post.ppk');
+  });
+
+  test('ignores object values in template and leaves placeholder', () => {
+    const options = {
+      obj: { key: 'value' },
+      output: `obj-${templateVar('obj')}.ppk`,
+    };
+    const result = translateOptions(options);
+    expect(result.output).toBe(`obj-${templateVar('obj')}.ppk`);
+  });
+
+  test('ignores array values in template and leaves placeholder', () => {
+    const options = {
+      arr: [1, 2, 3],
+      output: `arr-${templateVar('arr')}.ppk`,
+    };
+    const result = translateOptions(options);
+    expect(result.output).toBe(`arr-${templateVar('arr')}.ppk`);
+  });
+
+  test('replaces multiple identical placeholders', () => {
+    const options = {
+      val: 'test',
+      output: `${templateVar('val')}-${templateVar('val')}.ppk`,
+    };
+    const result = translateOptions(options);
+    expect(result.output).toBe('test-test.ppk');
+  });
+
+  describe('translateOptions with map', () => {
+    test('maps keys according to the provided map', () => {
+      const options = { oldKey: 'value', keepKey: 'keep' };
+      const map = { oldKey: 'newKey' };
+      const result = translateOptions(options, map);
+      expect(result).toEqual({ newKey: 'value', keepKey: 'keep' });
+    });
+
+    test('ignores missing keys in options', () => {
+      const options = { existingKey: 'value' };
+      const map = { missingKey: 'newKey' };
+      const result = translateOptions(options, map);
+      expect(result).toEqual({ existingKey: 'value' });
+    });
+
+    test('maps multiple keys', () => {
+      const options = { a: 1, b: 2, c: 3 };
+      const map = { a: 'alpha', b: 'beta' };
+      const result = translateOptions(options, map);
+      expect(result).toEqual({ alpha: 1, beta: 2, c: 3 });
+    });
+
+    test('handles mapping to existing keys by overwriting', () => {
+      const options = { a: 1, b: 2 };
+      const map = { a: 'b' };
+      const result = translateOptions(options, map);
+      expect(result).toEqual({ b: 1 });
+    });
+
+    test('handles undefined values', () => {
+      const options = { a: undefined, b: null };
+      const map = { a: 'newA', b: 'newB' };
+      const result = translateOptions(options, map);
+      expect(result).toEqual({ a: undefined, newB: null });
+    });
+  });
 });
 
 describe('isNonInteractive', () => {
