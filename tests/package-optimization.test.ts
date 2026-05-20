@@ -24,7 +24,6 @@ mock.module('chalk', () => ({
 mock.module('compare-versions', () => ({
   satisfies: () => true,
 }));
-mock.module('isomorphic-git', () => ({}));
 mock.module('registry-auth-token', () => ({}));
 mock.module(
   'registry-auth-token/registry-url',

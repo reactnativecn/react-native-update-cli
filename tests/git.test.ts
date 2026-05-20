@@ -1,111 +1,71 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { execFileSync } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { getCommitInfo, getCurrentCommit } from '../src/utils/git';
 
-// Define the mock functions so we can manipulate them in tests
-const spawnSyncMock = mock(() => ({
-  status: 0,
-  stdout: Buffer.from('mock-hash-123\n'),
-}));
+const originalCwd = process.cwd();
 
-mock.module('child_process', () => ({
-  spawnSync: spawnSyncMock,
-}));
-
-const listRemotesMock = mock(async () => [
-  { remote: 'origin', url: 'https://github.com/test/repo.git' },
-]);
-const logMock = mock(async () => [
-  {
-    oid: 'mock-commit-hash',
-    commit: {
-      message: 'mock commit message',
-      author: { name: 'Test Author' },
-      committer: { name: 'Test Committer', timestamp: 1625097600 },
+function runGit(args: string[], cwd: string) {
+  execFileSync('git', args, {
+    cwd,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 'Test Author',
+      GIT_AUTHOR_EMAIL: 'author@example.com',
+      GIT_COMMITTER_NAME: 'Test Committer',
+      GIT_COMMITTER_EMAIL: 'committer@example.com',
     },
-  },
-]);
+    stdio: 'ignore',
+  });
+}
 
-mock.module('isomorphic-git', () => ({
-  default: {
-    listRemotes: listRemotesMock,
-    log: logMock,
-  },
-}));
+describe('utils/git', () => {
+  let tempRoot = '';
 
-describe('git utils', async () => {
-  const { getCommitInfo, getCurrentCommit } = await import('../src/utils/git');
-
-  describe('getCurrentCommit', () => {
-    it('should return the commit hash when git command succeeds', () => {
-      spawnSyncMock.mockImplementationOnce(() => ({
-        status: 0,
-        stdout: Buffer.from('abcdef1234567890\n'),
-      }));
-
-      const commit = getCurrentCommit();
-      expect(commit).toBe('abcdef1234567890');
-      expect(spawnSyncMock).toHaveBeenCalledWith('git', ['rev-parse', 'HEAD']);
-    });
-
-    it('should throw an error when git command fails', () => {
-      spawnSyncMock.mockImplementationOnce(() => ({
-        status: 128,
-        stdout: Buffer.from(''),
-        stderr: Buffer.from(
-          'fatal: not a git repository (or any of the parent directories): .git\n',
-        ),
-      }));
-
-      expect(() => getCurrentCommit()).toThrow('Not a git repository');
-      expect(spawnSyncMock).toHaveBeenCalledWith('git', ['rev-parse', 'HEAD']);
-    });
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (tempRoot && fs.existsSync(tempRoot)) {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+    tempRoot = '';
   });
 
-  describe('getCommitInfo', () => {
-    it('should return correct commit info', async () => {
-      const info = await getCommitInfo();
+  test('throws for current commit outside of a git repository', () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-update-no-git-'));
+    process.chdir(tempRoot);
 
-      expect(info).toBeDefined();
-      expect(info?.hash).toBe('mock-commit-hash');
-      expect(info?.message).toBe('mock commit message');
-      expect(info?.author).toBe('Test Author');
-      expect(info?.timestamp).toBe('1625097600');
-      expect(info?.origin).toBe('https://github.com/test/repo.git');
+    expect(() => getCurrentCommit()).toThrow('Not a git repository');
+  });
 
-      expect(listRemotesMock).toHaveBeenCalled();
-      expect(logMock).toHaveBeenCalled();
-    });
+  test('returns undefined commit info outside of a git repository', async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-update-no-git-'));
+    process.chdir(tempRoot);
 
-    it('should handle missing author name by falling back to committer name', async () => {
-      logMock.mockImplementationOnce(async () => [
-        {
-          oid: 'mock-commit-hash-2',
-          commit: {
-            message: 'another message',
-            author: { name: '' },
-            committer: { name: 'Fallback Committer', timestamp: 1625098000 },
-          },
-        },
-      ]);
+    await expect(getCommitInfo()).resolves.toBeUndefined();
+  });
 
-      const info = await getCommitInfo();
-      expect(info?.author).toBe('Fallback Committer');
-    });
+  test('reads current commit and commit info using git executable', async () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-update-git-'));
+    runGit(['init'], tempRoot);
+    runGit(
+      ['remote', 'add', 'origin', 'https://example.com/demo.git'],
+      tempRoot,
+    );
+    fs.writeFileSync(path.join(tempRoot, 'README.md'), 'hello\n');
+    runGit(['add', 'README.md'], tempRoot);
+    runGit(['commit', '-m', 'Initial commit'], tempRoot);
+    process.chdir(tempRoot);
 
-    it('should return undefined and log error when git operations fail', async () => {
-      const originalConsoleError = console.error;
-      const consoleErrorMock = mock();
-      console.error = consoleErrorMock;
+    const currentCommit = getCurrentCommit();
+    const commit = await getCommitInfo();
 
-      listRemotesMock.mockImplementationOnce(async () => {
-        throw new Error('Git operation failed');
-      });
-
-      const info = await getCommitInfo();
-
-      expect(info).toBeUndefined();
-      expect(consoleErrorMock).toHaveBeenCalled();
-
-      console.error = originalConsoleError;
-    });
+    expect(currentCommit).toMatch(/^[0-9a-f]{40}$/);
+    expect(commit?.hash).toBe(currentCommit);
+    expect(commit?.message).toBe('Initial commit');
+    expect(commit?.author).toBe('Test Author');
+    expect(commit?.timestamp).toMatch(/^\d+$/);
+    expect(commit?.origin).toBe('https://example.com/demo.git');
   });
 });

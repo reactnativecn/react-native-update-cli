@@ -1,15 +1,15 @@
-import { spawnSync } from 'child_process';
-import fs from 'fs';
-import git from 'isomorphic-git';
-import path from 'path';
+import { execFile as execFileCallback, spawnSync } from 'child_process';
+import { promisify } from 'util';
 
 export interface CommitInfo {
   hash: string;
   message: string;
   author: string;
   timestamp: string;
-  origin: string;
+  origin?: string;
 }
+
+const execFile = promisify(execFileCallback);
 
 export function getCurrentCommit() {
   const result = spawnSync('git', ['rev-parse', 'HEAD']);
@@ -19,41 +19,53 @@ export function getCurrentCommit() {
   return result.stdout.toString().trim();
 }
 
-function findGitRoot(dir = process.cwd()) {
-  const gitRoot = fs.readdirSync(dir).find((dir) => dir === '.git');
-  if (gitRoot) {
-    // console.log({ gitRoot });
-    return path.join(dir, gitRoot);
-  }
-  const parentDir = path.dirname(dir);
-  if (parentDir === dir) {
-    return null;
-  }
-  return findGitRoot(parentDir);
+async function gitOutput(args: string[], cwd = process.cwd()): Promise<string> {
+  const { stdout } = await execFile('git', args, {
+    cwd,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  return stdout.trimEnd();
 }
 
-const gitRoot = findGitRoot();
+async function getRemoteOrigin(cwd: string) {
+  const origin = await gitOutput(['remote', 'get-url', 'origin'], cwd).catch(
+    () => '',
+  );
+  if (origin) {
+    return origin;
+  }
+
+  const remotes = await gitOutput(['remote'], cwd).catch(() => '');
+  const firstRemote = remotes.split(/\r?\n/).find(Boolean);
+  if (!firstRemote) {
+    return undefined;
+  }
+
+  return gitOutput(['remote', 'get-url', firstRemote], cwd).catch(
+    () => undefined,
+  );
+}
 
 export async function getCommitInfo(): Promise<CommitInfo | undefined> {
-  if (!gitRoot) {
-    return;
-  }
   try {
-    const remotes = await git.listRemotes({ fs, gitdir: gitRoot });
-    const origin =
-      remotes.find((remote) => remote.remote === 'origin') || remotes[0];
-    const { commit, oid } = (
-      await git.log({ fs, gitdir: gitRoot, depth: 1 })
-    )[0];
+    const gitRoot = await gitOutput(['rev-parse', '--show-toplevel']);
+    const [hash, message, author, timestamp, origin] = await Promise.all([
+      gitOutput(['rev-parse', 'HEAD'], gitRoot),
+      gitOutput(['log', '-1', '--format=%B'], gitRoot),
+      gitOutput(['log', '-1', '--format=%an'], gitRoot),
+      gitOutput(['log', '-1', '--format=%ct'], gitRoot),
+      getRemoteOrigin(gitRoot),
+    ]);
+
     return {
-      hash: oid,
-      message: commit.message,
-      author: commit.author.name || commit.committer.name,
-      timestamp: String(commit.committer.timestamp),
-      origin: origin?.url,
+      hash,
+      message,
+      author,
+      timestamp,
+      origin,
     };
-  } catch (error) {
-    console.error(error);
+  } catch (_error) {
     return;
   }
 }

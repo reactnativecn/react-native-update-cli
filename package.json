@@ -71,7 +71,6 @@
     "global-dirs": "^4.0.0",
     "gradle-to-js": "^2.0.1",
     "i18next": "^26.0.4",
-    "isomorphic-git": "^1.37.5",
     "node-fetch": "^2.6.1",
     "plist": "^3.1.0",
     "progress": "^2.0.3",
