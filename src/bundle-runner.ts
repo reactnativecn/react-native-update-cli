@@ -557,6 +557,51 @@ export async function copyDebugidForSentry(
   fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
 }
 
+export function buildSentrySourcemapsUploadArgs(
+  sentryCliPath: string,
+  bundleName: string,
+  outputFolder: string,
+  version: string,
+  useStandaloneSourcemapsCommand = true,
+): string[] {
+  const uploadArgs = [
+    '--strip-prefix',
+    path.join(process.cwd(), outputFolder),
+    path.join(outputFolder, bundleName),
+    path.join(outputFolder, `${bundleName}.map`),
+  ];
+
+  if (!useStandaloneSourcemapsCommand) {
+    return [
+      sentryCliPath,
+      'releases',
+      'files',
+      version,
+      'upload-sourcemaps',
+      ...uploadArgs,
+    ];
+  }
+
+  return [
+    sentryCliPath,
+    'sourcemaps',
+    'upload',
+    '--release',
+    version,
+    ...uploadArgs,
+  ];
+}
+
+function supportsStandaloneSentrySourcemapsUpload(sentryCliPath: string) {
+  const result = spawnJavaScriptSync(
+    [sentryCliPath, 'sourcemaps', 'upload', '--help'],
+    {
+      stdio: 'ignore',
+    },
+  );
+  return !result.error && result.status === 0;
+}
+
 export async function uploadSourcemapForSentry(
   bundleName: string,
   outputFolder: string,
@@ -595,17 +640,13 @@ export async function uploadSourcemapForSentry(
   console.log(t('uploadingSourcemap'));
   assertSuccessfulSyncProcess(
     spawnJavaScriptSync(
-      [
+      buildSentrySourcemapsUploadArgs(
         sentryCliPath,
-        'releases',
-        'files',
+        bundleName,
+        outputFolder,
         version,
-        'upload-sourcemaps',
-        '--strip-prefix',
-        path.join(process.cwd(), outputFolder),
-        path.join(outputFolder, bundleName),
-        path.join(outputFolder, `${bundleName}.map`),
-      ],
+        supportsStandaloneSentrySourcemapsUpload(sentryCliPath),
+      ),
       {
         stdio: 'inherit',
       },

@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
+import { IpaParser } from '../src/utils/app-info-parser/ipa';
 import { Zip } from '../src/utils/app-info-parser/zip';
 
 function mkTempDir(prefix: string): string {
@@ -11,12 +12,15 @@ function mkTempDir(prefix: string): string {
 
 async function writeZip(
   zipPath: string,
-  entries: Record<string, string>,
+  entries: Record<string, string | Buffer>,
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const zipFile = new YazlZipFile();
     for (const [name, content] of Object.entries(entries)) {
-      zipFile.addBuffer(Buffer.from(content), name);
+      zipFile.addBuffer(
+        Buffer.isBuffer(content) ? content : Buffer.from(content),
+        name,
+      );
     }
     zipFile.outputStream.on('error', reject);
     zipFile.outputStream.pipe(fs.createWriteStream(zipPath)).on('close', () => {
@@ -57,5 +61,36 @@ describe('app-info-parser Zip', () => {
       'manifest',
     );
     expect((buffers['res/icon.png'] as Buffer).toString()).toBe('icon');
+  });
+
+  test('parses ipa plist with current plist package exports', async () => {
+    const ipaPath = path.join(tempRoot, 'app.ipa');
+    await writeZip(ipaPath, {
+      'Payload/Test.app/Info.plist': `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>cn.reactnative.test</string>
+  <key>CFBundleShortVersionString</key>
+  <string>1.2.3</string>
+</dict>
+</plist>`,
+      'Payload/Test.app/embedded.mobileprovision': `prefix
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>TeamName</key>
+  <string>ReactNativeCN</string>
+</dict>
+</plist>
+suffix`,
+    });
+
+    const info = await new IpaParser(ipaPath).parse();
+
+    expect(info.CFBundleIdentifier).toBe('cn.reactnative.test');
+    expect(info.CFBundleShortVersionString).toBe('1.2.3');
+    expect(info.mobileProvision.TeamName).toBe('ReactNativeCN');
+    expect(info.icon).toBe(null);
   });
 });

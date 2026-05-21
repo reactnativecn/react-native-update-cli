@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import {
+  buildSentrySourcemapsUploadArgs,
   hasProjectDependency,
   resolveExpoCli,
   resolveHermesCommand,
@@ -201,5 +202,52 @@ describe('resolveHermesCommand', () => {
     _writeFile(hermesCommand);
 
     expect(resolveHermesCommand(tempRoot)).toBe(hermesCommand);
+  });
+});
+
+describe('buildSentrySourcemapsUploadArgs', () => {
+  test('uses the Sentry sourcemaps command supported by current CLI versions', () => {
+    const args = buildSentrySourcemapsUploadArgs(
+      '/bin/sentry-cli',
+      'index.android.bundle',
+      'build/intermedia',
+      '1.0.0',
+    );
+
+    expect(args).toEqual([
+      '/bin/sentry-cli',
+      'sourcemaps',
+      'upload',
+      '--release',
+      '1.0.0',
+      '--strip-prefix',
+      path.join(process.cwd(), 'build/intermedia'),
+      path.join('build/intermedia', 'index.android.bundle'),
+      path.join('build/intermedia', 'index.android.bundle.map'),
+    ]);
+    expect(args).not.toContain('files');
+    expect(args).not.toContain('upload-sourcemaps');
+  });
+
+  test('keeps the legacy releases files command for old Sentry CLI versions', () => {
+    const args = buildSentrySourcemapsUploadArgs(
+      '/bin/sentry-cli',
+      'index.android.bundle',
+      'build/intermedia',
+      '1.0.0',
+      false,
+    );
+
+    expect(args).toEqual([
+      '/bin/sentry-cli',
+      'releases',
+      'files',
+      '1.0.0',
+      'upload-sourcemaps',
+      '--strip-prefix',
+      path.join(process.cwd(), 'build/intermedia'),
+      path.join('build/intermedia', 'index.android.bundle'),
+      path.join('build/intermedia', 'index.android.bundle.map'),
+    ]);
   });
 });
