@@ -156,10 +156,12 @@ export default {
   usingCustomVersion: '使用自定义版本：{{version}}',
   confirmDeletePackage: '确认删除原生包 {{packageId}}? 此操作不可撤销 (Y/N):',
   deletePackageSuccess: '原生包 {{packageId}} 删除成功',
+  deletePackagesSuccess: '已删除 {{count}} 个原生包：{{packageIds}}',
   deletePackageError: '删除原生包 {{packageId}} 失败: {{error}}',
   usageDeletePackage:
-    '使用方法: pushy deletePackage [packageId] --appId [appId]',
+    '使用方法: pushy deletePackage [packageId] --packageIds [packageIds] --appId [appId]',
   deleteVersionSuccess: '热更包 {{versionId}} 删除成功',
+  deleteVersionsSuccess: '已删除 {{count}} 个热更包：{{versionIds}}',
   deleteVersionError: '删除热更包 {{versionId}} 失败: {{error}}',
   bundleFileNotFound: '未找到 bundle 文件！请使用默认的 bundle 文件名和路径。',
   diffPackageGenerated: '{{- output}} 已生成。',

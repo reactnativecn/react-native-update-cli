@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   getBooleanOption,
   getOptionalStringOption,
+  getStringListOption,
   getStringOption,
   toObjectState,
 } from '../src/utils/options';
@@ -31,6 +32,22 @@ describe('utils/options', () => {
     expect(getOptionalStringOption({ key: '' }, 'key')).toBeUndefined();
     expect(getOptionalStringOption({ key: null }, 'key')).toBeUndefined();
     expect(getOptionalStringOption({}, 'key')).toBeUndefined();
+  });
+
+  test('getStringListOption parses comma separated and repeated values', () => {
+    expect(getStringListOption({ ids: '1, 2,,3' }, 'ids')).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
+    expect(getStringListOption({ ids: ['1,2', '3'] }, 'ids')).toEqual([
+      '1',
+      '2',
+      '3',
+    ]);
+    expect(getStringListOption({ ids: 10 }, 'ids')).toEqual(['10']);
+    expect(getStringListOption({ ids: '' }, 'ids')).toBeUndefined();
+    expect(getStringListOption({}, 'ids')).toBeUndefined();
   });
 
   test('toObjectState returns object value or fallback', () => {

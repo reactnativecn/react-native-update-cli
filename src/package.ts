@@ -16,12 +16,16 @@ import { AabParser } from './utils/app-info-parser/aab';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { t } from './utils/i18n';
+import { getStringListOption } from './utils/options';
 
 type PackageCommandOptions = Record<string, unknown> & {
   appId?: string;
   appKey?: string;
   platform?: Platform;
   version?: string;
+  packageId?: string;
+  packageIds?: string;
+  packageVersion?: string;
   includeAllSplits?: boolean | string;
   splits?: string;
   output?: string;
@@ -80,6 +84,16 @@ function parseCsvOption(value: unknown): string[] | null {
     .map((item) => item.trim())
     .filter(Boolean);
   return parsed.length > 0 ? parsed : null;
+}
+
+function toNumericIds(ids: string[]) {
+  return ids.map((id) => {
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      throw new Error(`Invalid id: ${id}`);
+    }
+    return numericId;
+  });
 }
 
 function getVersionBinding(version: unknown): PackageVersionRef | undefined {
@@ -339,36 +353,37 @@ export const packageCommands = {
     const { appId } = await getSelectedApp(platform);
     await listPackage(String(appId));
   },
-  deletePackage: async ({
-    options,
-  }: {
-    options: {
-      appId?: string;
-      packageId?: string;
-      packageVersion?: string;
-      platform?: Platform;
-    };
-  }) => {
-    let { appId, packageId, packageVersion } = options;
+  deletePackage: async ({ options }: { options: PackageCommandOptions }) => {
+    let { appId } = options;
+    let packageIds =
+      getStringListOption(options, 'packageIds') ??
+      getStringListOption(options, 'packageId');
 
     if (!appId) {
       const platform = await getPlatform(options.platform);
       appId = (await getSelectedApp(platform)).appId;
     }
 
-    // If no packageId provided as argument, let user choose from list
-    if (!packageId) {
+    if (!packageIds) {
+      const packageVersions = getStringListOption(options, 'packageVersion');
+      if (!packageVersions) {
+        throw new Error(t('usageDeletePackage'));
+      }
+
       const allPkgs = await getAllPackages(appId);
       if (!allPkgs) {
         throw new Error(t('noPackagesFound', { appId }));
       }
-      const selectedPackage = allPkgs.find(
-        (pkg) => pkg.name === packageVersion,
-      );
-      if (!selectedPackage) {
-        throw new Error(t('packageNotFound', { packageVersion }));
-      }
-      packageId = selectedPackage.id;
+
+      packageIds = packageVersions.map((packageVersion) => {
+        const selectedPackage = allPkgs.find(
+          (pkg) => pkg.name === packageVersion,
+        );
+        if (!selectedPackage) {
+          throw new Error(t('packageNotFound', { packageVersion }));
+        }
+        return String(selectedPackage.id);
+      });
     }
 
     // Confirm deletion
@@ -385,11 +400,29 @@ export const packageCommands = {
     // }
 
     try {
-      await doDelete(`/app/${appId}/package/${packageId}`);
-      console.log(t('deletePackageSuccess', { packageId }));
+      if (packageIds.length === 1) {
+        const [packageId] = packageIds;
+        await doDelete(`/app/${appId}/package/${packageId}`);
+        console.log(t('deletePackageSuccess', { packageId }));
+      } else {
+        await doDelete(`/app/${appId}/package`, {
+          packageIds: toNumericIds(packageIds),
+        });
+        console.log(
+          t('deletePackagesSuccess', {
+            count: packageIds.length,
+            packageIds: packageIds.join(', '),
+          }),
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(t('deletePackageError', { packageId, error: message }));
+      throw new Error(
+        t('deletePackageError', {
+          packageId: packageIds.join(', '),
+          error: message,
+        }),
+      );
     }
   },
 };

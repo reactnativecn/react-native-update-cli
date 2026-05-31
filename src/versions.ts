@@ -9,7 +9,7 @@ import { isNonInteractive, question } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { t } from './utils/i18n';
-import { getBooleanOption } from './utils/options';
+import { getBooleanOption, getStringListOption } from './utils/options';
 
 interface VersionCommandOptions {
   [key: string]: unknown;
@@ -19,6 +19,7 @@ interface VersionCommandOptions {
   metaInfo?: string;
   platform?: Platform;
   versionId?: string;
+  versionIds?: string;
   packageId?: string;
   packageVersion?: string;
   minPackageVersion?: string;
@@ -126,6 +127,16 @@ function getDepsChanges(oldDeps?: Deps, newDeps?: Deps): DepChange[] {
   }
 
   return rows;
+}
+
+function toNumericIds(ids: string[]) {
+  return ids.map((id) => {
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      throw new Error(`Invalid id: ${id}`);
+    }
+    return numericId;
+  });
 }
 
 function getDepsChangeSummary(changes: DepChange[]): DepsChangeSummary {
@@ -407,14 +418,24 @@ export const bindVersionToPackages = async ({
       })}`,
     );
   }
-  for (const pkg of pkgs) {
-    if (!dryRun) {
+
+  if (!dryRun) {
+    if (pkgs.length === 1) {
       await post(`/app/${appId}/binding`, {
         versionId,
         rollout,
-        packageId: pkg.id,
+        packageId: pkgs[0].id,
+      });
+    } else {
+      await post(`/app/${appId}/binding`, {
+        versionId,
+        rollout,
+        packageIds: toNumericIds(pkgs.map((pkg) => String(pkg.id))),
       });
     }
+  }
+
+  for (const pkg of pkgs) {
     console.log(
       `${t('versionBind', {
         version: versionId,
@@ -688,20 +709,39 @@ export const versionCommands = {
       appId = (await getSelectedApp(platform)).appId;
     }
 
-    let versionId = options.versionId;
-    if (!versionId) {
+    const parsedVersionIds =
+      getStringListOption(options, 'versionIds') ??
+      getStringListOption(options, 'versionId');
+    let versionIds = parsedVersionIds;
+    if (!versionIds) {
       if (nonInteractive) {
         throw new Error(t('versionIdRequired'));
       }
-      versionId = (await chooseVersion(String(appId))).id;
+      versionIds = [(await chooseVersion(String(appId))).id];
     }
 
     try {
-      await doDelete(`/app/${String(appId)}/version/${versionId}`);
-      console.log(t('deleteVersionSuccess', { versionId }));
+      if (versionIds.length === 1) {
+        const [versionId] = versionIds;
+        await doDelete(`/app/${String(appId)}/version/${versionId}`);
+        console.log(t('deleteVersionSuccess', { versionId }));
+      } else {
+        await doDelete(`/app/${String(appId)}/version`, {
+          versionIds: toNumericIds(versionIds),
+        });
+        console.log(
+          t('deleteVersionsSuccess', {
+            count: versionIds.length,
+            versionIds: versionIds.join(', '),
+          }),
+        );
+      }
     } catch (error: any) {
       throw new Error(
-        t('deleteVersionError', { versionId, error: error.message }),
+        t('deleteVersionError', {
+          versionId: versionIds.join(', '),
+          error: error.message,
+        }),
       );
     }
   },

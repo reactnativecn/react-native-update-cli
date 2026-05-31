@@ -45,6 +45,28 @@ export function getOptionalStringOption(
   return undefined;
 }
 
+export function getStringListOption(
+  options: Record<string, unknown>,
+  key: string,
+): string[] | undefined {
+  const value = options[key];
+  const rawValues = Array.isArray(value) ? value : [value];
+  const result = rawValues.flatMap((item) => {
+    if (typeof item === 'string') {
+      return item
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+    }
+    if (typeof item === 'number' || typeof item === 'boolean') {
+      return [String(item)];
+    }
+    return [];
+  });
+
+  return result.length > 0 ? result : undefined;
+}
+
 export function toObjectState<T extends Record<string, unknown>>(
   value: unknown,
   fallback: T,

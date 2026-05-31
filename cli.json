@@ -99,6 +99,9 @@
         },
         "packageId": {
           "hasValue": true
+        },
+        "packageIds": {
+          "hasValue": true
         }
       }
     },
@@ -208,6 +211,9 @@
           "hasValue": true
         },
         "versionId": {
+          "hasValue": true
+        },
+        "versionIds": {
           "hasValue": true
         },
         "appId": {

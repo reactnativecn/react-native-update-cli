@@ -56,7 +56,12 @@ describe('bindVersionToPackages', () => {
       ],
     });
 
-    expect(postSpy).toHaveBeenCalledTimes(3);
+    expect(postSpy).toHaveBeenCalledTimes(1);
+    expect(postSpy).toHaveBeenCalledWith('/app/100/binding', {
+      versionId: '200',
+      rollout: undefined,
+      packageIds: [10, 11, 12],
+    });
   });
 
   test('passes rollout configuration', async () => {
@@ -265,29 +270,13 @@ describe('versionCommands.update package range selection', () => {
       ([url]) => url === `/app/${appId}/binding`,
     );
 
-    expect(bindingCalls).toHaveLength(3);
+    expect(bindingCalls).toHaveLength(1);
     expect(bindingCalls[0]).toEqual([
       `/app/${appId}/binding`,
       {
         versionId: '200',
         rollout: undefined,
-        packageId: '11',
-      },
-    ]);
-    expect(bindingCalls[1]).toEqual([
-      `/app/${appId}/binding`,
-      {
-        versionId: '200',
-        rollout: undefined,
-        packageId: '12',
-      },
-    ]);
-    expect(bindingCalls[2]).toEqual([
-      `/app/${appId}/binding`,
-      {
-        versionId: '200',
-        rollout: undefined,
-        packageId: '13',
+        packageIds: [11, 12, 13],
       },
     ]);
   });
@@ -307,29 +296,13 @@ describe('versionCommands.update package range selection', () => {
       ([url]) => url === `/app/${appId}/binding`,
     );
 
-    expect(bindingCalls).toHaveLength(3);
+    expect(bindingCalls).toHaveLength(1);
     expect(bindingCalls[0]).toEqual([
       `/app/${appId}/binding`,
       {
         versionId: '200',
         rollout: undefined,
-        packageId: '10',
-      },
-    ]);
-    expect(bindingCalls[1]).toEqual([
-      `/app/${appId}/binding`,
-      {
-        versionId: '200',
-        rollout: undefined,
-        packageId: '11',
-      },
-    ]);
-    expect(bindingCalls[2]).toEqual([
-      `/app/${appId}/binding`,
-      {
-        versionId: '200',
-        rollout: undefined,
-        packageId: '12',
+        packageIds: [10, 11, 12],
       },
     ]);
   });
@@ -426,6 +399,34 @@ describe('versionCommands.deleteVersion', () => {
     });
 
     expect(deleteSpy).toHaveBeenCalledWith('/app/100/version/200');
+  });
+
+  test('deletes multiple version ids with the batch endpoint', async () => {
+    await versionCommands.deleteVersion({
+      options: {
+        appId: '100',
+        versionIds: '200,201',
+        'no-interactive': true,
+      },
+    });
+
+    expect(deleteSpy).toHaveBeenCalledWith('/app/100/version', {
+      versionIds: [200, 201],
+    });
+  });
+
+  test('accepts comma separated ids through the legacy versionId option', async () => {
+    await versionCommands.deleteVersion({
+      options: {
+        appId: '100',
+        versionId: '200,201',
+        'no-interactive': true,
+      },
+    });
+
+    expect(deleteSpy).toHaveBeenCalledWith('/app/100/version', {
+      versionIds: [200, 201],
+    });
   });
 
   test('fails instead of prompting for version id in non-interactive mode', async () => {

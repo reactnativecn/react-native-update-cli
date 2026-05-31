@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test';
-import { normalizeUploadBuildTime } from '../src/package';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import * as api from '../src/api';
+import { normalizeUploadBuildTime, packageCommands } from '../src/package';
 
 describe('normalizeUploadBuildTime', () => {
   test('converts number to string', () => {
@@ -118,5 +119,57 @@ describe('package helper logic', () => {
 
   test('ensureFileByExt rejects empty string', () => {
     expect(() => ensureFileByExt('', '.apk')).toThrow();
+  });
+});
+
+describe('packageCommands.deletePackage', () => {
+  let consoleSpy: ReturnType<typeof spyOn>;
+  let deleteSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+    deleteSpy = spyOn(api, 'doDelete').mockResolvedValue({});
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    deleteSpy.mockRestore();
+  });
+
+  test('deletes one native package through the legacy endpoint', async () => {
+    await packageCommands.deletePackage({
+      options: {
+        appId: '100',
+        packageId: '10',
+      },
+    });
+
+    expect(deleteSpy).toHaveBeenCalledWith('/app/100/package/10');
+  });
+
+  test('deletes multiple native packages through the batch endpoint', async () => {
+    await packageCommands.deletePackage({
+      options: {
+        appId: '100',
+        packageIds: '10,11',
+      },
+    });
+
+    expect(deleteSpy).toHaveBeenCalledWith('/app/100/package', {
+      packageIds: [10, 11],
+    });
+  });
+
+  test('accepts comma separated ids through the legacy packageId option', async () => {
+    await packageCommands.deletePackage({
+      options: {
+        appId: '100',
+        packageId: '10,11',
+      },
+    });
+
+    expect(deleteSpy).toHaveBeenCalledWith('/app/100/package', {
+      packageIds: [10, 11],
+    });
   });
 });

@@ -168,10 +168,13 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   confirmDeletePackage:
     'Confirm delete native package {{packageId}}? This operation cannot be undone (Y/N):',
   deletePackageSuccess: 'Native package {{packageId}} deleted successfully',
+  deletePackagesSuccess: 'Deleted {{count}} native packages: {{packageIds}}',
   deletePackageError:
     'Failed to delete native package {{packageId}}: {{error}}',
-  usageDeletePackage: 'Usage: cresc deletePackage [packageId] --appId [appId]',
+  usageDeletePackage:
+    'Usage: cresc deletePackage [packageId] --packageIds [packageIds] --appId [appId]',
   deleteVersionSuccess: 'Version {{versionId}} deleted successfully',
+  deleteVersionsSuccess: 'Deleted {{count}} OTA versions: {{versionIds}}',
   deleteVersionError: 'Failed to delete version {{versionId}}: {{error}}',
   bundleFileNotFound:
     'Bundle file not found! Please use default bundle file name and path.',
