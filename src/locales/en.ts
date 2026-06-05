@@ -182,4 +182,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   nodeHdiffpatchRequired:
     'This function needs "node-hdiffpatch". Please run "{{scriptName}} install node-hdiffpatch" to install',
   apkExtracted: 'APK extracted to {{output}}',
+  proxyNetworkError:
+    'Network error — likely caused by a proxy/VPN. Please try disabling your proxy and retry.',
+  proxyNetworkErrorTips: 'Common fixes:\n1. Disable system proxy or VPN\n2. Check HTTP_PROXY / HTTPS_PROXY environment variables\n3. Check proxy settings in .npmrc',
 };

@@ -95,6 +95,31 @@ function createRequestError(
   return requestError;
 }
 
+const PROXY_ERROR_PATTERNS = [
+  'socket disconnected before secure TLS connection',
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  'CERT_HAS_EXPIRED',
+  'self signed certificate',
+  'proxy',
+  'ETIMEDOUT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+];
+
+function isProxyRelatedError(error: unknown): boolean {
+  const msg =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '';
+  const lower = msg.toLowerCase();
+  return PROXY_ERROR_PATTERNS.some((p) => lower.includes(p.toLowerCase()));
+}
+
 async function query(url: string, options: RuntimeRequestInit) {
   const baseUrl = await getBaseUrl;
   const fullUrl = `${baseUrl}${url}`;
@@ -102,7 +127,13 @@ async function query(url: string, options: RuntimeRequestInit) {
   try {
     resp = await runtimeFetch(fullUrl, options);
   } catch (error) {
-    throw createRequestError(error, fullUrl);
+    const baseError = createRequestError(error, fullUrl);
+    if (isProxyRelatedError(error)) {
+      throw new Error(
+        `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+      );
+    }
+    throw baseError;
   }
   const text = await resp.text();
   let json: any;
@@ -230,6 +261,13 @@ export async function uploadFile(fn: string, key?: string) {
       body: form,
     });
   } catch (error) {
+    if (isProxyRelatedError(error)) {
+      const rawMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+      );
+    }
     throw createRequestError(error, realUrl);
   }
 
