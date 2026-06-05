@@ -168,4 +168,7 @@ export default {
   nodeHdiffpatchRequired:
     '此功能需要 "node-hdiffpatch"。请运行 "{{scriptName}} install node-hdiffpatch" 来安装',
   apkExtracted: 'APK 已提取到 {{output}}',
+  proxyNetworkError:
+    '网络连接异常，可能是代理/VPN 导致。请尝试关闭代理后重试。',
+  proxyNetworkErrorTips: '常见解决方法：\n1. 关闭系统代理或 VPN\n2. 检查 HTTP_PROXY / HTTPS_PROXY 环境变量\n3. 检查 .npmrc 中的 proxy 配置',
 };
