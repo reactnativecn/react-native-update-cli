@@ -262,8 +262,7 @@ export async function uploadFile(fn: string, key?: string) {
     });
   } catch (error) {
     if (isProxyRelatedError(error)) {
-      const rawMessage =
-        error instanceof Error ? error.message : String(error);
+      const rawMessage = error instanceof Error ? error.message : String(error);
       throw new Error(
         `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
       );
