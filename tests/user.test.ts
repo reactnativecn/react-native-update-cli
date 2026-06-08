@@ -1,16 +1,9 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  spyOn,
-  test,
-} from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import crypto from 'crypto';
 
 import * as api from '../src/api';
-import * as utils from '../src/utils';
 import { userCommands } from '../src/user';
+import * as utils from '../src/utils';
 
 function md5(str: string) {
   return crypto.createHash('md5').update(str).digest('hex');
@@ -86,9 +79,9 @@ describe('userCommands.login', () => {
   });
 
   test('prompts for email and password when args are missing', async () => {
-    let callCount = 0;
+    let _callCount = 0;
     questionSpy.mockImplementation(async (prompt: string) => {
-      callCount++;
+      _callCount++;
       if (prompt === 'email:') return 'asked@email.com';
       return 'asked-password';
     });
@@ -120,9 +113,7 @@ describe('userCommands.logout', () => {
 
   beforeEach(() => {
     consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
-    closeSessionSpy = spyOn(api, 'closeSession').mockImplementation(
-      () => {},
-    );
+    closeSessionSpy = spyOn(api, 'closeSession').mockImplementation(() => {});
   });
 
   afterEach(() => {

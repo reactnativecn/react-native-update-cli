@@ -2,10 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import {
-  zipOptionsForPayloadFile,
-  ZIP_ENTRY_SNIFF_BYTES,
-} from '../src/utils/zip-options';
+import { zipOptionsForPayloadFile } from '../src/utils/zip-options';
 
 describe('zipOptionsForPayloadFile', () => {
   let tmpDir: string;
@@ -22,8 +19,8 @@ describe('zipOptionsForPayloadFile', () => {
     const pngFile = path.join(tmpDir, 'image.png');
     // PNG magic: 89 50 4E 47 0D 0A 1A 0A
     const pngMagic = Buffer.from([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-      0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52,
     ]);
     fs.writeFileSync(pngFile, pngMagic);
     const result = zipOptionsForPayloadFile(pngFile);
@@ -41,8 +38,8 @@ describe('zipOptionsForPayloadFile', () => {
     const hermesFile = path.join(tmpDir, 'index.bundlejs');
     // Hermes bytecode magic: c6 1f bc 03 c1 03 19 1f
     const hermesMagic = Buffer.from([
-      0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f,
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00,
     ]);
     fs.writeFileSync(hermesFile, hermesMagic);
     const result = zipOptionsForPayloadFile(hermesFile);
@@ -53,8 +50,8 @@ describe('zipOptionsForPayloadFile', () => {
     const jpegFile = path.join(tmpDir, 'photo.jpg');
     // JPEG magic: FF D8 FF
     const jpegMagic = Buffer.from([
-      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46,
-      0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+      0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+      0x01, 0x00, 0x00, 0x01,
     ]);
     fs.writeFileSync(jpegFile, jpegMagic);
     const result = zipOptionsForPayloadFile(jpegFile);
