@@ -16,14 +16,14 @@ describe('plugin-config - sentry plugin', () => {
     await fs.remove(tmpDir);
   });
 
-  const sentryPlugin = plugins.find((p) => p.name === 'sentry')!;
+  const sentryPlugin = plugins.find((p) => p.name === 'sentry');
 
   test('sentry plugin exists in the plugins array', () => {
     expect(sentryPlugin).toBeDefined();
   });
 
   test('sentry bundleParams are { sentry: true, sourcemap: true }', () => {
-    expect(sentryPlugin.bundleParams).toEqual({
+    expect(sentryPlugin?.bundleParams).toEqual({
       sentry: true,
       sourcemap: true,
     });
@@ -34,7 +34,7 @@ describe('plugin-config - sentry plugin', () => {
       const origCwd = process.cwd();
       process.chdir(tmpDir);
       try {
-        const result = await sentryPlugin.detect();
+        const result = await sentryPlugin?.detect();
         expect(result).toBe(false);
       } finally {
         process.chdir(origCwd);
@@ -51,7 +51,7 @@ describe('plugin-config - sentry plugin', () => {
       const origCwd = process.cwd();
       process.chdir(tmpDir);
       try {
-        const result = await sentryPlugin.detect();
+        const result = await sentryPlugin?.detect();
         expect(result).toBe(true);
       } finally {
         process.chdir(origCwd);
@@ -68,7 +68,7 @@ describe('plugin-config - sentry plugin', () => {
       const origCwd = process.cwd();
       process.chdir(tmpDir);
       try {
-        const result = await sentryPlugin.detect();
+        const result = await sentryPlugin?.detect();
         expect(result).toBe(true);
       } finally {
         process.chdir(origCwd);
@@ -90,7 +90,7 @@ describe('plugin-config - sentry plugin', () => {
       const origCwd = process.cwd();
       process.chdir(tmpDir);
       try {
-        const result = await sentryPlugin.detect();
+        const result = await sentryPlugin?.detect();
         expect(result).toBe(true);
       } finally {
         process.chdir(origCwd);

@@ -76,6 +76,12 @@ describe('userCommands.login', () => {
     });
 
     expect(saveSessionSpy).toHaveBeenCalled();
+    expect(replaceSessionSpy).toHaveBeenCalled();
+
+    // Verify call order: replaceSession should be called before saveSession
+    const replaceOrder = replaceSessionSpy.mock.invocationCallOrder[0];
+    const saveOrder = saveSessionSpy.mock.invocationCallOrder[0];
+    expect(replaceOrder).toBeLessThan(saveOrder);
   });
 
   test('prompts for email and password when args are missing', async () => {

@@ -3,8 +3,8 @@ import i18next from 'i18next';
 import { t } from '../src/utils/i18n';
 
 describe('i18n t()', () => {
-  test('returns a non-empty translated string for a known key in English', () => {
-    i18next.changeLanguage('en');
+  test('returns a non-empty translated string for a known key in English', async () => {
+    await i18next.changeLanguage('en');
     const result = t('cancelled');
     expect(typeof result).toBe('string');
     expect(result.length).toBeGreaterThan(0);
@@ -45,12 +45,11 @@ describe('i18n t()', () => {
     expect(result).toContain('abc');
   });
 
-  test('returns the key itself or a fallback for an unknown key', () => {
-    i18next.changeLanguage('en');
+  test('returns the key itself or a fallback for an unknown key', async () => {
+    await i18next.changeLanguage('en');
     const result = t('this_key_does_not_exist_at_all');
     // i18next returns the key string when a key is missing
-    expect(typeof result).toBe('string');
-    expect(result.length).toBeGreaterThan(0);
+    expect(result).toBe('this_key_does_not_exist_at_all');
   });
 
   test('returns different strings for en and zh for the same key', () => {
