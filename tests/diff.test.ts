@@ -401,6 +401,65 @@ describe('diff commands', () => {
     expect(result.files['assets/new.txt']?.toString('utf-8')).toBe('new-file');
   });
 
+  test('hdiffFromApk emits copiesCrc for moved (res/) entries only', async () => {
+    const originPath = path.join(tempRoot, 'origin-crc.apk');
+    const nextPath = path.join(tempRoot, 'next-crc.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'apk-crc-diff.ppk');
+
+    const imageContent = Buffer.concat([
+      Buffer.from('RIFF'),
+      Buffer.from([0x10, 0x00, 0x00, 0x00]),
+      Buffer.from('WEBPVP8 image-bytes'),
+    ]);
+
+    // origin (APK layout): image lives under res/drawable-*-v4 with a full
+    // readable path; an asset under assets/ keeps a stable path.
+    await createZip(originPath, {
+      'assets/index.android.bundle': 'old-bundle',
+      'res/drawable-xhdpi-v4/x.webp': imageContent,
+      'assets/keep.txt': 'keep-content',
+    });
+    // next (ppk layout from --assets-dest): image is at root drawable-* (moved),
+    // the asset keeps its assets/ path (same content -> same path).
+    await createZip(nextPath, {
+      'index.bundlejs': 'new-bundle',
+      'drawable-xhdpi/x.webp': imageContent,
+      'assets/keep.txt': 'keep-content',
+    });
+
+    await diffCommands.hdiffFromApk(
+      createContext([originPath, nextPath], {
+        output: outputPath,
+        customDiff: () => Buffer.from('patch'),
+      }),
+    );
+
+    // crc32 of the image as stored in the origin package
+    let originImageCrc = -1;
+    await enumZipEntries(originPath, async (entry) => {
+      if (entry.fileName === 'res/drawable-xhdpi-v4/x.webp') {
+        originImageCrc = entry.crc32;
+      }
+    });
+
+    const result = await readZipContent(outputPath);
+    const diffMeta = JSON.parse(
+      result.files['__diff.json'].toString('utf-8'),
+    ) as {
+      copies: Record<string, string>;
+      copiesCrc: Record<string, number>;
+    };
+
+    // moved res/ image -> path recorded in copies, crc recorded in copiesCrc
+    expect(diffMeta.copies['drawable-xhdpi/x.webp']).toBe(
+      'res/drawable-xhdpi-v4/x.webp',
+    );
+    expect(diffMeta.copiesCrc['drawable-xhdpi/x.webp']).toBe(originImageCrc);
+    // same-path asset -> no crc needed (efficiency: only moved entries get one)
+    expect(diffMeta.copies['assets/keep.txt']).toBe('');
+    expect(diffMeta.copiesCrc['assets/keep.txt']).toBeUndefined();
+  });
+
   test('hdiffFromIpa ignores non-payload files when resolving origin package path', async () => {
     const originPath = path.join(tempRoot, 'origin-non-payload.ipa');
     const nextPath = path.join(tempRoot, 'next-non-payload.ppk');

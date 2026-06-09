@@ -223,6 +223,13 @@ async function diffFromPackage(
 
   let originSource: Buffer | undefined;
 
+  // Content checksum (CRC32) for entries that are copied from a *different*
+  // path in the origin package ("moved" entries). On Android these are the
+  // res/ drawables (images), whose on-device path differs between an APK
+  // baseline and an AAB(split-apk) install due to resource path shortening,
+  // so the client cannot locate them by path and must fall back to content.
+  const copiesCrc: Record<string, number> = {};
+
   await enumZipEntries(origin, async (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
       const fn = transformPackagePath(entry.fileName);
@@ -281,6 +288,10 @@ async function diffFromPackage(
       const movedFrom = originMap[entry.crc32];
       if (movedFrom) {
         copies[entry.fileName] = movedFrom;
+        // Record the content checksum so the client can locate this file by
+        // content when the origin path does not exist verbatim on device
+        // (APK baseline -> AAB install path shortening).
+        copiesCrc[entry.fileName] = entry.crc32;
         return;
       }
 
@@ -313,7 +324,7 @@ async function diffFromPackage(
     }
   });
 
-  const diffManifest = Buffer.from(JSON.stringify({ copies }));
+  const diffManifest = Buffer.from(JSON.stringify({ copies, copiesCrc }));
   zipfile.addBuffer(
     diffManifest,
     '__diff.json',
