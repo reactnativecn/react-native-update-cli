@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -7,24 +7,36 @@ describe('depVersions utility', () => {
   const originalCwd = process.cwd();
   let testDir: string;
   let testCount = 0;
+  let cwdSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     testCount++;
-    testDir = path.join(os.tmpdir(), `temp-test-dep-versions-${Date.now()}-${testCount}`);
+    testDir = path.join(
+      os.tmpdir(),
+      `temp-test-dep-versions-${Date.now()}-${testCount}`,
+    );
     fs.mkdirSync(testDir, { recursive: true });
-    process.chdir(testDir);
+
+    // Mock process.cwd() instead of using process.chdir() to avoid affecting parallel tests
+    cwdSpy = spyOn(process, 'cwd').mockReturnValue(testDir);
   });
 
   afterEach(() => {
-    process.chdir(originalCwd);
+    cwdSpy.mockRestore();
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
   const loadDepVersions = async () => {
     // Bust the module cache by appending a query string
-    // Since the process.cwd() has changed, we need the absolute path to the module
-    const modulePath = path.join(originalCwd, 'src', 'utils', 'dep-versions.ts');
-    const module = await import(`${modulePath}?t=${Date.now()}_${testCount}`);
+    // In Bun, using the raw absolute path with query string correctly bypasses the cache
+    const modulePath = path.join(
+      originalCwd,
+      'src',
+      'utils',
+      'dep-versions.ts',
+    );
+    const moduleUrl = `${modulePath}?t=${Date.now()}_${testCount}`;
+    const module = await import(moduleUrl);
     return module.depVersions;
   };
 
