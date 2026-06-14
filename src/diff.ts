@@ -367,7 +367,7 @@ function diffArgsCheck(
   const { output } = translateOptions({
     ...options,
     tempDir,
-  });
+  } as DiffCommandOptions & { tempDir: string });
   if (typeof output !== 'string') {
     throw new Error('Output path is required.');
   }
