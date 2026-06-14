@@ -95,4 +95,16 @@ describe('testUrls edge cases', () => {
     const result = await testUrls(['http://fail1.local', 'http://fail2.local']);
     expect(result).toBe('http://fail1.local');
   });
+
+  test('Handles array containing empty strings or malformed URLs', async () => {
+    runtimeFetchMock.mockImplementation((url: string) => {
+      if (url === 'http://success.local') {
+        return Promise.resolve({ status: 200 });
+      }
+      return Promise.reject(new Error('fail'));
+    });
+
+    const result = await testUrls(['', 'invalid-url', 'http://success.local']);
+    expect(result).toBe('http://success.local');
+  });
 });
