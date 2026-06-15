@@ -90,6 +90,9 @@ export class CLIProviderImpl implements CLIProvider {
           expo: options.expo || false,
           rncli: options.rncli || false,
           hermes: options.hermes || false,
+          sentryRelease: options.sentryRelease,
+          sentryDist: options.sentryDist,
+          sentryFlavor: options.sentryFlavor,
         });
 
         const { bundleCommands } = await import('./bundle');

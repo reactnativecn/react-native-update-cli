@@ -9,6 +9,10 @@ import {
   spawnJavaScript,
   spawnJavaScriptSync,
 } from './utils/runtime';
+import {
+  resolveSentryReleaseAndDist,
+  type SentryReleaseOptions,
+} from './utils/sentry-release';
 
 const g2js = require('gradle-to-js/lib/parser');
 const properties = require('properties');
@@ -54,6 +58,23 @@ type ResolvedExpoCli = {
   cliPath: string;
   usingExpo: boolean;
 };
+
+type SentryUploadArtifacts = {
+  bundlePath: string;
+  sourcemapPath: string;
+};
+
+type BuildSentrySourcemapsUploadArgsOptions = {
+  sentryCliPath: string;
+  bundlePath: string;
+  sourcemapPath: string;
+  release: string;
+  dist?: string;
+  stripPrefix?: string;
+  useStandaloneSourcemapsCommand?: boolean;
+};
+
+const ANDROID_SENTRY_BUNDLE_NAME = 'index.android.bundle';
 
 export function hasProjectDependency(
   dependencyName: string,
@@ -557,27 +578,59 @@ export async function copyDebugidForSentry(
   fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
 }
 
-export function buildSentrySourcemapsUploadArgs(
-  sentryCliPath: string,
+export function prepareSentryUploadArtifacts(
   bundleName: string,
   outputFolder: string,
-  version: string,
+  platform: string,
+): SentryUploadArtifacts {
+  const bundlePath = path.join(outputFolder, bundleName);
+  const sourcemapPath = path.join(outputFolder, `${bundleName}.map`);
+
+  if (platform !== 'android' || bundleName === ANDROID_SENTRY_BUNDLE_NAME) {
+    return {
+      bundlePath,
+      sourcemapPath,
+    };
+  }
+
+  const androidBundlePath = path.join(outputFolder, ANDROID_SENTRY_BUNDLE_NAME);
+  const androidSourcemapPath = path.join(
+    outputFolder,
+    `${ANDROID_SENTRY_BUNDLE_NAME}.map`,
+  );
+  fs.copyFileSync(bundlePath, androidBundlePath);
+
+  const sourcemap = JSON.parse(
+    fs.readFileSync(sourcemapPath, 'utf8'),
+  ) as Record<string, unknown>;
+  sourcemap.file = ANDROID_SENTRY_BUNDLE_NAME;
+  fs.writeFileSync(androidSourcemapPath, JSON.stringify(sourcemap));
+
+  return {
+    bundlePath: androidBundlePath,
+    sourcemapPath: androidSourcemapPath,
+  };
+}
+
+export function buildSentrySourcemapsUploadArgs({
+  sentryCliPath,
+  bundlePath,
+  sourcemapPath,
+  release,
+  dist,
+  stripPrefix = process.cwd(),
   useStandaloneSourcemapsCommand = true,
-): string[] {
-  const uploadArgs = [
-    '--strip-prefix',
-    path.join(process.cwd(), outputFolder),
-    path.join(outputFolder, bundleName),
-    path.join(outputFolder, `${bundleName}.map`),
-  ];
+}: BuildSentrySourcemapsUploadArgsOptions): string[] {
+  const uploadArgs = ['--strip-prefix', stripPrefix, bundlePath, sourcemapPath];
 
   if (!useStandaloneSourcemapsCommand) {
     return [
       sentryCliPath,
       'releases',
       'files',
-      version,
+      release,
       'upload-sourcemaps',
+      ...(dist ? ['--dist', dist] : []),
       ...uploadArgs,
     ];
   }
@@ -587,7 +640,8 @@ export function buildSentrySourcemapsUploadArgs(
     'sourcemaps',
     'upload',
     '--release',
-    version,
+    release,
+    ...(dist ? ['--dist', dist] : []),
     ...uploadArgs,
   ];
 }
@@ -607,6 +661,8 @@ export async function uploadSourcemapForSentry(
   outputFolder: string,
   sourcemapOutput: string,
   version: string,
+  platform = '',
+  sentryOptions: SentryReleaseOptions = {},
 ): Promise<void> {
   if (!sourcemapOutput) {
     return;
@@ -626,27 +682,40 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
+  const { release, dist } = await resolveSentryReleaseAndDist(
+    platform,
+    version,
+    sentryOptions,
+  );
+  const { bundlePath, sourcemapPath } = prepareSentryUploadArtifacts(
+    bundleName,
+    outputFolder,
+    platform,
+  );
+
   assertSuccessfulSyncProcess(
     spawnJavaScriptSync(
-      [sentryCliPath, 'releases', 'set-commits', version, '--auto'],
+      [sentryCliPath, 'releases', 'set-commits', release, '--auto'],
       {
         stdio: 'inherit',
       },
     ),
     sentryCliPath,
   );
-  console.log(t('sentryReleaseCreated', { version }));
+  console.log(t('sentryReleaseCreated', { version: release }));
 
   console.log(t('uploadingSourcemap'));
   assertSuccessfulSyncProcess(
     spawnJavaScriptSync(
-      buildSentrySourcemapsUploadArgs(
+      buildSentrySourcemapsUploadArgs({
         sentryCliPath,
-        bundleName,
-        outputFolder,
-        version,
-        supportsStandaloneSentrySourcemapsUpload(sentryCliPath),
-      ),
+        bundlePath,
+        sourcemapPath,
+        release,
+        dist,
+        useStandaloneSourcemapsCommand:
+          supportsStandaloneSentrySourcemapsUpload(sentryCliPath),
+      }),
       {
         stdio: 'inherit',
       },

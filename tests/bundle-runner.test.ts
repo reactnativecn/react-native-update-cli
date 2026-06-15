@@ -5,6 +5,7 @@ import path from 'path';
 import {
   buildSentrySourcemapsUploadArgs,
   hasProjectDependency,
+  prepareSentryUploadArtifacts,
   resolveExpoCli,
   resolveHermesCommand,
 } from '../src/bundle-runner';
@@ -206,22 +207,25 @@ describe('resolveHermesCommand', () => {
 });
 
 describe('buildSentrySourcemapsUploadArgs', () => {
-  test('uses the Sentry sourcemaps command supported by current CLI versions', () => {
-    const args = buildSentrySourcemapsUploadArgs(
-      '/bin/sentry-cli',
-      'index.android.bundle',
-      'build/intermedia',
-      '1.0.0',
-    );
+  test('uses the Sentry sourcemaps command supported by current CLI versions with dist', () => {
+    const args = buildSentrySourcemapsUploadArgs({
+      sentryCliPath: '/bin/sentry-cli',
+      bundlePath: path.join('build/intermedia', 'index.android.bundle'),
+      sourcemapPath: path.join('build/intermedia', 'index.android.bundle.map'),
+      release: 'com.example@1.0.0+10',
+      dist: '10',
+    });
 
     expect(args).toEqual([
       '/bin/sentry-cli',
       'sourcemaps',
       'upload',
       '--release',
-      '1.0.0',
+      'com.example@1.0.0+10',
+      '--dist',
+      '10',
       '--strip-prefix',
-      path.join(process.cwd(), 'build/intermedia'),
+      process.cwd(),
       path.join('build/intermedia', 'index.android.bundle'),
       path.join('build/intermedia', 'index.android.bundle.map'),
     ]);
@@ -230,24 +234,82 @@ describe('buildSentrySourcemapsUploadArgs', () => {
   });
 
   test('keeps the legacy releases files command for old Sentry CLI versions', () => {
-    const args = buildSentrySourcemapsUploadArgs(
-      '/bin/sentry-cli',
-      'index.android.bundle',
-      'build/intermedia',
-      '1.0.0',
-      false,
-    );
+    const args = buildSentrySourcemapsUploadArgs({
+      sentryCliPath: '/bin/sentry-cli',
+      bundlePath: path.join('build/intermedia', 'index.android.bundle'),
+      sourcemapPath: path.join('build/intermedia', 'index.android.bundle.map'),
+      release: 'com.example@1.0.0+10',
+      dist: '10',
+      useStandaloneSourcemapsCommand: false,
+    });
 
     expect(args).toEqual([
       '/bin/sentry-cli',
       'releases',
       'files',
-      '1.0.0',
+      'com.example@1.0.0+10',
       'upload-sourcemaps',
+      '--dist',
+      '10',
       '--strip-prefix',
-      path.join(process.cwd(), 'build/intermedia'),
+      process.cwd(),
       path.join('build/intermedia', 'index.android.bundle'),
       path.join('build/intermedia', 'index.android.bundle.map'),
     ]);
+  });
+});
+
+describe('prepareSentryUploadArtifacts', () => {
+  let tempRoot = '';
+
+  beforeEach(() => {
+    tempRoot = mkTempDir('rn-update-sentry-artifacts-');
+  });
+
+  afterEach(() => {
+    if (tempRoot && fs.existsSync(tempRoot)) {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('aliases Android OTA bundles to the default Android bundle name', () => {
+    _writeFile(path.join(tempRoot, 'index.bundlejs'), 'bundle');
+    writeJson(path.join(tempRoot, 'index.bundlejs.map'), {
+      version: 3,
+      file: 'index.bundlejs',
+      sources: ['src/App.tsx'],
+    });
+
+    const artifacts = prepareSentryUploadArtifacts(
+      'index.bundlejs',
+      tempRoot,
+      'android',
+    );
+
+    expect(artifacts).toEqual({
+      bundlePath: path.join(tempRoot, 'index.android.bundle'),
+      sourcemapPath: path.join(tempRoot, 'index.android.bundle.map'),
+    });
+    expect(fs.readFileSync(artifacts.bundlePath, 'utf8')).toBe('bundle');
+    expect(
+      JSON.parse(fs.readFileSync(artifacts.sourcemapPath, 'utf8')),
+    ).toEqual({
+      version: 3,
+      file: 'index.android.bundle',
+      sources: ['src/App.tsx'],
+    });
+  });
+
+  test('keeps non-Android artifacts unchanged', () => {
+    const artifacts = prepareSentryUploadArtifacts(
+      'index.bundlejs',
+      tempRoot,
+      'ios',
+    );
+
+    expect(artifacts).toEqual({
+      bundlePath: path.join(tempRoot, 'index.bundlejs'),
+      sourcemapPath: path.join(tempRoot, 'index.bundlejs.map'),
+    });
   });
 });

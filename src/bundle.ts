@@ -18,6 +18,7 @@ import {
   getOptionalStringOption,
   getStringOption,
 } from './utils/options';
+import type { SentryReleaseOptions } from './utils/sentry-release';
 import { versionCommands } from './versions';
 
 type NormalizedBundleOptions = {
@@ -41,6 +42,9 @@ type NormalizedBundleOptions = {
   packageVersionRange?: string;
   rollout?: string;
   dryRun: boolean;
+  sentryRelease?: string;
+  sentryDist?: string;
+  sentryFlavor?: string;
 };
 
 type PublishBundlePayload = {
@@ -55,6 +59,17 @@ type PublishBundlePayload = {
   rollout?: string;
   dryRun?: boolean;
 };
+
+function getAliasedOptionalStringOption(
+  options: Record<string, unknown>,
+  key: string,
+  alias: string,
+): string | undefined {
+  return (
+    getOptionalStringOption(options, key) ??
+    getOptionalStringOption(options, alias)
+  );
+}
 
 function normalizeBundleOptions(
   translatedOptions: Record<string, unknown>,
@@ -105,6 +120,21 @@ function normalizeBundleOptions(
     ),
     rollout: getOptionalStringOption(translatedOptions, 'rollout'),
     dryRun: getBooleanOption(translatedOptions, 'dryRun', false),
+    sentryRelease: getAliasedOptionalStringOption(
+      translatedOptions,
+      'sentry-release',
+      'sentryRelease',
+    ),
+    sentryDist: getAliasedOptionalStringOption(
+      translatedOptions,
+      'sentry-dist',
+      'sentryDist',
+    ),
+    sentryFlavor: getAliasedOptionalStringOption(
+      translatedOptions,
+      'sentry-flavor',
+      'sentryFlavor',
+    ),
   };
 }
 
@@ -114,6 +144,8 @@ async function uploadSentryArtifactsIfNeeded(
   intermediaDir: string,
   sourcemapOutput: string,
   versionName: string,
+  platform: Platform,
+  sentryOptions: SentryReleaseOptions,
 ): Promise<void> {
   if (!shouldUpload) {
     return;
@@ -125,6 +157,8 @@ async function uploadSentryArtifactsIfNeeded(
     intermediaDir,
     sourcemapOutput,
     versionName,
+    platform,
+    sentryOptions,
   );
 }
 
@@ -217,6 +251,12 @@ export const bundleCommands = {
         normalized.intermediaDir,
         sourcemapOutput,
         versionName,
+        platform,
+        {
+          sentryRelease: normalized.sentryRelease,
+          sentryDist: normalized.sentryDist,
+          sentryFlavor: normalized.sentryFlavor,
+        },
       );
       return;
     }
@@ -235,6 +275,12 @@ export const bundleCommands = {
           normalized.intermediaDir,
           sourcemapOutput,
           versionName,
+          platform,
+          {
+            sentryRelease: normalized.sentryRelease,
+            sentryDist: normalized.sentryDist,
+            sentryFlavor: normalized.sentryFlavor,
+          },
         );
       }
     }

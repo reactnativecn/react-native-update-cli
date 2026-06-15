@@ -56,6 +56,9 @@ export interface BundleOptions {
   expo?: boolean;
   rncli?: boolean;
   hermes?: boolean;
+  sentryRelease?: string;
+  sentryDist?: string;
+  sentryFlavor?: string;
 }
 
 export interface PublishOptions {

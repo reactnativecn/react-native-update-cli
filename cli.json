@@ -297,6 +297,30 @@
         },
         "dryRun": {
           "default": false
+        },
+        "sentry-release": {
+          "hasValue": true,
+          "description": "Sentry release for source map upload"
+        },
+        "sentryRelease": {
+          "hasValue": true,
+          "description": "Sentry release for source map upload"
+        },
+        "sentry-dist": {
+          "hasValue": true,
+          "description": "Sentry dist for source map upload"
+        },
+        "sentryDist": {
+          "hasValue": true,
+          "description": "Sentry dist for source map upload"
+        },
+        "sentry-flavor": {
+          "hasValue": true,
+          "description": "Android product flavor or variant for native Sentry release/dist"
+        },
+        "sentryFlavor": {
+          "hasValue": true,
+          "description": "Android product flavor or variant for native Sentry release/dist"
         }
       }
     },
