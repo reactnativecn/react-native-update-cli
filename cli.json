@@ -313,14 +313,6 @@
         "sentryDist": {
           "hasValue": true,
           "description": "Sentry dist for source map upload"
-        },
-        "sentry-flavor": {
-          "hasValue": true,
-          "description": "Android product flavor or variant for native Sentry release/dist"
-        },
-        "sentryFlavor": {
-          "hasValue": true,
-          "description": "Android product flavor or variant for native Sentry release/dist"
         }
       }
     },

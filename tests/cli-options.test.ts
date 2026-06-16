@@ -13,19 +13,16 @@ describe('cli.json options', () => {
     const parsed = cliArguments.parse(cliConfig, [
       'bundle',
       '--sentry-release',
-      'com.example@1.0.0+1',
+      'com.example@1.0.0+1+pushy:hash',
       '--sentry-dist',
-      '1',
-      '--sentry-flavor',
-      'devRelease',
+      'pushy:hash',
     ]);
 
     expect(parsed.command).toBe('bundle');
     expect(parsed.options).toEqual(
       expect.objectContaining({
-        'sentry-release': 'com.example@1.0.0+1',
-        'sentry-dist': '1',
-        'sentry-flavor': 'devRelease',
+        'sentry-release': 'com.example@1.0.0+1+pushy:hash',
+        'sentry-dist': 'pushy:hash',
       }),
     );
   });

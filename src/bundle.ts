@@ -4,6 +4,7 @@ import { packBundle } from './bundle-pack';
 import {
   copyDebugidForSentry,
   runReactNativeBundleCommand,
+  type SentryUploadOptions,
   uploadSourcemapForSentry,
 } from './bundle-runner';
 import type { Platform } from './types';
@@ -18,7 +19,6 @@ import {
   getOptionalStringOption,
   getStringOption,
 } from './utils/options';
-import type { SentryReleaseOptions } from './utils/sentry-release';
 import { versionCommands } from './versions';
 
 type NormalizedBundleOptions = {
@@ -44,7 +44,6 @@ type NormalizedBundleOptions = {
   dryRun: boolean;
   sentryRelease?: string;
   sentryDist?: string;
-  sentryFlavor?: string;
 };
 
 type PublishBundlePayload = {
@@ -130,11 +129,6 @@ function normalizeBundleOptions(
       'sentry-dist',
       'sentryDist',
     ),
-    sentryFlavor: getAliasedOptionalStringOption(
-      translatedOptions,
-      'sentry-flavor',
-      'sentryFlavor',
-    ),
   };
 }
 
@@ -143,9 +137,8 @@ async function uploadSentryArtifactsIfNeeded(
   bundleName: string,
   intermediaDir: string,
   sourcemapOutput: string,
-  versionName: string,
   platform: Platform,
-  sentryOptions: SentryReleaseOptions,
+  sentryOptions: SentryUploadOptions,
 ): Promise<void> {
   if (!shouldUpload) {
     return;
@@ -156,7 +149,6 @@ async function uploadSentryArtifactsIfNeeded(
     bundleName,
     intermediaDir,
     sourcemapOutput,
-    versionName,
     platform,
     sentryOptions,
   );
@@ -233,7 +225,7 @@ export const bundleCommands = {
     await packBundle(path.resolve(normalized.intermediaDir), realOutput);
 
     if (normalized.name) {
-      const versionName = await publishBundleVersion(realOutput, platform, {
+      await publishBundleVersion(realOutput, platform, {
         name: normalized.name,
         description: normalized.description,
         metaInfo: normalized.metaInfo,
@@ -250,12 +242,10 @@ export const bundleCommands = {
         normalized.bundleName,
         normalized.intermediaDir,
         sourcemapOutput,
-        versionName,
         platform,
         {
           sentryRelease: normalized.sentryRelease,
           sentryDist: normalized.sentryDist,
-          sentryFlavor: normalized.sentryFlavor,
         },
       );
       return;
@@ -264,22 +254,16 @@ export const bundleCommands = {
     if (!getBooleanOption(options, 'no-interactive', false)) {
       const v = await question(t('uploadBundlePrompt'));
       if (v.toLowerCase() === 'y') {
-        const versionName = await publishBundleVersion(
-          realOutput,
-          platform,
-          {},
-        );
+        await publishBundleVersion(realOutput, platform, {});
         await uploadSentryArtifactsIfNeeded(
           bundleParams.sentry,
           normalized.bundleName,
           normalized.intermediaDir,
           sourcemapOutput,
-          versionName,
           platform,
           {
             sentryRelease: normalized.sentryRelease,
             sentryDist: normalized.sentryDist,
-            sentryFlavor: normalized.sentryFlavor,
           },
         );
       }

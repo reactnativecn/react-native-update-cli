@@ -9,10 +9,6 @@ import {
   spawnJavaScript,
   spawnJavaScriptSync,
 } from './utils/runtime';
-import {
-  resolveSentryReleaseAndDist,
-  type SentryReleaseOptions,
-} from './utils/sentry-release';
 
 const g2js = require('gradle-to-js/lib/parser');
 const properties = require('properties');
@@ -68,13 +64,30 @@ type BuildSentrySourcemapsUploadArgsOptions = {
   sentryCliPath: string;
   bundlePath: string;
   sourcemapPath: string;
-  release: string;
+  release?: string;
   dist?: string;
   stripPrefix?: string;
+  debugIdReference?: boolean;
   useStandaloneSourcemapsCommand?: boolean;
 };
 
 const ANDROID_SENTRY_BUNDLE_NAME = 'index.android.bundle';
+
+export interface SentryUploadOptions {
+  sentryRelease?: string;
+  sentryDist?: string;
+}
+
+type SentryUploadMode =
+  | {
+      type: 'debug-id';
+      debugId: string;
+    }
+  | {
+      type: 'release';
+      release: string;
+      dist?: string;
+    };
 
 export function hasProjectDependency(
   dependencyName: string,
@@ -397,6 +410,11 @@ function assertSuccessfulSyncProcess(
   }
 }
 
+function normalizeString(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
 export function resolveHermesCommand(projectRoot = process.cwd()): string {
   const osBin = getHermesOSBin();
   if (!osBin) {
@@ -612,6 +630,75 @@ export function prepareSentryUploadArtifacts(
   };
 }
 
+export function readSourcemapDebugId(
+  sourcemapPath: string,
+): string | undefined {
+  try {
+    const sourcemap = JSON.parse(
+      fs.readFileSync(sourcemapPath, 'utf8'),
+    ) as Record<string, unknown>;
+    const debugId = sourcemap.debugId ?? sourcemap.debug_id;
+    return typeof debugId === 'string' ? normalizeString(debugId) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveSentryReleaseFromValues(
+  releaseValue: string | undefined,
+  distValue: string | undefined,
+): { release: string; dist?: string } | undefined {
+  const release = normalizeString(releaseValue);
+  if (!release) {
+    return undefined;
+  }
+  return {
+    release,
+    dist: normalizeString(distValue),
+  };
+}
+
+export function resolveSentryUploadMode(
+  sourcemapPath: string,
+  options: SentryUploadOptions = {},
+): SentryUploadMode {
+  const optionRelease = resolveSentryReleaseFromValues(
+    options.sentryRelease,
+    options.sentryDist,
+  );
+  if (optionRelease) {
+    return {
+      type: 'release',
+      ...optionRelease,
+    };
+  }
+
+  const debugId = readSourcemapDebugId(sourcemapPath);
+  if (debugId) {
+    return {
+      type: 'debug-id',
+      debugId,
+    };
+  }
+
+  const environmentRelease = resolveSentryReleaseFromValues(
+    process.env.SENTRY_RELEASE,
+    process.env.SENTRY_DIST,
+  );
+  if (environmentRelease) {
+    return {
+      type: 'release',
+      ...environmentRelease,
+    };
+  }
+
+  throw new Error(
+    '[pushy/sentry] Generated source map does not contain a Debug ID. ' +
+      'Add @sentry/react-native/metro to metro.config.js so the OTA bundle can be matched by Debug ID, ' +
+      'or set --sentry-release/--sentry-dist (or SENTRY_RELEASE/SENTRY_DIST) for legacy release matching.',
+  );
+}
+
 export function buildSentrySourcemapsUploadArgs({
   sentryCliPath,
   bundlePath,
@@ -619,9 +706,31 @@ export function buildSentrySourcemapsUploadArgs({
   release,
   dist,
   stripPrefix = process.cwd(),
+  debugIdReference = false,
   useStandaloneSourcemapsCommand = true,
 }: BuildSentrySourcemapsUploadArgsOptions): string[] {
   const uploadArgs = ['--strip-prefix', stripPrefix, bundlePath, sourcemapPath];
+
+  if (debugIdReference) {
+    if (!useStandaloneSourcemapsCommand) {
+      throw new Error(
+        '[pushy/sentry] Debug ID upload requires sentry-cli sourcemaps upload.',
+      );
+    }
+    return [
+      sentryCliPath,
+      'sourcemaps',
+      'upload',
+      '--debug-id-reference',
+      ...uploadArgs,
+    ];
+  }
+
+  if (!release) {
+    throw new Error(
+      '[pushy/sentry] Legacy Sentry sourcemap upload requires a release.',
+    );
+  }
 
   if (!useStandaloneSourcemapsCommand) {
     return [
@@ -656,13 +765,70 @@ function supportsStandaloneSentrySourcemapsUpload(sentryCliPath: string) {
   return !result.error && result.status === 0;
 }
 
+function supportsSentryDebugIdReference(sentryCliPath: string) {
+  const result = spawnJavaScriptSync(
+    [sentryCliPath, 'sourcemaps', 'upload', '--help'],
+    {
+      encoding: 'utf8',
+    },
+  );
+  return (
+    !result.error &&
+    result.status === 0 &&
+    typeof result.stdout === 'string' &&
+    result.stdout.includes('--debug-id-reference')
+  );
+}
+
+function runSentryCli(args: string[]): SyncProcessResult {
+  return spawnJavaScriptSync(args, {
+    stdio: 'inherit',
+  });
+}
+
+function uploadSourcemapsWithRelease({
+  sentryCliPath,
+  bundlePath,
+  sourcemapPath,
+  release,
+  dist,
+  useStandaloneSourcemapsCommand,
+}: {
+  sentryCliPath: string;
+  bundlePath: string;
+  sourcemapPath: string;
+  release: string;
+  dist?: string;
+  useStandaloneSourcemapsCommand: boolean;
+}): void {
+  assertSuccessfulSyncProcess(
+    runSentryCli([sentryCliPath, 'releases', 'set-commits', release, '--auto']),
+    sentryCliPath,
+  );
+  console.log(t('sentryReleaseCreated', { version: release }));
+
+  console.log(t('uploadingSourcemap'));
+  assertSuccessfulSyncProcess(
+    runSentryCli(
+      buildSentrySourcemapsUploadArgs({
+        sentryCliPath,
+        bundlePath,
+        sourcemapPath,
+        release,
+        dist,
+        useStandaloneSourcemapsCommand,
+      }),
+    ),
+    sentryCliPath,
+  );
+}
+
 export async function uploadSourcemapForSentry(
   bundleName: string,
   outputFolder: string,
   sourcemapOutput: string,
-  version: string,
   platform = '',
-  sentryOptions: SentryReleaseOptions = {},
+  sentryOptions: SentryUploadOptions = {},
 ): Promise<void> {
   if (!sourcemapOutput) {
     return;
@@ -682,44 +848,98 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  const { release, dist } = await resolveSentryReleaseAndDist(
-    platform,
-    version,
-    sentryOptions,
-  );
   const { bundlePath, sourcemapPath } = prepareSentryUploadArtifacts(
     bundleName,
     outputFolder,
     platform,
   );
+  const uploadMode = resolveSentryUploadMode(sourcemapPath, sentryOptions);
+  const useStandaloneSourcemapsCommand =
+    supportsStandaloneSentrySourcemapsUpload(sentryCliPath);
 
-  assertSuccessfulSyncProcess(
-    spawnJavaScriptSync(
-      [sentryCliPath, 'releases', 'set-commits', release, '--auto'],
-      {
-        stdio: 'inherit',
-      },
-    ),
-    sentryCliPath,
-  );
-  console.log(t('sentryReleaseCreated', { version: release }));
+  if (uploadMode.type === 'release') {
+    uploadSourcemapsWithRelease({
+      sentryCliPath,
+      bundlePath,
+      sourcemapPath,
+      release: uploadMode.release,
+      dist: uploadMode.dist,
+      useStandaloneSourcemapsCommand,
+    });
+    return;
+  }
 
   console.log(t('uploadingSourcemap'));
-  assertSuccessfulSyncProcess(
-    spawnJavaScriptSync(
-      buildSentrySourcemapsUploadArgs({
-        sentryCliPath,
-        bundlePath,
-        sourcemapPath,
-        release,
-        dist,
-        useStandaloneSourcemapsCommand:
-          supportsStandaloneSentrySourcemapsUpload(sentryCliPath),
-      }),
-      {
-        stdio: 'inherit',
-      },
-    ),
-    sentryCliPath,
+  if (
+    !useStandaloneSourcemapsCommand ||
+    !supportsSentryDebugIdReference(sentryCliPath)
+  ) {
+    const explicitRelease =
+      resolveSentryReleaseFromValues(
+        sentryOptions.sentryRelease,
+        sentryOptions.sentryDist,
+      ) ??
+      resolveSentryReleaseFromValues(
+        process.env.SENTRY_RELEASE,
+        process.env.SENTRY_DIST,
+      );
+    if (!explicitRelease) {
+      throw new Error(
+        '[pushy/sentry] sentry-cli does not support Debug ID source map upload. ' +
+          'Upgrade @sentry/cli, or set --sentry-release/--sentry-dist for legacy release matching.',
+      );
+    }
+    uploadSourcemapsWithRelease({
+      sentryCliPath,
+      bundlePath,
+      sourcemapPath,
+      release: explicitRelease.release,
+      dist: explicitRelease.dist,
+      useStandaloneSourcemapsCommand,
+    });
+    return;
+  }
+
+  console.log(
+    `[pushy/sentry] Using source map Debug ID: ${uploadMode.debugId}`,
   );
+  const debugIdResult = runSentryCli(
+    buildSentrySourcemapsUploadArgs({
+      sentryCliPath,
+      bundlePath,
+      sourcemapPath,
+      debugIdReference: true,
+      useStandaloneSourcemapsCommand,
+    }),
+  );
+
+  if (debugIdResult.status === 0 && !debugIdResult.error) {
+    return;
+  }
+
+  const explicitRelease =
+    resolveSentryReleaseFromValues(
+      sentryOptions.sentryRelease,
+      sentryOptions.sentryDist,
+    ) ??
+    resolveSentryReleaseFromValues(
+      process.env.SENTRY_RELEASE,
+      process.env.SENTRY_DIST,
+    );
+  if (!explicitRelease) {
+    assertSuccessfulSyncProcess(debugIdResult, sentryCliPath);
+    return;
+  }
+
+  console.warn(
+    '[pushy/sentry] Debug ID source map upload failed; falling back to explicit release/dist upload.',
+  );
+  uploadSourcemapsWithRelease({
+    sentryCliPath,
+    bundlePath,
+    sourcemapPath,
+    release: explicitRelease.release,
+    dist: explicitRelease.dist,
+    useStandaloneSourcemapsCommand,
+  });
 }

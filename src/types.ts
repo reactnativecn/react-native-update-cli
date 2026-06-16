@@ -58,7 +58,6 @@ export interface BundleOptions {
   hermes?: boolean;
   sentryRelease?: string;
   sentryDist?: string;
-  sentryFlavor?: string;
 }
 
 export interface PublishOptions {

@@ -134,6 +134,24 @@ export PUSHY_REGISTRY=https://your-api-endpoint.com
 export NO_INTERACTIVE=true
 ```
 
+## Sentry Sourcemaps
+
+When `ios/sentry.properties` or `android/sentry.properties` exists, `bundle` uploads sourcemaps for OTA packages. The default matching path is Sentry Debug IDs; the CLI no longer infers release/dist from the native package.
+
+React Native projects should use `@sentry/react-native/metro` in `metro.config.js` so the generated bundle and sourcemap share the same Debug ID. For Hermes, the CLI copies the packager sourcemap Debug ID to the composed Hermes sourcemap and uploads with:
+
+```bash
+sentry-cli sourcemaps upload --debug-id-reference
+```
+
+For older self-hosted Sentry versions or older `@sentry/cli` versions without Debug ID support, pass explicit legacy release/dist values:
+
+```bash
+npx pushy bundle --platform android --name "4.1" --sentry-release "com.example@1.0.0+10+pushy:4.1" --sentry-dist "pushy:4.1"
+```
+
+In legacy mode, the app runtime must report exactly the same Sentry `release` and `dist` values.
+
 ## Configuration
 
 Create `update.json` in your React Native project:

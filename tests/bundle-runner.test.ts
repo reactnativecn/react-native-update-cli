@@ -6,8 +6,10 @@ import {
   buildSentrySourcemapsUploadArgs,
   hasProjectDependency,
   prepareSentryUploadArtifacts,
+  readSourcemapDebugId,
   resolveExpoCli,
   resolveHermesCommand,
+  resolveSentryUploadMode,
 } from '../src/bundle-runner';
 
 function mkTempDir(prefix: string): string {
@@ -207,13 +209,35 @@ describe('resolveHermesCommand', () => {
 });
 
 describe('buildSentrySourcemapsUploadArgs', () => {
-  test('uses the Sentry sourcemaps command supported by current CLI versions with dist', () => {
+  test('uses Debug ID references for current Sentry CLI versions', () => {
     const args = buildSentrySourcemapsUploadArgs({
       sentryCliPath: '/bin/sentry-cli',
       bundlePath: path.join('build/intermedia', 'index.android.bundle'),
       sourcemapPath: path.join('build/intermedia', 'index.android.bundle.map'),
-      release: 'com.example@1.0.0+10',
-      dist: '10',
+      debugIdReference: true,
+    });
+
+    expect(args).toEqual([
+      '/bin/sentry-cli',
+      'sourcemaps',
+      'upload',
+      '--debug-id-reference',
+      '--strip-prefix',
+      process.cwd(),
+      path.join('build/intermedia', 'index.android.bundle'),
+      path.join('build/intermedia', 'index.android.bundle.map'),
+    ]);
+    expect(args).not.toContain('--release');
+    expect(args).not.toContain('--dist');
+  });
+
+  test('keeps explicit release and dist for legacy upload fallback', () => {
+    const args = buildSentrySourcemapsUploadArgs({
+      sentryCliPath: '/bin/sentry-cli',
+      bundlePath: path.join('build/intermedia', 'index.android.bundle'),
+      sourcemapPath: path.join('build/intermedia', 'index.android.bundle.map'),
+      release: 'com.example@1.0.0+10+pushy:hash',
+      dist: 'pushy:hash',
     });
 
     expect(args).toEqual([
@@ -221,9 +245,9 @@ describe('buildSentrySourcemapsUploadArgs', () => {
       'sourcemaps',
       'upload',
       '--release',
-      'com.example@1.0.0+10',
+      'com.example@1.0.0+10+pushy:hash',
       '--dist',
-      '10',
+      'pushy:hash',
       '--strip-prefix',
       process.cwd(),
       path.join('build/intermedia', 'index.android.bundle'),
@@ -238,8 +262,8 @@ describe('buildSentrySourcemapsUploadArgs', () => {
       sentryCliPath: '/bin/sentry-cli',
       bundlePath: path.join('build/intermedia', 'index.android.bundle'),
       sourcemapPath: path.join('build/intermedia', 'index.android.bundle.map'),
-      release: 'com.example@1.0.0+10',
-      dist: '10',
+      release: 'com.example@1.0.0+10+pushy:hash',
+      dist: 'pushy:hash',
       useStandaloneSourcemapsCommand: false,
     });
 
@@ -247,15 +271,120 @@ describe('buildSentrySourcemapsUploadArgs', () => {
       '/bin/sentry-cli',
       'releases',
       'files',
-      'com.example@1.0.0+10',
+      'com.example@1.0.0+10+pushy:hash',
       'upload-sourcemaps',
       '--dist',
-      '10',
+      'pushy:hash',
       '--strip-prefix',
       process.cwd(),
       path.join('build/intermedia', 'index.android.bundle'),
       path.join('build/intermedia', 'index.android.bundle.map'),
     ]);
+  });
+});
+
+describe('Sentry Debug ID upload mode', () => {
+  let tempRoot = '';
+  let originalEnv: NodeJS.ProcessEnv;
+
+  beforeEach(() => {
+    tempRoot = mkTempDir('rn-update-sentry-debug-id-');
+    originalEnv = { ...process.env };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+    if (tempRoot && fs.existsSync(tempRoot)) {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('reads debugId from source maps', () => {
+    const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
+    writeJson(sourcemapPath, {
+      version: 3,
+      debugId: '85314830-023f-4cf1-a267-535f4e37bb17',
+    });
+
+    expect(readSourcemapDebugId(sourcemapPath)).toBe(
+      '85314830-023f-4cf1-a267-535f4e37bb17',
+    );
+  });
+
+  test('prefers Debug ID upload when the source map has a Debug ID', () => {
+    const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
+    writeJson(sourcemapPath, {
+      version: 3,
+      debug_id: '85314830-023f-4cf1-a267-535f4e37bb17',
+    });
+
+    expect(resolveSentryUploadMode(sourcemapPath)).toEqual({
+      type: 'debug-id',
+      debugId: '85314830-023f-4cf1-a267-535f4e37bb17',
+    });
+  });
+
+  test('uses explicit release and dist before Debug ID for legacy self-hosted fallback', () => {
+    const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
+    writeJson(sourcemapPath, {
+      version: 3,
+      debug_id: '85314830-023f-4cf1-a267-535f4e37bb17',
+    });
+
+    expect(
+      resolveSentryUploadMode(sourcemapPath, {
+        sentryRelease: 'com.example@1.0.0+10+pushy:4.1',
+        sentryDist: 'pushy:4.1',
+      }),
+    ).toEqual({
+      type: 'release',
+      release: 'com.example@1.0.0+10+pushy:4.1',
+      dist: 'pushy:4.1',
+    });
+  });
+
+  test('falls back to explicit release and dist when no Debug ID exists', () => {
+    const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
+    writeJson(sourcemapPath, {
+      version: 3,
+    });
+
+    expect(
+      resolveSentryUploadMode(sourcemapPath, {
+        sentryRelease: 'com.example@1.0.0+10+pushy:hash',
+        sentryDist: 'pushy:hash',
+      }),
+    ).toEqual({
+      type: 'release',
+      release: 'com.example@1.0.0+10+pushy:hash',
+      dist: 'pushy:hash',
+    });
+  });
+
+  test('uses SENTRY_RELEASE and SENTRY_DIST for legacy fallback', () => {
+    process.env.SENTRY_RELEASE = 'com.example@1.0.0+10+pushy:hash';
+    process.env.SENTRY_DIST = 'pushy:hash';
+    const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
+    writeJson(sourcemapPath, {
+      version: 3,
+    });
+
+    expect(resolveSentryUploadMode(sourcemapPath)).toEqual({
+      type: 'release',
+      release: 'com.example@1.0.0+10+pushy:hash',
+      dist: 'pushy:hash',
+    });
+  });
+
+  test('fails loudly when neither Debug ID nor explicit release is available', () => {
+    const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
+    writeJson(sourcemapPath, {
+      version: 3,
+    });
+
+    expect(() => resolveSentryUploadMode(sourcemapPath)).toThrow(
+      'Generated source map does not contain a Debug ID',
+    );
   });
 });
 

@@ -134,6 +134,24 @@ export PUSHY_REGISTRY=https://your-api-endpoint.com
 export NO_INTERACTIVE=true
 ```
 
+## Sentry Sourcemap
+
+当项目存在 `ios/sentry.properties` 或 `android/sentry.properties` 时，`bundle` 会为 OTA 包上传 sourcemap。默认使用 Sentry Debug ID 匹配，不再根据原生包推导 release/dist。
+
+React Native 项目需要在 `metro.config.js` 中接入 `@sentry/react-native/metro`，确保生成的 bundle 和 sourcemap 带有相同 Debug ID。Hermes 场景下 CLI 会把 packager sourcemap 的 Debug ID 复制到合成后的 Hermes sourcemap，并使用：
+
+```bash
+sentry-cli sourcemaps upload --debug-id-reference
+```
+
+旧版 self-hosted Sentry 或旧版 `@sentry/cli` 不支持 Debug ID 时，可以显式指定 legacy release/dist：
+
+```bash
+npx pushy bundle --platform android --name "4.1" --sentry-release "com.example@1.0.0+10+pushy:4.1" --sentry-dist "pushy:4.1"
+```
+
+这种 legacy 模式要求 App 运行时上报到 Sentry 的 `release` 和 `dist` 与上传参数完全一致。
+
 ## 配置文件
 
 在 React Native 项目中创建 `update.json`：
