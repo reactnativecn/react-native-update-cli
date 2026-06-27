@@ -48,7 +48,7 @@ interface DepsChangeSummary {
   changed: number;
 }
 
-function normalizeDeps(input: unknown): Deps | undefined {
+export function normalizeDeps(input: unknown): Deps | undefined {
   if (!input) {
     return undefined;
   }

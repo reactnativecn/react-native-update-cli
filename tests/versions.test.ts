@@ -15,7 +15,11 @@ import * as api from '../src/api';
 import * as app from '../src/app';
 import * as utils from '../src/utils';
 import * as git from '../src/utils/git';
-import { bindVersionToPackages, versionCommands } from '../src/versions';
+import {
+  bindVersionToPackages,
+  normalizeDeps,
+  versionCommands,
+} from '../src/versions';
 
 describe('bindVersionToPackages', () => {
   let consoleSpy: ReturnType<typeof spyOn>;
@@ -493,5 +497,62 @@ describe('rollout validation (via versionCommands.update)', () => {
   test('handles decimal strings', () => {
     // parseInt('33.7') returns 33
     expect(parseRollout('33.7')).toBe(33);
+  });
+});
+
+describe('normalizeDeps', () => {
+  test('returns undefined for falsy inputs', () => {
+    expect(normalizeDeps(undefined)).toBeUndefined();
+    expect(normalizeDeps(null)).toBeUndefined();
+    expect(normalizeDeps(false)).toBeUndefined();
+    expect(normalizeDeps('')).toBeUndefined();
+  });
+
+  test('handles string inputs', () => {
+    // Valid JSON object with string values
+    expect(normalizeDeps('{"react":"18.2.0","lodash":"4.17.21"}')).toEqual({
+      react: '18.2.0',
+      lodash: '4.17.21',
+    });
+
+    // Valid JSON but not an object (array)
+    expect(normalizeDeps('["react", "lodash"]')).toBeUndefined();
+
+    // Valid JSON but non-string values
+    expect(normalizeDeps('{"react": 18, "lodash": true}')).toBeUndefined();
+
+    // Invalid JSON
+    expect(normalizeDeps('invalid-json')).toBeUndefined();
+  });
+
+  test('handles object inputs', () => {
+    // Valid object
+    expect(normalizeDeps({ react: '18.2.0', lodash: '4.17.21' })).toEqual({
+      react: '18.2.0',
+      lodash: '4.17.21',
+    });
+
+    // Object with mixed values (ignores non-strings and empty strings)
+    expect(
+      normalizeDeps({
+        react: '18.2.0',
+        lodash: 4,
+        empty: '',
+        bool: true,
+        obj: {},
+      }),
+    ).toEqual({
+      react: '18.2.0',
+    });
+
+    // Empty object after filtering
+    expect(normalizeDeps({ number: 1, bool: true })).toBeUndefined();
+  });
+
+  test('returns undefined for invalid object types', () => {
+    // Array
+    expect(normalizeDeps(['react'])).toBeUndefined();
+    // Function
+    expect(normalizeDeps(() => {})).toBeUndefined();
   });
 });
