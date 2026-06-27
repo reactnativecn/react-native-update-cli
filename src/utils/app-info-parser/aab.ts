@@ -57,8 +57,8 @@ export class AabParser extends Zip {
       });
 
     // Create a temp file for the .apks output
-    const tempDir = os.tmpdir();
-    const tempApksPath = path.join(tempDir, `temp-${Date.now()}.apks`);
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bundletool-'));
+    const tempApksPath = path.join(tempDir, 'output.apks');
 
     const needsNpxDownload = async () => {
       try {
@@ -155,8 +155,8 @@ export class AabParser extends Zip {
       });
     } finally {
       // Cleanup
-      if (await fs.pathExists(tempApksPath)) {
-        await fs.remove(tempApksPath);
+      if (await fs.pathExists(tempDir)) {
+        await fs.remove(tempDir);
       }
     }
   }
