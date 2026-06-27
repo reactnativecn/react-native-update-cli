@@ -15,7 +15,6 @@ export const installCommands = {
     spawnSync(installCommand.command, installCommand.args, {
       cwd: cliDir,
       stdio: 'inherit',
-      shell: true,
     });
   },
 };
