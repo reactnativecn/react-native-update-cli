@@ -107,4 +107,10 @@ lib/
 .DS_Store
 # react-native-update
 .update
-.pushy
+.pushytest-output/
+test-output2/
+bench.ts
+bench2.ts
+test-output3/
+test-output4/
+bench-node.js

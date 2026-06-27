@@ -299,32 +299,32 @@ describe('Sentry Debug ID upload mode', () => {
     }
   });
 
-  test('reads debugId from source maps', () => {
+  test('reads debugId from source maps', async () => {
     const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
     writeJson(sourcemapPath, {
       version: 3,
       debugId: '85314830-023f-4cf1-a267-535f4e37bb17',
     });
 
-    expect(readSourcemapDebugId(sourcemapPath)).toBe(
+    expect(await readSourcemapDebugId(sourcemapPath)).toBe(
       '85314830-023f-4cf1-a267-535f4e37bb17',
     );
   });
 
-  test('prefers Debug ID upload when the source map has a Debug ID', () => {
+  test('prefers Debug ID upload when the source map has a Debug ID', async () => {
     const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
     writeJson(sourcemapPath, {
       version: 3,
       debug_id: '85314830-023f-4cf1-a267-535f4e37bb17',
     });
 
-    expect(resolveSentryUploadMode(sourcemapPath)).toEqual({
+    expect(await resolveSentryUploadMode(sourcemapPath)).toEqual({
       type: 'debug-id',
       debugId: '85314830-023f-4cf1-a267-535f4e37bb17',
     });
   });
 
-  test('uses explicit release and dist before Debug ID for legacy self-hosted fallback', () => {
+  test('uses explicit release and dist before Debug ID for legacy self-hosted fallback', async () => {
     const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
     writeJson(sourcemapPath, {
       version: 3,
@@ -332,7 +332,7 @@ describe('Sentry Debug ID upload mode', () => {
     });
 
     expect(
-      resolveSentryUploadMode(sourcemapPath, {
+      await resolveSentryUploadMode(sourcemapPath, {
         sentryRelease: 'com.example@1.0.0+10+pushy:4.1',
         sentryDist: 'pushy:4.1',
       }),
@@ -343,14 +343,14 @@ describe('Sentry Debug ID upload mode', () => {
     });
   });
 
-  test('falls back to explicit release and dist when no Debug ID exists', () => {
+  test('falls back to explicit release and dist when no Debug ID exists', async () => {
     const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
     writeJson(sourcemapPath, {
       version: 3,
     });
 
     expect(
-      resolveSentryUploadMode(sourcemapPath, {
+      await resolveSentryUploadMode(sourcemapPath, {
         sentryRelease: 'com.example@1.0.0+10+pushy:hash',
         sentryDist: 'pushy:hash',
       }),
@@ -361,7 +361,7 @@ describe('Sentry Debug ID upload mode', () => {
     });
   });
 
-  test('uses SENTRY_RELEASE and SENTRY_DIST for legacy fallback', () => {
+  test('uses SENTRY_RELEASE and SENTRY_DIST for legacy fallback', async () => {
     process.env.SENTRY_RELEASE = 'com.example@1.0.0+10+pushy:hash';
     process.env.SENTRY_DIST = 'pushy:hash';
     const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
@@ -369,20 +369,20 @@ describe('Sentry Debug ID upload mode', () => {
       version: 3,
     });
 
-    expect(resolveSentryUploadMode(sourcemapPath)).toEqual({
+    expect(await resolveSentryUploadMode(sourcemapPath)).toEqual({
       type: 'release',
       release: 'com.example@1.0.0+10+pushy:hash',
       dist: 'pushy:hash',
     });
   });
 
-  test('fails loudly when neither Debug ID nor explicit release is available', () => {
+  test('fails loudly when neither Debug ID nor explicit release is available', async () => {
     const sourcemapPath = path.join(tempRoot, 'index.bundlejs.map');
     writeJson(sourcemapPath, {
       version: 3,
     });
 
-    expect(() => resolveSentryUploadMode(sourcemapPath)).toThrow(
+    await expect(resolveSentryUploadMode(sourcemapPath)).rejects.toThrow(
       'Generated source map does not contain a Debug ID',
     );
   });
@@ -401,7 +401,7 @@ describe('prepareSentryUploadArtifacts', () => {
     }
   });
 
-  test('aliases Android OTA bundles to the default Android bundle name', () => {
+  test('aliases Android OTA bundles to the default Android bundle name', async () => {
     _writeFile(path.join(tempRoot, 'index.bundlejs'), 'bundle');
     writeJson(path.join(tempRoot, 'index.bundlejs.map'), {
       version: 3,
@@ -409,7 +409,7 @@ describe('prepareSentryUploadArtifacts', () => {
       sources: ['src/App.tsx'],
     });
 
-    const artifacts = prepareSentryUploadArtifacts(
+    const artifacts = await prepareSentryUploadArtifacts(
       'index.bundlejs',
       tempRoot,
       'android',
@@ -429,8 +429,8 @@ describe('prepareSentryUploadArtifacts', () => {
     });
   });
 
-  test('keeps non-Android artifacts unchanged', () => {
-    const artifacts = prepareSentryUploadArtifacts(
+  test('keeps non-Android artifacts unchanged', async () => {
+    const artifacts = await prepareSentryUploadArtifacts(
       'index.bundlejs',
       tempRoot,
       'ios',
