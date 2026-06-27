@@ -596,11 +596,11 @@ export async function copyDebugidForSentry(
   fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
 }
 
-export function prepareSentryUploadArtifacts(
+export async function prepareSentryUploadArtifacts(
   bundleName: string,
   outputFolder: string,
   platform: string,
-): SentryUploadArtifacts {
+): Promise<SentryUploadArtifacts> {
   const bundlePath = path.join(outputFolder, bundleName);
   const sourcemapPath = path.join(outputFolder, `${bundleName}.map`);
 
@@ -616,13 +616,13 @@ export function prepareSentryUploadArtifacts(
     outputFolder,
     `${ANDROID_SENTRY_BUNDLE_NAME}.map`,
   );
-  fs.copyFileSync(bundlePath, androidBundlePath);
+  await fs.promises.copyFile(bundlePath, androidBundlePath);
 
   const sourcemap = JSON.parse(
-    fs.readFileSync(sourcemapPath, 'utf8'),
+    await fs.promises.readFile(sourcemapPath, 'utf8'),
   ) as Record<string, unknown>;
   sourcemap.file = ANDROID_SENTRY_BUNDLE_NAME;
-  fs.writeFileSync(androidSourcemapPath, JSON.stringify(sourcemap));
+  await fs.promises.writeFile(androidSourcemapPath, JSON.stringify(sourcemap));
 
   return {
     bundlePath: androidBundlePath,
@@ -630,12 +630,12 @@ export function prepareSentryUploadArtifacts(
   };
 }
 
-export function readSourcemapDebugId(
+export async function readSourcemapDebugId(
   sourcemapPath: string,
-): string | undefined {
+): Promise<string | undefined> {
   try {
     const sourcemap = JSON.parse(
-      fs.readFileSync(sourcemapPath, 'utf8'),
+      await fs.promises.readFile(sourcemapPath, 'utf8'),
     ) as Record<string, unknown>;
     const debugId = sourcemap.debugId ?? sourcemap.debug_id;
     return typeof debugId === 'string' ? normalizeString(debugId) : undefined;
@@ -658,10 +658,10 @@ function resolveSentryReleaseFromValues(
   };
 }
 
-export function resolveSentryUploadMode(
+export async function resolveSentryUploadMode(
   sourcemapPath: string,
   options: SentryUploadOptions = {},
-): SentryUploadMode {
+): Promise<SentryUploadMode> {
   const optionRelease = resolveSentryReleaseFromValues(
     options.sentryRelease,
     options.sentryDist,
@@ -673,7 +673,7 @@ export function resolveSentryUploadMode(
     };
   }
 
-  const debugId = readSourcemapDebugId(sourcemapPath);
+  const debugId = await readSourcemapDebugId(sourcemapPath);
   if (debugId) {
     return {
       type: 'debug-id',
@@ -848,12 +848,15 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  const { bundlePath, sourcemapPath } = prepareSentryUploadArtifacts(
+  const { bundlePath, sourcemapPath } = await prepareSentryUploadArtifacts(
     bundleName,
     outputFolder,
     platform,
   );
-  const uploadMode = resolveSentryUploadMode(sourcemapPath, sentryOptions);
+  const uploadMode = await resolveSentryUploadMode(
+    sourcemapPath,
+    sentryOptions,
+  );
   const useStandaloneSourcemapsCommand =
     supportsStandaloneSentrySourcemapsUpload(sentryCliPath);
 
