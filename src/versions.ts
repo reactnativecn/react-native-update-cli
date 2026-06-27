@@ -588,6 +588,10 @@ export const versionCommands = {
       throw new Error(t('noPackagesFound', { appId }));
     }
 
+    const pkgMap = new Map(
+      allPkgs.map((pkg: Package) => [String(pkg.id), pkg]),
+    );
+
     let pkgsToBind: Package[] = [];
 
     if (minPkgVersion) {
@@ -641,9 +645,7 @@ export const versionCommands = {
       if (!pkgId) {
         throw new Error(t('packageIdRequired'));
       }
-      const pkg = allPkgs.find(
-        (pkg: Package) => String(pkg.id) === String(pkgId),
-      );
+      const pkg = pkgMap.get(String(pkgId));
       if (pkg) {
         pkgsToBind = [pkg];
       } else {
