@@ -41,7 +41,10 @@ type DiffCommandConfig = {
 export { enumZipEntries, readEntry };
 
 const loadModule = <T>(pkgName: string): T | undefined => {
-  const resolvePaths = ['.', npm.packages, yarn.packages];
+  const nodePathDirs = (process.env.NODE_PATH || '')
+    .split(path.delimiter)
+    .filter(Boolean);
+  const resolvePaths = ['.', ...nodePathDirs, npm.packages, yarn.packages];
 
   try {
     const resolved = require.resolve(pkgName, { paths: resolvePaths });
