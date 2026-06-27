@@ -375,10 +375,10 @@ export const packageCommands = {
         throw new Error(t('noPackagesFound', { appId }));
       }
 
+      const allPkgsMap = new Map(allPkgs.map((pkg) => [pkg.name, pkg]));
+
       packageIds = packageVersions.map((packageVersion) => {
-        const selectedPackage = allPkgs.find(
-          (pkg) => pkg.name === packageVersion,
-        );
+        const selectedPackage = allPkgsMap.get(packageVersion);
         if (!selectedPackage) {
           throw new Error(t('packageNotFound', { packageVersion }));
         }
