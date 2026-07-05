@@ -70,7 +70,7 @@ function getAliasedOptionalStringOption(
   );
 }
 
-function normalizeBundleOptions(
+export function normalizeBundleOptions(
   translatedOptions: Record<string, unknown>,
   platform: string,
 ): NormalizedBundleOptions {

@@ -110,4 +110,24 @@ describe('bundle-pack', () => {
     expect(compressionMethods['assets/image-without-extension']).toBe(0);
     expect(compressionMethods['assets/hermes-misnamed.png']).toBe(8);
   });
+
+  test('excludes sourcemap derived from a custom bundleName', async () => {
+    const sourceDir = path.join(tempRoot, 'bundle');
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.writeFileSync(path.join(sourceDir, 'custom.bundle'), 'bundle');
+    fs.writeFileSync(path.join(sourceDir, 'custom.bundle.map'), 'map');
+
+    const withName = path.join(tempRoot, 'with-name.ppk');
+    await packBundle(sourceDir, withName, 'custom.bundle');
+    const withNameInfo = await readZipEntryInfo(withName);
+    expect(withNameInfo.entries).toContain('custom.bundle');
+    expect(withNameInfo.entries).not.toContain('custom.bundle.map');
+
+    // without bundleName the custom map is not excluded
+    const withoutName = path.join(tempRoot, 'without-name.ppk');
+    await packBundle(sourceDir, withoutName);
+    expect((await readZipEntryInfo(withoutName)).entries).toContain(
+      'custom.bundle.map',
+    );
+  });
 });
