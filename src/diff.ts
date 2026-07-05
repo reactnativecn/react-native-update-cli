@@ -182,6 +182,7 @@ async function diffFromPPK(
             entry.fileName,
             zipOptionsForPayloadEntry(entry.fileName, entryPrefix),
           );
+          readStream.on('error', reject);
           readStream.on('end', () => {
             //console.log('add finished');
             resolve(void 0);
@@ -318,6 +319,7 @@ async function diffFromPackage(
             entry.fileName,
             zipOptionsForPayloadEntry(entry.fileName, entryPrefix),
           );
+          readStream.on('error', reject);
           readStream.on('end', () => {
             //console.log('add finished');
             resolve(void 0);

@@ -243,7 +243,7 @@ describe('CLI e2e', () => {
       },
     });
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     expect(result.stdout).toContain('尚未登录');
     expect(result.stderr).toBe('');
     expect(requests).toContain('GET /api/app/list');

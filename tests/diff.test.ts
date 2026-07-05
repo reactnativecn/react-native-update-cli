@@ -350,6 +350,22 @@ describe('diff commands', () => {
     expect(prefix).toEqual(payload.subarray(0, 64));
   });
 
+  test('enumZipEntries rejects when the entry callback throws', async () => {
+    const zipPath = path.join(tempRoot, 'callback-error.ppk');
+    await createZip(zipPath, {
+      'index.bundlejs': 'bundle',
+      'assets/a.txt': 'a',
+    });
+
+    await expect(
+      enumZipEntries(zipPath, async (entry) => {
+        if (entry.fileName === 'assets/a.txt') {
+          throw new Error('entry processing failed');
+        }
+      }),
+    ).rejects.toThrow('entry processing failed');
+  });
+
   test('hdiffFromApk throws when origin package bundle is missing', async () => {
     const originPath = path.join(tempRoot, 'origin-missing-bundle.apk');
     const nextPath = path.join(tempRoot, 'next-for-apk.ppk');

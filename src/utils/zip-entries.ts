@@ -152,6 +152,7 @@ export async function enumZipEntries(
                 zipfile.openReadStream(entry, async (err, readStream) => {
                   if (err) return rej(err);
                   const writeStream = fs.createWriteStream(tempZipPath);
+                  readStream.on('error', rej);
                   readStream.pipe(writeStream);
                   writeStream.on('finish', () => res(void 0));
                   writeStream.on('error', rej);
@@ -169,6 +170,9 @@ export async function enumZipEntries(
             }
           } catch (error) {
             console.error(t('processingError', { error }));
+            zipfile.close();
+            reject(error);
+            return;
           }
 
           zipfile.readEntry();

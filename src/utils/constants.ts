@@ -1,6 +1,10 @@
 import path from 'path';
 
-export const scriptName = path.basename(process.argv[1]) as 'cresc' | 'pushy';
+export const scriptName =
+  process.env.RNU_BRAND === 'cresc' ||
+  path.basename(process.argv[1] ?? '') === 'cresc'
+    ? 'cresc'
+    : 'pushy';
 export const IS_CRESC = scriptName === 'cresc';
 
 export const ppkBundleFileNames = ['index.bundlejs', 'bundle.harmony.js'];

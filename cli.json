@@ -221,9 +221,6 @@
         }
       }
     },
-    "build": {
-      "description": "Bundle javascript and copy assets."
-    },
     "bundle": {
       "description": "Bundle javascript code only and optionally publish.",
       "options": {
@@ -315,9 +312,6 @@
           "description": "Sentry dist for source map upload"
         }
       }
-    },
-    "release": {
-      "description": "Push builded file to server."
     },
     "hdiff": {
       "description": "Create hdiff patch",

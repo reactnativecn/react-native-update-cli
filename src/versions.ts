@@ -384,7 +384,7 @@ async function chooseVersion(appId: string) {
       default: {
         const versionId = Number.parseInt(cmd, 10);
         const v = data.find(
-          (version: Version) => version.id === String(versionId),
+          (version: Version) => String(version.id) === String(versionId),
         );
         if (v) {
           return v;
@@ -413,6 +413,7 @@ export const bindVersionToPackages = async ({
   if (rollout !== undefined) {
     console.log(
       `${t('rolloutConfigSet', {
+        version: versionId,
         versions: pkgs.map((pkg: Package) => pkg.name).join(', '),
         rollout: rollout,
       })}`,
@@ -664,7 +665,8 @@ export const versionCommands = {
 
     await bindVersionToPackages({
       appId: String(appId),
-      versionId: String(versionId),
+      // keep null as-is: `--versionId null` means unbinding the version
+      versionId: versionId ?? null,
       pkgs: pkgsToBind,
       rollout,
       dryRun: options.dryRun,

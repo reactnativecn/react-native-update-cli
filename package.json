@@ -6,7 +6,7 @@
   "types": "lib/exports.d.ts",
   "bin": {
     "pushy": "lib/bin.js",
-    "cresc": "lib/bin.js"
+    "cresc": "lib/bin-cresc.js"
   },
   "exports": {
     ".": {
@@ -32,7 +32,7 @@
     "cli.json"
   ],
   "scripts": {
-    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && bun run typecheck:build && chmod +x lib/bin.js",
+    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && bun run typecheck:build && chmod +x lib/bin.js lib/bin-cresc.js",
     "prepublishOnly": "bun run build",
     "typecheck": "tsc --noEmit",
     "typecheck:build": "tsc -p tsconfig.build.json",
@@ -87,7 +87,7 @@
     "@xmldom/xmldom": "0.8.13"
   },
   "engines": {
-    "node": ">= 16.6.0"
+    "node": ">= 18.17.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.12",

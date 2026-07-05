@@ -83,10 +83,10 @@ async function run() {
   } catch (err: any) {
     if (err.status === 401) {
       console.log(t('loginFirst'));
-      return;
+      process.exit(1);
     }
     console.error(err.stack);
-    process.exit(-1);
+    process.exit(1);
   }
 }
 
