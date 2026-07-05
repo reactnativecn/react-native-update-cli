@@ -1,6 +1,7 @@
 import * as fs from 'fs-extra';
 import { npm, yarn } from 'global-dirs';
 import path from 'path';
+import type { Entry, ZipFile as YauzlZipFile } from 'yauzl';
 import { ZipFile as YazlZipFile } from 'yazl';
 import type { CommandContext } from './types';
 import { translateOptions } from './utils';
@@ -61,14 +62,85 @@ function basename(fn: string): string | undefined {
   return m?.[1];
 }
 
+function createOutputZip(output: string) {
+  fs.ensureDirSync(path.dirname(output));
+  const zipfile = new YazlZipFile();
+  const writePromise = new Promise<void>((resolve, reject) => {
+    zipfile.outputStream.on('error', reject);
+    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
+      resolve(void 0);
+    });
+  });
+  return { zipfile, writePromise };
+}
+
+async function addBundlePatch(
+  zipfile: YazlZipFile,
+  entry: Entry,
+  nextZipfile: YauzlZipFile,
+  diffFn: Diff,
+  originSource: Buffer | undefined,
+) {
+  const newSource = await readEntry(entry, nextZipfile);
+  zipfile.addBuffer(
+    diffFn(originSource, newSource),
+    `${entry.fileName}.patch`,
+    zipOptionsForPatchEntry(),
+  );
+}
+
+async function addFileFromZipEntry(
+  zipfile: YazlZipFile,
+  entry: Entry,
+  nextZipfile: YauzlZipFile,
+) {
+  const entryPrefix = await readEntryPrefix(
+    entry,
+    nextZipfile,
+    ZIP_ENTRY_SNIFF_BYTES,
+  );
+  await new Promise<void>((resolve, reject) => {
+    nextZipfile.openReadStream(entry, (err, readStream) => {
+      if (err) {
+        return reject(err);
+      }
+      if (!readStream) {
+        return reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
+      }
+      zipfile.addReadStream(
+        readStream,
+        entry.fileName,
+        zipOptionsForPayloadEntry(entry.fileName, entryPrefix),
+      );
+      readStream.on('error', reject);
+      readStream.on('end', () => {
+        resolve(void 0);
+      });
+    });
+  });
+}
+
+function finishDiffZip(
+  zipfile: YazlZipFile,
+  writePromise: Promise<void>,
+  manifest: Record<string, unknown>,
+) {
+  const diffManifest = Buffer.from(JSON.stringify(manifest));
+  zipfile.addBuffer(
+    diffManifest,
+    '__diff.json',
+    zipOptionsForManifestEntry(diffManifest.length),
+  );
+  zipfile.end();
+  return writePromise;
+}
+
 async function diffFromPPK(
   origin: string,
   next: string,
   output: string,
   diffFn: Diff,
 ) {
-  fs.ensureDirSync(path.dirname(output));
-
   const originEntries: EntryMap = {};
   const originMap: CrcMap = {};
 
@@ -93,14 +165,7 @@ async function diffFromPPK(
 
   const copies: CopyMap = {};
 
-  const zipfile = new YazlZipFile();
-
-  const writePromise = new Promise<void>((resolve, reject) => {
-    zipfile.outputStream.on('error', reject);
-    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
-      resolve(void 0);
-    });
-  });
+  const { zipfile, writePromise } = createOutputZip(output);
 
   const addedEntry: Record<string, true> = {};
 
@@ -128,15 +193,7 @@ async function diffFromPPK(
         addEntry(entry.fileName);
       }
     } else if (isPPKBundleFileName(entry.fileName)) {
-      //console.log('Found bundle');
-      const newSource = await readEntry(entry, nextZipfile);
-      //console.log('Begin diff');
-      zipfile.addBuffer(
-        diffFn(originSource, newSource),
-        `${entry.fileName}.patch`,
-        zipOptionsForPatchEntry(),
-      );
-      //console.log('End diff');
+      await addBundlePatch(zipfile, entry, nextZipfile, diffFn, originSource);
     } else {
       // If same file.
       const originEntry = originEntries[entry.fileName];
@@ -162,33 +219,7 @@ async function diffFromPPK(
         addEntry(basePath);
       }
 
-      const entryPrefix = await readEntryPrefix(
-        entry,
-        nextZipfile,
-        ZIP_ENTRY_SNIFF_BYTES,
-      );
-      await new Promise<void>((resolve, reject) => {
-        nextZipfile.openReadStream(entry, (err, readStream) => {
-          if (err) {
-            return reject(err);
-          }
-          if (!readStream) {
-            return reject(
-              new Error(`Unable to read zip entry: ${entry.fileName}`),
-            );
-          }
-          zipfile.addReadStream(
-            readStream,
-            entry.fileName,
-            zipOptionsForPayloadEntry(entry.fileName, entryPrefix),
-          );
-          readStream.on('error', reject);
-          readStream.on('end', () => {
-            //console.log('add finished');
-            resolve(void 0);
-          });
-        });
-      });
+      await addFileFromZipEntry(zipfile, entry, nextZipfile);
     }
   });
 
@@ -201,15 +232,7 @@ async function diffFromPPK(
     }
   }
 
-  //console.log({copies, deletes});
-  const diffManifest = Buffer.from(JSON.stringify({ copies, deletes }));
-  zipfile.addBuffer(
-    diffManifest,
-    '__diff.json',
-    zipOptionsForManifestEntry(diffManifest.length),
-  );
-  zipfile.end();
-  await writePromise;
+  await finishDiffZip(zipfile, writePromise, { copies, deletes });
 }
 
 async function diffFromPackage(
@@ -220,8 +243,6 @@ async function diffFromPackage(
   originBundleName: string,
   transformPackagePath: (v: string) => string | undefined = (v: string) => v,
 ) {
-  fs.ensureDirSync(path.dirname(output));
-
   const originEntries: Record<string, number> = {};
   const originMap: CrcMap = {};
 
@@ -259,29 +280,14 @@ async function diffFromPackage(
 
   const copies: CopyMap = {};
 
-  const zipfile = new YazlZipFile();
-
-  const writePromise = new Promise<void>((resolve, reject) => {
-    zipfile.outputStream.on('error', reject);
-    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
-      resolve(void 0);
-    });
-  });
+  const { zipfile, writePromise } = createOutputZip(output);
 
   await enumZipEntries(next, async (entry, nextZipfile) => {
     if (/\/$/.test(entry.fileName)) {
       // Directory
       zipfile.addEmptyDirectory(entry.fileName);
     } else if (isPPKBundleFileName(entry.fileName)) {
-      //console.log('Found bundle');
-      const newSource = await readEntry(entry, nextZipfile);
-      //console.log('Begin diff');
-      zipfile.addBuffer(
-        diffFn(originSource, newSource),
-        `${entry.fileName}.patch`,
-        zipOptionsForPatchEntry(),
-      );
-      //console.log('End diff');
+      await addBundlePatch(zipfile, entry, nextZipfile, diffFn, originSource);
     } else {
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
@@ -299,44 +305,11 @@ async function diffFromPackage(
         return;
       }
 
-      const entryPrefix = await readEntryPrefix(
-        entry,
-        nextZipfile,
-        ZIP_ENTRY_SNIFF_BYTES,
-      );
-      await new Promise<void>((resolve, reject) => {
-        nextZipfile.openReadStream(entry, (err, readStream) => {
-          if (err) {
-            return reject(err);
-          }
-          if (!readStream) {
-            return reject(
-              new Error(`Unable to read zip entry: ${entry.fileName}`),
-            );
-          }
-          zipfile.addReadStream(
-            readStream,
-            entry.fileName,
-            zipOptionsForPayloadEntry(entry.fileName, entryPrefix),
-          );
-          readStream.on('error', reject);
-          readStream.on('end', () => {
-            //console.log('add finished');
-            resolve(void 0);
-          });
-        });
-      });
+      await addFileFromZipEntry(zipfile, entry, nextZipfile);
     }
   });
 
-  const diffManifest = Buffer.from(JSON.stringify({ copies, copiesCrc }));
-  zipfile.addBuffer(
-    diffManifest,
-    '__diff.json',
-    zipOptionsForManifestEntry(diffManifest.length),
-  );
-  zipfile.end();
-  await writePromise;
+  await finishDiffZip(zipfile, writePromise, { copies, copiesCrc });
 }
 
 type DiffCommandOptions = {

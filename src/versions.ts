@@ -563,7 +563,7 @@ export const versionCommands = {
       if (nonInteractive) {
         throw new Error(t('versionIdRequired'));
       }
-      versionId = (await chooseVersion(String(appId))).id;
+      versionId = String((await chooseVersion(String(appId))).id);
     }
     if (versionId === 'null') {
       versionId = null;
@@ -640,7 +640,7 @@ export const versionCommands = {
         if (nonInteractive) {
           throw new Error(t('packageIdRequired'));
         }
-        pkgId = (await choosePackage(String(appId))).id;
+        pkgId = String((await choosePackage(String(appId))).id);
       }
 
       if (!pkgId) {
@@ -693,7 +693,7 @@ export const versionCommands = {
       if (nonInteractive) {
         throw new Error(t('versionIdRequired'));
       }
-      versionId = (await chooseVersion(String(appId))).id;
+      versionId = String((await chooseVersion(String(appId))).id);
     }
 
     const updateParams: Record<string, string> = {};
@@ -721,7 +721,7 @@ export const versionCommands = {
       if (nonInteractive) {
         throw new Error(t('versionIdRequired'));
       }
-      versionIds = [(await chooseVersion(String(appId))).id];
+      versionIds = [String((await chooseVersion(String(appId))).id)];
     }
 
     try {

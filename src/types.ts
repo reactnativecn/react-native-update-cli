@@ -10,7 +10,8 @@ export interface Session {
 export type Platform = 'ios' | 'android' | 'harmony';
 
 export interface Package {
-  id: string;
+  // server-side ids are numeric (auto-increment primary keys)
+  id: number;
   name: string;
   version?: string;
   status?: string;
@@ -22,7 +23,7 @@ export interface Package {
 }
 
 export interface Version {
-  id: string;
+  id: number;
   hash: string;
   name: string;
   packages?: Package[];
