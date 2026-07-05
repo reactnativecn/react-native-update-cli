@@ -37,20 +37,33 @@ export class Zip {
   async getEntryFromHarmonyApp(
     regex: RegExp,
   ): Promise<Buffer | Blob | undefined> {
+    return (await this.getEntriesFromHarmonyApp([regex]))[0];
+  }
+
+  /**
+   * Read multiple entries in a single pass over the archive (including
+   * nested .hap extraction), instead of one full scan per entry.
+   * Returns buffers in the same order as the given regexps.
+   */
+  async getEntriesFromHarmonyApp(
+    regexps: RegExp[],
+  ): Promise<(Buffer | undefined)[]> {
+    const results: (Buffer | undefined)[] = new Array(regexps.length);
     try {
-      let originSource: Buffer | Blob | undefined;
       if (typeof this.file !== 'string') {
         throw new Error('Param error: [file] must be file path in Node.');
       }
       await enumZipEntries(this.file, async (entry, zipFile) => {
-        if (regex.test(entry.fileName)) {
-          originSource = await readEntry(entry, zipFile);
+        for (let i = 0; i < regexps.length; i++) {
+          if (regexps[i].test(entry.fileName)) {
+            results[i] = await readEntry(entry, zipFile);
+          }
         }
       });
-      return originSource;
     } catch (error) {
-      console.error('Error in getEntryFromHarmonyApp:', error);
+      console.error('Error in getEntriesFromHarmonyApp:', error);
     }
+    return results;
   }
 
   private async readEntries(

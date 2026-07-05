@@ -145,6 +145,40 @@ suffix`,
     expect((buf as Buffer).toString()).toBe('{"harmony": true}');
   });
 
+  test('getEntriesFromHarmonyApp reads multiple entries in one pass', async () => {
+    const zipPath = path.join(tempRoot, 'app.zip');
+    await writeZip(zipPath, {
+      'rawfile/bundle.harmony.js': 'bundle',
+      'rawfile/update.json': '{"harmony":{}}',
+      'other.txt': 'ignore',
+    });
+
+    const zip = new Zip(zipPath);
+
+    const [bundle, updateJson, missing] = await zip.getEntriesFromHarmonyApp([
+      /rawfile\/bundle.harmony.js/,
+      /rawfile\/update.json/,
+      /rawfile\/meta.json/,
+    ]);
+    expect((bundle as Buffer).toString()).toBe('bundle');
+    expect((updateJson as Buffer).toString()).toBe('{"harmony":{}}');
+    expect(missing).toBeUndefined();
+  });
+
+  test('getEntry matches case-sensitive regex against original entry name', async () => {
+    const zipPath = path.join(tempRoot, 'app.zip');
+    await writeZip(zipPath, {
+      'base/manifest/AndroidManifest.xml': 'aab manifest',
+    });
+
+    // regex with uppercase letters used to never match because only the
+    // lowercased entry name was tested
+    const buf = await new Zip(zipPath).getEntry(
+      /^base\/manifest\/AndroidManifest\.xml$/,
+    );
+    expect((buf as Buffer).toString()).toBe('aab manifest');
+  });
+
   test('constructor resolves path for string input', () => {
     const relPath = 'some/relative/path.zip';
     const zip = new Zip(relPath);

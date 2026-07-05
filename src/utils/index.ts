@@ -139,11 +139,17 @@ export function translateOptions<T extends Record<string, unknown>>(
   return result as T;
 }
 
+const ApkBundleFileName = /assets\/index.android.bundle/;
+const ApkUpdateJsonName = /res\/raw\/update.json/;
+
 export async function getApkInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);
-  const bundleFile = await appInfoParser.parser.getEntry(
-    /assets\/index.android.bundle/,
-  );
+  // read both entries in a single scan over the archive
+  const entries = await appInfoParser.parser.getEntries([
+    ApkBundleFileName,
+    ApkUpdateJsonName,
+  ]);
+  const bundleFile = entries[String(ApkBundleFileName)];
   if (!bundleFile) {
     throw new Error(
       t('bundleNotFound', {
@@ -152,9 +158,7 @@ export async function getApkInfo(fn: string) {
       }),
     );
   }
-  const updateJsonFile = await appInfoParser.parser.getEntry(
-    /res\/raw\/update.json/,
-  );
+  const updateJsonFile = entries[String(ApkUpdateJsonName)];
   let appCredential = {};
   if (updateJsonFile) {
     appCredential = JSON.parse(updateJsonFile.toString()).android;
@@ -182,9 +186,13 @@ export async function getApkInfo(fn: string) {
 
 export async function getAppInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);
-  const bundleFile = await appInfoParser.parser.getEntryFromHarmonyApp(
-    /rawfile\/bundle.harmony.js/,
-  );
+  // single scan (and single nested .hap extraction) for all three entries
+  const [bundleFile, updateJsonFile, metaJsonFile] =
+    await appInfoParser.parser.getEntriesFromHarmonyApp([
+      /rawfile\/bundle.harmony.js/,
+      /rawfile\/update.json/,
+      /rawfile\/meta.json/,
+    ]);
   if (!bundleFile) {
     throw new Error(
       t('bundleNotFound', {
@@ -193,14 +201,10 @@ export async function getAppInfo(fn: string) {
       }),
     );
   }
-  const updateJsonFile =
-    await appInfoParser.parser.getEntryFromHarmonyApp(/rawfile\/update.json/);
   let appCredential = {};
   if (updateJsonFile) {
     appCredential = JSON.parse(updateJsonFile.toString()).harmony;
   }
-  const metaJsonFile =
-    await appInfoParser.parser.getEntryFromHarmonyApp(/rawfile\/meta.json/);
   let metaData: ParsedAppMetaInfo = {};
   if (metaJsonFile) {
     metaData = JSON.parse(metaJsonFile.toString()) as ParsedAppMetaInfo;
@@ -216,11 +220,23 @@ export async function getAppInfo(fn: string) {
   return { versionName, buildTime, ...appCredential };
 }
 
+const IpaBundleFileName = /payload\/.+?\.app\/main.jsbundle/;
+const IpaUpdateJsonName = /payload\/.+?\.app\/assets\/update.json/;
+const IpaBuildTimeName = /payload\/.+?\.app\/pushy_build_time.txt/;
+// Not in root bundle when use `use_frameworks`
+const IpaBuildTimeFrameworkName =
+  /payload\/.+?\.app\/frameworks\/react_native_update.framework\/pushy_build_time.txt/;
+
 export async function getIpaInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);
-  const bundleFile = await appInfoParser.parser.getEntry(
-    /payload\/.+?\.app\/main.jsbundle/,
-  );
+  // read all four entries in a single scan over the archive
+  const entries = await appInfoParser.parser.getEntries([
+    IpaBundleFileName,
+    IpaUpdateJsonName,
+    IpaBuildTimeName,
+    IpaBuildTimeFrameworkName,
+  ]);
+  const bundleFile = entries[String(IpaBundleFileName)];
   if (!bundleFile) {
     throw new Error(
       t('bundleNotFound', {
@@ -229,24 +245,16 @@ export async function getIpaInfo(fn: string) {
       }),
     );
   }
-  const updateJsonFile = await appInfoParser.parser.getEntry(
-    /payload\/.+?\.app\/assets\/update.json/,
-  );
+  const updateJsonFile = entries[String(IpaUpdateJsonName)];
   let appCredential = {};
   if (updateJsonFile) {
     appCredential = JSON.parse(updateJsonFile.toString()).ios;
   }
   const { CFBundleShortVersionString: versionName } =
     await appInfoParser.parse<ParsedIpaInfo>();
-  let buildTimeTxtBuffer = await appInfoParser.parser.getEntry(
-    /payload\/.+?\.app\/pushy_build_time.txt/,
-  );
-  if (!buildTimeTxtBuffer) {
-    // Not in root bundle when use `use_frameworks`
-    buildTimeTxtBuffer = await appInfoParser.parser.getEntry(
-      /payload\/.+?\.app\/frameworks\/react_native_update.framework\/pushy_build_time.txt/,
-    );
-  }
+  const buildTimeTxtBuffer =
+    entries[String(IpaBuildTimeName)] ??
+    entries[String(IpaBuildTimeFrameworkName)];
   if (!buildTimeTxtBuffer) {
     throw new Error(t('buildTimeNotFound'));
   }
