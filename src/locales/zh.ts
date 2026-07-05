@@ -123,6 +123,7 @@ export default {
     '已在原生版本 {{versions}} 上设置灰度发布 {{rollout}}% 热更包 {{version}}',
   rolloutRangeError: 'rollout 必须是 1-100 的整数',
   runningHermesc: '运行 hermesc：{{- command}} {{- args}}',
+  sentryReactNativeNotFound: '无法找到 @sentry/react-native，请确保已正确安装',
   sentryCliNotFound: '无法找到 Sentry CLI 工具，请确保已正确安装 @sentry/cli',
   sentryReleaseCreated: '已为版本 {{version}} 创建 Sentry release',
   totalApps: '共 {{count}} 个 {{platform}} 应用',
@@ -168,6 +169,8 @@ export default {
   nodeHdiffpatchRequired:
     '此功能需要 "node-hdiffpatch"。请运行 "{{scriptName}} install node-hdiffpatch" 来安装',
   apkExtracted: 'APK 已提取到 {{output}}',
+  composeSourceMapsNotFound:
+    '找不到 react-native/scripts/compose-source-maps.js，跳过 hermes sourcemap 合成。上传的 sourcemap 可能与编译后的 bundle 不匹配。',
   installPackageRequired:
     '请指定要安装的包，例如 "{{scriptName}} install node-hdiffpatch"',
   installFailed: '安装 {{packages}} 失败: {{error}}',

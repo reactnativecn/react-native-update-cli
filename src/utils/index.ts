@@ -174,7 +174,7 @@ export async function getApkInfo(fn: string) {
       }
     }
   }
-  if (buildTime == 0) {
+  if (!Number.isFinite(buildTime) || buildTime === 0) {
     throw new Error(t('buildTimeNotFound'));
   }
   return { versionName, buildTime, ...appCredential };
@@ -210,7 +210,7 @@ export async function getAppInfo(fn: string) {
   if (pushy_build_time) {
     buildTime = Number(pushy_build_time);
   }
-  if (buildTime == 0) {
+  if (!Number.isFinite(buildTime) || buildTime === 0) {
     throw new Error(t('buildTimeNotFound'));
   }
   return { versionName, buildTime, ...appCredential };
@@ -250,7 +250,7 @@ export async function getIpaInfo(fn: string) {
   if (!buildTimeTxtBuffer) {
     throw new Error(t('buildTimeNotFound'));
   }
-  const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
+  const buildTime = buildTimeTxtBuffer.toString().trim();
   return { versionName, buildTime, ...appCredential };
 }
 
@@ -331,7 +331,7 @@ export async function getAabInfo(fn: string) {
     }
   }
 
-  if (buildTime === 0) {
+  if (!Number.isFinite(buildTime) || buildTime === 0) {
     throw new Error(t('buildTimeNotFound'));
   }
 
@@ -352,13 +352,20 @@ async function readZipEntry(fn: string, entryName: string): Promise<Buffer> {
           found = true;
           zipfile.openReadStream(entry, (streamError, readStream) => {
             if (streamError || !readStream) {
+              zipfile.close();
               reject(streamError ?? new Error('Failed to read zip entry'));
               return;
             }
             const chunks: Buffer[] = [];
             readStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-            readStream.on('end', () => resolve(Buffer.concat(chunks)));
-            readStream.on('error', reject);
+            readStream.on('end', () => {
+              zipfile.close();
+              resolve(Buffer.concat(chunks));
+            });
+            readStream.on('error', (error) => {
+              zipfile.close();
+              reject(error);
+            });
           });
         } else {
           zipfile.readEntry();

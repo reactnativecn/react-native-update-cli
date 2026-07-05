@@ -75,11 +75,12 @@ function normalizeBundleOptions(
   platform: string,
 ): NormalizedBundleOptions {
   return {
-    bundleName: getStringOption(
-      translatedOptions,
-      'bundleName',
-      'index.bundlejs',
-    ),
+    // harmony bundles always use this fixed name (runReactNativeBundleCommand
+    // forces it), so sourcemap paths and Sentry uploads must match
+    bundleName:
+      platform === 'harmony'
+        ? 'bundle.harmony.js'
+        : getStringOption(translatedOptions, 'bundleName', 'index.bundlejs'),
     entryFile: getStringOption(translatedOptions, 'entryFile', 'index.js'),
     intermediaDir: getStringOption(
       translatedOptions,
@@ -222,7 +223,11 @@ export const bundleCommands = {
       isSentry: bundleParams.sentry,
     });
 
-    await packBundle(path.resolve(normalized.intermediaDir), realOutput);
+    await packBundle(
+      path.resolve(normalized.intermediaDir),
+      realOutput,
+      normalized.bundleName,
+    );
 
     if (normalized.name) {
       await publishBundleVersion(realOutput, platform, {

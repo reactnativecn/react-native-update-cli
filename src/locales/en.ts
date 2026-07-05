@@ -132,6 +132,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'Set {{rollout}}% rollout for OTA update {{version}} on native version(s) {{versions}}',
   rolloutRangeError: 'rollout must be an integer between 1-100',
   runningHermesc: 'Running hermesc: {{- command}} {{- args}}',
+  sentryReactNativeNotFound:
+    'Cannot find @sentry/react-native, please make sure it is properly installed',
   sentryCliNotFound:
     'Cannot find Sentry CLI tool, please make sure @sentry/cli is properly installed',
   sentryReleaseCreated: 'Sentry release created for version: {{version}}',
@@ -182,6 +184,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   nodeHdiffpatchRequired:
     'This function needs "node-hdiffpatch". Please run "{{scriptName}} install node-hdiffpatch" to install',
   apkExtracted: 'APK extracted to {{output}}',
+  composeSourceMapsNotFound:
+    'Cannot find react-native/scripts/compose-source-maps.js, skipping hermes sourcemap composing. The uploaded sourcemap may not match the compiled bundle.',
   installPackageRequired:
     'Please specify the package to install, e.g. "{{scriptName}} install node-hdiffpatch"',
   installFailed: 'Failed to install {{packages}}: {{error}}',

@@ -74,6 +74,10 @@ export class Zip {
           return pattern === entryName || pattern === lowerEntryName;
         }
         pattern.lastIndex = 0;
+        if (pattern.test(entryName)) {
+          return true;
+        }
+        pattern.lastIndex = 0;
         return pattern.test(lowerEntryName);
       });
 

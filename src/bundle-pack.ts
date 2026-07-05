@@ -4,15 +4,20 @@ import { ZipFile as YazlZipFile } from 'yazl';
 import { t } from './utils/i18n';
 import { zipOptionsForPayloadFile } from './utils/zip-options';
 
-const ignorePackingFileNames = [
-  '.',
-  '..',
-  'index.bundlejs.map',
-  'bundle.harmony.js.map',
-];
 const ignorePackingExtensions = ['DS_Store', 'txt.map'];
 
-export async function packBundle(dir: string, output: string): Promise<void> {
+export async function packBundle(
+  dir: string,
+  output: string,
+  bundleName?: string,
+): Promise<void> {
+  const ignorePackingFileNames = [
+    'index.bundlejs.map',
+    'bundle.harmony.js.map',
+  ];
+  if (bundleName) {
+    ignorePackingFileNames.push(`${bundleName}.map`);
+  }
   console.log(t('packing'));
   fs.ensureDirSync(path.dirname(output));
   await new Promise<void>((resolve, reject) => {

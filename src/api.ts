@@ -140,9 +140,13 @@ async function query(url: string, options: RuntimeRequestInit) {
   try {
     json = JSON.parse(text);
   } catch (_e) {
-    if (resp.status === 200 && text) {
-      console.warn(
-        `Warning: API returned 200 with non-JSON body (${text.length} bytes)`,
+    if (resp.status === 200) {
+      // a proxy/gateway likely replaced the response; surface it instead of
+      // returning undefined and crashing callers on destructuring
+      throw createRequestError(
+        `API returned 200 with non-JSON body (${text.length} bytes)`,
+        fullUrl,
+        resp.status,
       );
     }
   }
@@ -282,6 +286,27 @@ export async function uploadFile(fn: string, key?: string) {
 }
 
 export const getAllPackages = async (appId: string) => {
-  const { data } = await get(`/app/${appId}/package/list?limit=1000`);
-  return data as Package[] | undefined | null;
+  // the server caps limit at 100, so page through with offset
+  const limit = 100;
+  let offset = 0;
+  let allPackages: Package[] | undefined | null;
+  while (true) {
+    const { data, count } = await get(
+      `/app/${appId}/package/list?offset=${offset}&limit=${limit}`,
+    );
+    const packages = data as Package[] | undefined | null;
+    if (allPackages === undefined || allPackages === null) {
+      allPackages = packages;
+    } else if (packages) {
+      allPackages.push(...packages);
+    }
+    if (!packages || packages.length === 0) {
+      break;
+    }
+    offset += packages.length;
+    if (offset >= Number(count || 0)) {
+      break;
+    }
+  }
+  return allPackages;
 };

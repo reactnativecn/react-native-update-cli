@@ -180,7 +180,7 @@ describe('api.ts query API methods', () => {
     expect(error.message).toContain('URL:');
   });
 
-  test('query warns on 200 status with non-JSON body', async () => {
+  test('query throws on 200 status with non-JSON body', async () => {
     const nonJsonText = 'Not a JSON response';
     runtimeFetchSpy = spyOn(runtime, 'runtimeFetch').mockImplementation(
       async () =>
@@ -191,20 +191,17 @@ describe('api.ts query API methods', () => {
         }) as any,
     );
 
-    let _error: any;
+    let error: any;
     try {
       await get('/test-endpoint');
     } catch (e) {
-      _error = e;
+      error = e;
     }
 
-    expect(console.warn).toHaveBeenCalled();
-    const warnMessage = (console.warn as import('bun:test').Mock<any>).mock
-      .calls[0][0];
-    expect(warnMessage).toContain(
-      'Warning: API returned 200 with non-JSON body',
-    );
-    expect(warnMessage).toContain(String(nonJsonText.length));
+    expect(error).toBeDefined();
+    expect(error.message).toContain('API returned 200 with non-JSON body');
+    expect(error.message).toContain(String(nonJsonText.length));
+    expect(error.status).toBe(200);
   });
 
   test('query throws on non-200 HTTP status', async () => {

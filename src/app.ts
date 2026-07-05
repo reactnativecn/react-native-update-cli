@@ -147,6 +147,7 @@ export function getAppCommands() {
       const id = args[0] || (await chooseApp(platform)).id;
       if (!id) {
         console.log(t('cancelled'));
+        return;
       }
       await doDelete(`/app/${id}`);
       console.log(t('operationSuccess'));

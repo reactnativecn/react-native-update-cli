@@ -173,7 +173,7 @@ export class BinaryXmlParser {
     };
 
     const value = this.readU32();
-    const unit = (dimension.value ?? 0) & 0xff;
+    const unit = value & 0xff;
 
     dimension.value = value >> 8;
     dimension.rawUnit = unit;
@@ -567,10 +567,9 @@ and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
 
     if (valueRef > 0) {
       if (attr.name === 'versionName') {
-        this.strings[valueRef] = this.strings[valueRef].replace(
-          /[^\x21-\x7E]/g,
-          '',
-        );
+        // strip UTF-16 null padding only; keep spaces and non-ASCII chars
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: removing NUL padding is the point
+        this.strings[valueRef] = this.strings[valueRef].replace(/\u0000/g, '');
       }
       attr.value = this.strings[valueRef];
     }

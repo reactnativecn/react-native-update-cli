@@ -251,8 +251,11 @@ export class CLIProviderImpl implements CLIProvider {
 
   async listPackages(appId?: string): Promise<CommandResult> {
     return this.runDataCommand(async () => {
+      if (!appId) {
+        throw new Error('appId is required to list packages');
+      }
       const { listPackage } = await import('./package');
-      return listPackage(appId || '');
+      return listPackage(appId);
     }, 'Unknown error listing packages');
   }
 }

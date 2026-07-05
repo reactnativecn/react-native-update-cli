@@ -10,8 +10,12 @@ const lockFiles = [
   'bun.lock',
 ];
 
-// Function to check if a package.json has a workspaces field
+// Function to check if a directory is a monorepo root
+// (package.json workspaces field, or pnpm-workspace.yaml)
 function hasWorkspaces(dir: string): boolean {
+  if (fs.existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+    return true;
+  }
   const pkgPath = path.join(dir, 'package.json');
   if (fs.existsSync(pkgPath)) {
     try {

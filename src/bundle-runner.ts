@@ -241,6 +241,11 @@ export async function runReactNativeBundleCommand({
       process.env.SENTRY_PROPERTIES = 'ios/sentry.properties';
     } else if (platform === 'android') {
       process.env.SENTRY_PROPERTIES = 'android/sentry.properties';
+    } else if (
+      platform === 'harmony' &&
+      fs.existsSync('harmony/sentry.properties')
+    ) {
+      process.env.SENTRY_PROPERTIES = 'harmony/sentry.properties';
     }
   }
 
@@ -302,20 +307,24 @@ export async function runReactNativeBundleCommand({
       console.error(data.toString().trim());
     });
 
+    reactNativeBundleProcess.once('error', reject);
+
     reactNativeBundleProcess.on('close', async (exitCode) => {
       if (exitCode) {
         reject(new Error(t('bundleCommandError', { code: exitCode })));
         return;
       }
 
-      let hermesEnabled: boolean | undefined = false;
+      try {
+        let hermesEnabled: boolean | undefined = false;
 
-      if (forceHermes) {
-        hermesEnabled = true;
-        console.log(t('forceHermes'));
-      } else if (platform === 'android') {
-        const gradleProperties = await new Promise<{ hermesEnabled?: boolean }>(
-          (resolve) => {
+        if (forceHermes) {
+          hermesEnabled = true;
+          console.log(t('forceHermes'));
+        } else if (platform === 'android') {
+          const gradleProperties = await new Promise<{
+            hermesEnabled?: boolean;
+          }>((resolve) => {
             properties.parse(
               './android/gradle.properties',
               { path: true },
@@ -331,42 +340,48 @@ export async function runReactNativeBundleCommand({
                 resolve(props);
               },
             );
-          },
-        );
-        hermesEnabled = gradleProperties.hermesEnabled;
+          });
+          hermesEnabled = gradleProperties.hermesEnabled;
 
-        if (typeof hermesEnabled !== 'boolean') {
-          hermesEnabled = gradleConfig.enableHermes;
+          if (typeof hermesEnabled !== 'boolean') {
+            hermesEnabled = gradleConfig.enableHermes;
+          }
+        } else if (
+          platform === 'ios' &&
+          fs.existsSync('ios/Pods/hermes-engine')
+        ) {
+          hermesEnabled = true;
         }
-      } else if (
-        platform === 'ios' &&
-        fs.existsSync('ios/Pods/hermes-engine')
-      ) {
-        hermesEnabled = true;
-      }
 
-      if (hermesEnabled) {
-        await compileHermesByteCode(
-          bundleName,
-          outputFolder,
-          sourcemapOutput,
-          !isSentry,
-        );
-      }
+        if (hermesEnabled) {
+          await compileHermesByteCode(
+            bundleName,
+            outputFolder,
+            sourcemapOutput,
+            !isSentry,
+          );
+        }
 
-      if (platform === 'harmony') {
-        const harmonyRawAssetsPath =
-          'harmony/entry/src/main/resources/rawfile/assets';
-        fs.ensureDirSync(harmonyRawAssetsPath);
-        fs.copySync(outputFolder, harmonyRawAssetsPath, { overwrite: true });
-        fs.moveSync(
-          `${harmonyRawAssetsPath}/bundle.harmony.js`,
-          `${harmonyRawAssetsPath}/../bundle.harmony.js`,
-          { overwrite: true },
-        );
-      }
+        if (platform === 'harmony') {
+          const harmonyRawAssetsPath =
+            'harmony/entry/src/main/resources/rawfile/assets';
+          fs.ensureDirSync(harmonyRawAssetsPath);
+          fs.copySync(outputFolder, harmonyRawAssetsPath, {
+            overwrite: true,
+            // sourcemaps must not ship inside the native package
+            filter: (src) => !src.endsWith('.map'),
+          });
+          fs.moveSync(
+            `${harmonyRawAssetsPath}/bundle.harmony.js`,
+            `${harmonyRawAssetsPath}/../bundle.harmony.js`,
+            { overwrite: true },
+          );
+        }
 
-      resolve();
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
     });
   });
 }
@@ -529,9 +544,15 @@ async function compileHermesByteCode(
     hermesCommand,
   );
   if (sourcemapOutput) {
-    const composerPath =
-      'node_modules/react-native/scripts/compose-source-maps.js';
-    if (!fs.existsSync(composerPath)) {
+    let composerPath: string;
+    try {
+      // resolve through the project so hoisted node_modules (monorepos) work
+      composerPath = require.resolve(
+        'react-native/scripts/compose-source-maps.js',
+        { paths: [process.cwd()] },
+      );
+    } catch {
+      console.warn(t('composeSourceMapsNotFound'));
       return;
     }
     console.log(t('composingSourceMap'));
@@ -571,7 +592,7 @@ export async function copyDebugidForSentry(
         },
       );
     } catch {
-      console.error(t('sentryCliNotFound'));
+      console.error(t('sentryReactNativeNotFound'));
       return;
     }
 

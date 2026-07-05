@@ -23,34 +23,27 @@ export function promiseAny<T>(promises: Promise<T>[]) {
 }
 
 export const ping = async (url: string) => {
-  let pingFinished = false;
-  return Promise.race([
-    runtimeFetch(url, {
-      method: 'HEAD',
-    })
-      .then(({ status }) => {
-        pingFinished = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await (Promise.race([
+      runtimeFetch(url, {
+        method: 'HEAD',
+      }).then(({ status }) => {
         if (status === 200) {
-          // console.log('ping success', url);
           return url;
         }
-        // console.log('ping failed', url, status, statusText);
         throw new Error('ping failed');
-      })
-      .catch((_e) => {
-        pingFinished = true;
-        // console.log('ping error', url, e);
-        throw new Error('ping error');
       }),
-    new Promise((_, reject) =>
-      setTimeout(() => {
-        reject(new Error('ping timeout'));
-        if (!pingFinished) {
-          // console.log('ping timeout', url);
-        }
-      }, 5000),
-    ),
-  ]) as Promise<string | null>;
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error('ping timeout'));
+        }, 5000);
+      }),
+    ]) as Promise<string | null>);
+  } finally {
+    // clear the timer so it doesn't keep the process alive for 5s
+    clearTimeout(timer);
+  }
 };
 
 export const testUrls = async (urls?: string[]) => {
