@@ -282,7 +282,7 @@ export async function getAabInfo(fn: string) {
 
   const manifestElement = object.element;
   if (manifestElement.name !== 'manifest') {
-    throw new Error('Invalid manifest');
+    throw new Error(t('invalidManifest'));
   }
 
   let versionName = '';
@@ -429,7 +429,7 @@ async function resolveResource(
       }
     }
   } catch (e) {
-    console.warn('Failed to resolve resource:', e);
+    console.warn(t('failedToResolveResource', { error: e }));
   }
   return null;
 }

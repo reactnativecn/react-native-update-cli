@@ -12,6 +12,7 @@ import type {
   UploadOptions,
 } from './types';
 import { runAsCommandResult } from './utils/command-result';
+import { t } from './utils/i18n';
 
 const DEFAULT_BUNDLE_OUTPUT =
   '$' + '{tempDir}/output/$' + '{platform}.$' + '{time}.ppk';
@@ -164,7 +165,7 @@ export class CLIProviderImpl implements CLIProvider {
             : undefined;
 
         if (!uploadHandler) {
-          throw new Error(`Unsupported file type: ${fileType}`);
+          throw new Error(t('unsupportedFileType', { fileType }));
         }
         await uploadHandler(context);
       },
@@ -244,7 +245,7 @@ export class CLIProviderImpl implements CLIProvider {
   async loadSession(): Promise<Session> {
     await this.ensureInitialized();
     if (!this.session) {
-      throw new Error('Failed to load session');
+      throw new Error(t('failedToLoadSession'));
     }
     return this.session;
   }
@@ -252,7 +253,7 @@ export class CLIProviderImpl implements CLIProvider {
   async listPackages(appId?: string): Promise<CommandResult> {
     return this.runDataCommand(async () => {
       if (!appId) {
-        throw new Error('appId is required to list packages');
+        throw new Error(t('appIdRequired'));
       }
       const { listPackage } = await import('./package');
       return listPackage(appId);

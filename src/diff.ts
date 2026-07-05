@@ -347,7 +347,7 @@ function diffArgsCheck(
     tempDir,
   } as DiffCommandOptions & { tempDir: string });
   if (typeof output !== 'string') {
-    throw new Error('Output path is required.');
+    throw new Error(t('outputPathRequired'));
   }
 
   return {

@@ -178,4 +178,13 @@ export default {
     '网络连接异常，可能是代理/VPN 导致。请尝试关闭代理后重试。',
   proxyNetworkErrorTips:
     '常见解决方法：\n1. 关闭系统代理或 VPN\n2. 检查 HTTP_PROXY / HTTPS_PROXY 环境变量\n3. 检查 .npmrc 中的 proxy 配置',
+  invalidId: '无效的 id：{{id}}',
+  outputPathRequired: '必须指定输出路径。',
+  unsupportedFileType: '不支持的文件类型：{{fileType}}',
+  failedToLoadSession: '加载登录状态失败',
+  appIdRequired: '必须指定 appId',
+  unknownCommand: '未知命令：{{command}}',
+  unsupportedPlatformForHermes: 'Hermes 不支持当前系统平台：{{platform}}',
+  invalidManifest: '无效的 manifest',
+  failedToResolveResource: '资源解析失败：{{error}}',
 };

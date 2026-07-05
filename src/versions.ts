@@ -133,7 +133,7 @@ function toNumericIds(ids: string[]) {
   return ids.map((id) => {
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) {
-      throw new Error(`Invalid id: ${id}`);
+      throw new Error(t('invalidId', { id }));
     }
     return numericId;
   });

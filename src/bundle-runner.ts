@@ -433,7 +433,9 @@ function normalizeString(value: string | undefined): string | undefined {
 export function resolveHermesCommand(projectRoot = process.cwd()): string {
   const osBin = getHermesOSBin();
   if (!osBin) {
-    throw new Error(`Unsupported platform for Hermes: ${os.platform()}`);
+    throw new Error(
+      t('unsupportedPlatformForHermes', { platform: os.platform() }),
+    );
   }
 
   const executableName = getHermesExecutableName();

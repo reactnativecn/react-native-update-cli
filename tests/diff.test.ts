@@ -6,6 +6,7 @@ import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
 import { diffCommands, enumZipEntries, readEntry } from '../src/diff';
 import type { CommandContext } from '../src/types';
+import { t } from '../src/utils/i18n';
 import { readEntryPrefix } from '../src/utils/zip-entries';
 
 const pngPrefix = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -515,7 +516,7 @@ describe('diff commands', () => {
           customDiff: () => Buffer.from('patch'),
         }),
       ),
-    ).rejects.toThrow('Output path is required.');
+    ).rejects.toThrow(t('outputPathRequired'));
   });
 
   test('hdiff requires engine module when customDiff is not provided', async () => {

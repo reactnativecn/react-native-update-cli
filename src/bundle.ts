@@ -204,7 +204,7 @@ export const bundleCommands = {
       throw new Error(t('platformRequired'));
     }
 
-    console.log(`Bundling with react-native: ${depVersions['react-native']}`);
+    console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
 
     await runReactNativeBundleCommand({
       bundleName: normalized.bundleName,

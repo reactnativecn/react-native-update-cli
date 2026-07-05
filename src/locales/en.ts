@@ -193,4 +193,13 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'Network error — likely caused by a proxy/VPN. Please try disabling your proxy and retry.',
   proxyNetworkErrorTips:
     'Common fixes:\n1. Disable system proxy or VPN\n2. Check HTTP_PROXY / HTTPS_PROXY environment variables\n3. Check proxy settings in .npmrc',
+  invalidId: 'Invalid id: {{id}}',
+  outputPathRequired: 'Output path is required.',
+  unsupportedFileType: 'Unsupported file type: {{fileType}}',
+  failedToLoadSession: 'Failed to load session',
+  appIdRequired: 'appId is required',
+  unknownCommand: 'Unknown command: {{command}}',
+  unsupportedPlatformForHermes: 'Unsupported platform for Hermes: {{platform}}',
+  invalidManifest: 'Invalid manifest',
+  failedToResolveResource: 'Failed to resolve resource: {{error}}',
 };

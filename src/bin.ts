@@ -78,7 +78,7 @@ async function run() {
       const handler = commandHandlers[argv.command];
       await handler(argv);
     } else {
-      throw new Error(`Unknown command: ${argv.command}`);
+      throw new Error(t('unknownCommand', { command: argv.command }));
     }
   } catch (err: any) {
     if (err.status === 401) {
