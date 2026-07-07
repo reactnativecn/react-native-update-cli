@@ -19,7 +19,10 @@ import {
   zipOptionsForPayloadEntry,
 } from './utils/zip-options';
 
-type Diff = (oldSource?: Buffer, newSource?: Buffer) => Buffer;
+type Diff = (
+  oldSource?: Buffer,
+  newSource?: Buffer,
+) => Buffer | Promise<Buffer>;
 type HdiffModule = {
   diff?: Diff;
 };
@@ -83,7 +86,7 @@ async function addBundlePatch(
 ) {
   const newSource = await readEntry(entry, nextZipfile);
   zipfile.addBuffer(
-    diffFn(originSource, newSource),
+    await diffFn(originSource, newSource),
     `${entry.fileName}.patch`,
     zipOptionsForPatchEntry(),
   );

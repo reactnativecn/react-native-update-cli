@@ -22,7 +22,10 @@ type ZipContent = {
 
 type DiffContextOptions = {
   output?: unknown;
-  customDiff?: (oldSource?: Buffer, newSource?: Buffer) => Buffer;
+  customDiff?: (
+    oldSource?: Buffer,
+    newSource?: Buffer,
+  ) => Buffer | Promise<Buffer>;
   customHdiffModule?: {
     diff?: (oldSource?: Buffer, newSource?: Buffer) => Buffer;
   };
@@ -183,6 +186,37 @@ describe('diff commands', () => {
       'moved-source.txt',
     );
     expect(diffMeta.deletes['old-only.txt']).toBe(1);
+  });
+
+  test('hdiff supports an async customDiff implementation', async () => {
+    const originPath = path.join(tempRoot, 'origin.ppk');
+    const nextPath = path.join(tempRoot, 'next.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'diff-async.ppk');
+
+    await createZip(originPath, {
+      'index.bundlejs': 'old-bundle',
+    });
+
+    await createZip(nextPath, {
+      'index.bundlejs': 'new-bundle',
+    });
+
+    await diffCommands.hdiff(
+      createContext([originPath, nextPath], {
+        output: outputPath,
+        customDiff: async (oldSource, newSource) => {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          return Buffer.from(
+            `async-patch:${oldSource?.toString('utf-8')}:${newSource?.toString('utf-8')}`,
+          );
+        },
+      }),
+    );
+
+    const result = await readZipContent(outputPath);
+    expect(result.files['index.bundlejs.patch']?.toString('utf-8')).toBe(
+      'async-patch:old-bundle:new-bundle',
+    );
   });
 
   test('hdiff compresses large manifest entries', async () => {
