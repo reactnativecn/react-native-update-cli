@@ -13,6 +13,8 @@ import { getBooleanOption, getStringListOption } from './utils/options';
 
 interface VersionCommandOptions {
   [key: string]: unknown;
+  config?: string;
+  appKey?: string;
   appId?: string;
   name?: string;
   description?: string;
@@ -464,7 +466,12 @@ export const versionCommands = {
     }
 
     const platform = await getPlatform(options.platform);
-    const { appId } = await getSelectedApp(platform);
+    let appId = options.appId;
+    if (!appId) {
+      appId = (
+        await getSelectedApp(platform, options.config as string | undefined)
+      ).appId;
+    }
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
 
@@ -539,7 +546,9 @@ export const versionCommands = {
     let appId = options.appId;
     if (!appId) {
       const platform = await getPlatform(options.platform);
-      appId = (await getSelectedApp(platform)).appId;
+      appId = (
+        await getSelectedApp(platform, options.config as string | undefined)
+      ).appId;
     }
     const interactive = !(
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive()
@@ -553,7 +562,9 @@ export const versionCommands = {
     let platform = options.platform;
     if (!appId) {
       platform = await getPlatform(platform);
-      appId = (await getSelectedApp(platform)).appId;
+      appId = (
+        await getSelectedApp(platform, options.config as string | undefined)
+      ).appId;
     } else if (platform) {
       platform = await getPlatform(platform);
     }
@@ -683,7 +694,9 @@ export const versionCommands = {
     let platform = options.platform;
     if (!appId) {
       platform = await getPlatform(platform);
-      appId = (await getSelectedApp(platform)).appId;
+      appId = (
+        await getSelectedApp(platform, options.config as string | undefined)
+      ).appId;
     } else if (platform) {
       await getPlatform(platform);
     }
@@ -710,7 +723,9 @@ export const versionCommands = {
     let appId = options.appId;
     if (!appId) {
       const platform = await getPlatform(options.platform);
-      appId = (await getSelectedApp(platform)).appId;
+      appId = (
+        await getSelectedApp(platform, options.config as string | undefined)
+      ).appId;
     }
 
     const parsedVersionIds =

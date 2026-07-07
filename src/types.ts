@@ -74,6 +74,8 @@ export interface PublishOptions {
   packageVersionRange?: string;
   rollout?: number | string;
   dryRun?: boolean;
+  appId?: string;
+  config?: string;
 }
 
 export interface UploadOptions {
@@ -82,6 +84,7 @@ export interface UploadOptions {
   appId?: string;
   appKey?: string;
   version?: string;
+  config?: string;
 }
 
 export interface UpdateVersionOptions {

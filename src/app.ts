@@ -26,13 +26,16 @@ export function assertPlatform(platform: string): Platform {
 
 export async function getSelectedApp(
   platform: Platform,
+  configPath?: string,
 ): Promise<{ appId: string; appKey: string; platform: Platform }> {
   assertPlatform(platform);
 
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
     {};
   try {
-    updateInfo = JSON.parse(await fs.promises.readFile('update.json', 'utf8'));
+    updateInfo = JSON.parse(
+      await fs.promises.readFile(configPath || 'update.json', 'utf8'),
+    );
   } catch (e: any) {
     if (e.code === 'ENOENT') {
       throw new Error(t('appNotSelected', { platform }));
@@ -97,10 +100,13 @@ async function selectApp({
     ? Number.parseInt(args[0], 10)
     : (await chooseApp(platform)).id;
 
+  const configPath = (options as any).config as string | undefined;
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
     {};
   try {
-    updateInfo = JSON.parse(await fs.promises.readFile('update.json', 'utf8'));
+    updateInfo = JSON.parse(
+      await fs.promises.readFile(configPath || 'update.json', 'utf8'),
+    );
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
       console.error(t('failedToParseUpdateJson'));
@@ -113,7 +119,7 @@ async function selectApp({
     appKey,
   };
   await fs.promises.writeFile(
-    'update.json',
+    configPath || 'update.json',
     JSON.stringify(updateInfo, null, 4),
     'utf8',
   );

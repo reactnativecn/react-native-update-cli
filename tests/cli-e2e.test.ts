@@ -95,7 +95,7 @@ function createMockServer(requests: string[], options: MockServerOptions = {}) {
         return;
       }
 
-      if (url === '/api/app/100/version/create') {
+      if (url.startsWith('/api/app/') && url.endsWith('/version/create')) {
         const body = await readBody(request);
         options.createdVersions?.push(JSON.parse(body));
         sendJson(response, 200, { id: '200' });
@@ -313,6 +313,84 @@ describe('CLI e2e', () => {
       expect(createdVersions).toEqual([
         expect.objectContaining({
           name: 'v1',
+          hash: 'hash-from-oss',
+          description: '',
+          metaInfo: '',
+        }),
+      ]);
+    } finally {
+      if (tempRoot) {
+        await rm(tempRoot, { force: true, recursive: true });
+      }
+    }
+  });
+
+  test('publishes a ppk using custom config path', async () => {
+    const requests: string[] = [];
+    const createdVersions: unknown[] = [];
+    const server = createMockServer(requests, { createdVersions });
+    let tempRoot: string | undefined;
+
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    closeServer = () =>
+      new Promise((resolve) => {
+        if (!server.listening) {
+          resolve();
+          return;
+        }
+        server.close(() => {
+          server.closeAllConnections?.();
+          resolve();
+        });
+      });
+
+    try {
+      tempRoot = await mkdtemp(path.join(tmpdir(), 'rn-update-cli-e2e-'));
+      await writeFile(
+        path.join(tempRoot, 'update-custom.json'),
+        JSON.stringify({
+          android: {
+            appId: 105,
+            appKey: 'android-key-custom',
+          },
+        }),
+      );
+      await writeFile(path.join(tempRoot, 'bundle.ppk'), 'fake-ppk');
+
+      const { port } = server.address() as AddressInfo;
+      const origin = `http://127.0.0.1:${port}`;
+      const result = await runCli({
+        args: [
+          path.join(repoRoot, 'src/bin.ts'),
+          'publish',
+          'bundle.ppk',
+          '--platform',
+          'android',
+          '--name',
+          'v1-custom',
+          '--config',
+          'update-custom.json',
+          '--no-interactive',
+        ],
+        cwd: tempRoot,
+        env: {
+          ...process.env,
+          NO_INTERACTIVE: 'true',
+          PUSHY_REGISTRY: `${origin}/api`,
+          npm_config_registry: `${origin}/registry/`,
+        },
+      });
+
+      expect(result.status).toBe(0);
+      expect(result.stderr.trim()).toBe('');
+      expect(requests).toContain('POST /api/upload');
+      expect(requests).toContain('POST /oss/upload');
+      expect(requests).toContain('POST /api/app/105/version/create');
+      expect(createdVersions).toEqual([
+        expect.objectContaining({
+          name: 'v1-custom',
           hash: 'hash-from-oss',
           description: '',
           metaInfo: '',

@@ -118,7 +118,10 @@ async function uploadNativePackage(
         appId: String(options.appId),
         appKey: typeof options.appKey === 'string' ? options.appKey : undefined,
       }
-    : await getSelectedApp(config.platform);
+    : await getSelectedApp(
+        config.platform,
+        options.config as string | undefined,
+      );
   const { appId, appKey } = selectedApp;
 
   if (appIdInPkg && String(appIdInPkg) !== appId) {
@@ -348,9 +351,18 @@ export const packageCommands = {
 
     console.log(t('apkExtracted', { output }));
   },
-  packages: async ({ options }: { options: { platform: Platform } }) => {
-    const platform = await getPlatform(options.platform);
-    const { appId } = await getSelectedApp(platform);
+  packages: async ({
+    options,
+  }: {
+    options: { platform: Platform; appId?: string; config?: string };
+  }) => {
+    let appId = options.appId;
+    if (!appId) {
+      const platform = await getPlatform(options.platform);
+      appId = (
+        await getSelectedApp(platform, options.config as string | undefined)
+      ).appId;
+    }
     await listPackage(String(appId));
   },
   deletePackage: async ({ options }: { options: PackageCommandOptions }) => {
@@ -361,7 +373,9 @@ export const packageCommands = {
 
     if (!appId) {
       const platform = await getPlatform(options.platform);
-      appId = (await getSelectedApp(platform)).appId;
+      appId = (
+        await getSelectedApp(platform, options.config as string | undefined)
+      ).appId;
     }
 
     if (!packageIds) {

@@ -148,6 +148,7 @@ export class CLIProviderImpl implements CLIProvider {
             appId: options.appId,
             appKey: options.appKey,
             version: options.version,
+            config: options.config,
           },
           [filePath],
         );

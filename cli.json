@@ -364,6 +364,15 @@
     },
     "acc": {
       "default": false
+    },
+    "config": {
+      "hasValue": true
+    },
+    "appId": {
+      "hasValue": true
+    },
+    "appKey": {
+      "hasValue": true
     }
   }
 }
