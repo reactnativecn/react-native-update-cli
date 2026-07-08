@@ -1,6 +1,6 @@
 import crypto from 'crypto';
-import type { CommandContext } from 'types';
 import { closeSession, get, post, replaceSession, saveSession } from './api';
+import type { CommandContext } from './types';
 import { question } from './utils';
 import { t } from './utils/i18n';
 

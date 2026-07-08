@@ -4,10 +4,10 @@ import fs from 'fs';
 import fetch from 'node-fetch';
 import path from 'path';
 import ProgressBar from 'progress';
-import { getBaseUrl } from 'utils/http-helper';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
 import { credentialFile, IS_CRESC, pricingPageUrl } from './utils/constants';
+import { getBaseUrl } from './utils/http-helper';
 import { t } from './utils/i18n';
 import {
   measureTcpLatency,
