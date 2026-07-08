@@ -42,7 +42,7 @@
         "@types/semver": "^7.7.1",
         "@types/yauzl": "^2.10.3",
         "@types/yazl": "^2.4.6",
-        "node-hdiffpatch": "^2.0.3",
+        "node-hdiffpatch": "^2.2.1",
         "typescript": "^6.0.2",
       },
     },
@@ -561,7 +561,7 @@
 
     "node-gyp-build": ["node-gyp-build@4.8.4", "", { "bin": { "node-gyp-build": "bin.js", "node-gyp-build-optional": "optional.js", "node-gyp-build-test": "build-test.js" } }, "sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ=="],
 
-    "node-hdiffpatch": ["node-hdiffpatch@2.0.3", "", { "dependencies": { "node-gyp-build": "^4.8.1" }, "bin": { "hdp": "bin/hdiffpatch.js" } }, "sha512-FpIAOBCXAryIsW3UuN7YT3b1G0+36qMJDtGqql0bMjf3pm3G0B9hddJ/CBaw5dOgsJ8dMfBzDABTgyoCCTQ5lw=="],
+    "node-hdiffpatch": ["node-hdiffpatch@2.2.1", "", { "dependencies": { "node-gyp-build": "^4.8.1" }, "bin": { "hdp": "bin/hdiffpatch.js" } }, "sha512-O996tSAXYENuKWUoQWsysWmFtZ/wHGMnpLGSZwnKljPFbcmFlc81vpN+/XiD4VzLi1RCJPECUj7JrIR9jaEfuA=="],
 
     "normalize-url": ["normalize-url@8.1.1", "", {}, "sha512-JYc0DPlpGWB40kH5g07gGTrYuMqV653k3uBKY6uITPWds3M0ov3GaWGp9lbE3Bzngx8+XkfzgvASb9vk9JDFXQ=="],
 

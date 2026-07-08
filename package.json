@@ -102,7 +102,7 @@
     "@types/semver": "^7.7.1",
     "@types/yauzl": "^2.10.3",
     "@types/yazl": "^2.4.6",
-    "node-hdiffpatch": "^2.0.3",
+    "node-hdiffpatch": "^2.2.1",
     "typescript": "^6.0.2"
   },
   "trustedDependencies": [
