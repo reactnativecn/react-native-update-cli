@@ -319,6 +319,9 @@
         "output": {
           "default": "${tempDir}/output/hdiff",
           "hasValue": true
+        },
+        "hbcTransform": {
+          "default": false
         }
       }
     },

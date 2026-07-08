@@ -6,6 +6,11 @@ import { ZipFile as YazlZipFile } from 'yazl';
 import type { CommandContext } from './types';
 import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
+import {
+  type HbcTransformMeta,
+  transformHbcWithLayout,
+  tryTransformPair,
+} from './utils/hbcTransform';
 import { t } from './utils/i18n';
 import {
   enumZipEntries,
@@ -23,8 +28,10 @@ type Diff = (
   oldSource?: Buffer,
   newSource?: Buffer,
 ) => Buffer | Promise<Buffer>;
+type Patch = (oldSource: Buffer, diffData: Buffer) => Buffer;
 type HdiffModule = {
   diff?: Diff;
+  patch?: Patch;
 };
 type EntryMap = Record<string, { crc32: number; fileName: string }>;
 type CrcMap = Record<number, string>;
@@ -77,19 +84,84 @@ function createOutputZip(output: string) {
   return { zipfile, writePromise };
 }
 
+// baseline patch 小于该值时跳过变换尝试:节省一次 diff 的 CPU,
+// 且此时变换收益上限(~25%)也抵不过元数据开销
+const HBC_TRANSFORM_MIN_BASELINE_BYTES = 64 * 1024;
+
+type BundleDiffOptions = {
+  hbcTransform?: boolean;
+  patchFn?: Patch;
+  /** 测试用:覆写跳过变换尝试的 baseline 大小下限 */
+  minBaselineBytes?: number;
+};
+
+/**
+ * 生成 bundle patch:默认现状路径;开启 hbcTransform 时对 Hermes bundle
+ * 做双候选择优(baseline vs 变换域 + 元数据开销),且变换候选必须通过
+ * 本地 round-trip 还原自检才会被采用——收益永不为负,未知格式天然安全。
+ */
+async function buildBundlePatch(
+  diffFn: Diff,
+  originSource: Buffer | undefined,
+  newSource: Buffer,
+  options: BundleDiffOptions,
+): Promise<{ patchData: Buffer; hbcTransform?: HbcTransformMeta }> {
+  const baseline = await diffFn(originSource, newSource);
+  if (
+    !options.hbcTransform ||
+    !options.patchFn ||
+    !originSource ||
+    baseline.length <
+      (options.minBaselineBytes ?? HBC_TRANSFORM_MIN_BASELINE_BYTES)
+  ) {
+    return { patchData: baseline };
+  }
+
+  const pair = tryTransformPair(originSource, newSource);
+  if (!pair) {
+    return { patchData: baseline };
+  }
+
+  try {
+    const candidate = await diffFn(pair.tOld, pair.tNew);
+    const metaOverhead = Buffer.byteLength(JSON.stringify(pair.meta));
+    if (candidate.length + metaOverhead >= baseline.length) {
+      return { patchData: baseline };
+    }
+
+    const patched = options.patchFn(pair.tOld, candidate);
+    const restored = transformHbcWithLayout(patched, pair.layout, true);
+    if (!restored || Buffer.compare(restored, newSource) !== 0) {
+      console.warn(t('hbcTransformRoundTripFailed'));
+      return { patchData: baseline };
+    }
+    return { patchData: candidate, hbcTransform: pair.meta };
+  } catch {
+    return { patchData: baseline };
+  }
+}
+
 async function addBundlePatch(
   zipfile: YazlZipFile,
   entry: Entry,
   nextZipfile: YauzlZipFile,
   diffFn: Diff,
   originSource: Buffer | undefined,
+  bundleOptions: BundleDiffOptions,
+  hbcTransformMetas: Record<string, HbcTransformMeta>,
 ) {
   const newSource = await readEntry(entry, nextZipfile);
-  zipfile.addBuffer(
-    await diffFn(originSource, newSource),
-    `${entry.fileName}.patch`,
-    zipOptionsForPatchEntry(),
+  const { patchData, hbcTransform } = await buildBundlePatch(
+    diffFn,
+    originSource,
+    newSource,
+    bundleOptions,
   );
+  const patchEntryName = `${entry.fileName}.patch`;
+  if (hbcTransform) {
+    hbcTransformMetas[patchEntryName] = hbcTransform;
+  }
+  zipfile.addBuffer(patchData, patchEntryName, zipOptionsForPatchEntry());
 }
 
 async function addFileFromZipEntry(
@@ -143,6 +215,7 @@ async function diffFromPPK(
   next: string,
   output: string,
   diffFn: Diff,
+  bundleOptions: BundleDiffOptions = {},
 ) {
   const originEntries: EntryMap = {};
   const originMap: CrcMap = {};
@@ -186,6 +259,7 @@ async function diffFromPPK(
   }
 
   const newEntries: EntryMap = {};
+  const hbcTransformMetas: Record<string, HbcTransformMeta> = {};
 
   await enumZipEntries(next, async (entry, nextZipfile) => {
     newEntries[entry.fileName] = entry;
@@ -196,7 +270,15 @@ async function diffFromPPK(
         addEntry(entry.fileName);
       }
     } else if (isPPKBundleFileName(entry.fileName)) {
-      await addBundlePatch(zipfile, entry, nextZipfile, diffFn, originSource);
+      await addBundlePatch(
+        zipfile,
+        entry,
+        nextZipfile,
+        diffFn,
+        originSource,
+        bundleOptions,
+        hbcTransformMetas,
+      );
     } else {
       // If same file.
       const originEntry = originEntries[entry.fileName];
@@ -235,7 +317,13 @@ async function diffFromPPK(
     }
   }
 
-  await finishDiffZip(zipfile, writePromise, { copies, deletes });
+  await finishDiffZip(zipfile, writePromise, {
+    copies,
+    deletes,
+    ...(Object.keys(hbcTransformMetas).length
+      ? { hbcTransform: hbcTransformMetas }
+      : {}),
+  });
 }
 
 async function diffFromPackage(
@@ -245,6 +333,7 @@ async function diffFromPackage(
   diffFn: Diff,
   originBundleName: string,
   transformPackagePath: (v: string) => string | undefined = (v: string) => v,
+  bundleOptions: BundleDiffOptions = {},
 ) {
   const originEntries: Record<string, number> = {};
   const originMap: CrcMap = {};
@@ -284,13 +373,22 @@ async function diffFromPackage(
   const copies: CopyMap = {};
 
   const { zipfile, writePromise } = createOutputZip(output);
+  const hbcTransformMetas: Record<string, HbcTransformMeta> = {};
 
   await enumZipEntries(next, async (entry, nextZipfile) => {
     if (/\/$/.test(entry.fileName)) {
       // Directory
       zipfile.addEmptyDirectory(entry.fileName);
     } else if (isPPKBundleFileName(entry.fileName)) {
-      await addBundlePatch(zipfile, entry, nextZipfile, diffFn, originSource);
+      await addBundlePatch(
+        zipfile,
+        entry,
+        nextZipfile,
+        diffFn,
+        originSource,
+        bundleOptions,
+        hbcTransformMetas,
+      );
     } else {
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
@@ -312,12 +410,20 @@ async function diffFromPackage(
     }
   });
 
-  await finishDiffZip(zipfile, writePromise, { copies, copiesCrc });
+  await finishDiffZip(zipfile, writePromise, {
+    copies,
+    copiesCrc,
+    ...(Object.keys(hbcTransformMetas).length
+      ? { hbcTransform: hbcTransformMetas }
+      : {}),
+  });
 }
 
 type DiffCommandOptions = {
   customDiff?: Diff;
+  customPatch?: Patch;
   customHdiffModule?: HdiffModule;
+  hbcTransform?: boolean;
   [key: string]: any;
 };
 
@@ -331,6 +437,37 @@ function resolveDiffImplementation(options: DiffCommandOptions): Diff {
     throw new Error(t('nodeHdiffpatchRequired', { scriptName }));
   }
   return hdiffModule.diff;
+}
+
+// round-trip 自检需要 patch 能力;拿不到时禁用变换(安全优先),不报错
+function resolvePatchImplementation(
+  options: DiffCommandOptions,
+): Patch | undefined {
+  if (options.customPatch) {
+    return options.customPatch;
+  }
+  const hdiffModule = options.customHdiffModule ?? hdiff;
+  return hdiffModule?.patch;
+}
+
+function resolveBundleDiffOptions(
+  options: DiffCommandOptions,
+): BundleDiffOptions {
+  if (!options.hbcTransform) {
+    return {};
+  }
+  const patchFn = resolvePatchImplementation(options);
+  if (!patchFn) {
+    console.warn(t('hbcTransformNeedsPatch'));
+    return {};
+  }
+  return {
+    hbcTransform: true,
+    patchFn,
+    ...(typeof options.hbcTransformMinBaseline === 'number'
+      ? { minBaselineBytes: options.hbcTransformMinBaseline }
+      : {}),
+  };
 }
 
 function diffArgsCheck(
@@ -374,9 +511,12 @@ const createDiffCommand =
       options as DiffCommandOptions,
       diffFnName,
     );
+    const bundleOptions = resolveBundleDiffOptions(
+      options as DiffCommandOptions,
+    );
 
     if (target.kind === 'ppk') {
-      await diffFromPPK(origin, next, realOutput, diffFn);
+      await diffFromPPK(origin, next, realOutput, diffFn, bundleOptions);
     } else {
       await diffFromPackage(
         origin,
@@ -385,6 +525,7 @@ const createDiffCommand =
         diffFn,
         target.originBundleName,
         target.transformPackagePath,
+        bundleOptions,
       );
     }
 

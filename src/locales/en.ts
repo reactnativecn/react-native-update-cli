@@ -183,6 +183,10 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   diffPackageGenerated: '{{- output}} generated.',
   nodeHdiffpatchRequired:
     'This function needs "node-hdiffpatch". Please run "{{scriptName}} install node-hdiffpatch" to install',
+  hbcTransformRoundTripFailed:
+    'HBC transform round-trip verification failed; falling back to plain diff.',
+  hbcTransformNeedsPatch:
+    'hbcTransform requires patch support from node-hdiffpatch; option ignored.',
   apkExtracted: 'APK extracted to {{output}}',
   composeSourceMapsNotFound:
     'Cannot find react-native/scripts/compose-source-maps.js, skipping hermes sourcemap composing. The uploaded sourcemap may not match the compiled bundle.',

@@ -168,6 +168,10 @@ export default {
   diffPackageGenerated: '{{- output}} 已生成。',
   nodeHdiffpatchRequired:
     '此功能需要 "node-hdiffpatch"。请运行 "{{scriptName}} install node-hdiffpatch" 来安装',
+  hbcTransformRoundTripFailed:
+    'HBC 变换 round-trip 自检未通过，已回退普通 diff。',
+  hbcTransformNeedsPatch:
+    'hbcTransform 需要 node-hdiffpatch 的 patch 能力，选项已忽略。',
   apkExtracted: 'APK 已提取到 {{output}}',
   composeSourceMapsNotFound:
     '找不到 react-native/scripts/compose-source-maps.js，跳过 hermes sourcemap 合成。上传的 sourcemap 可能与编译后的 bundle 不匹配。',
