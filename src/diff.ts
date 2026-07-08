@@ -1,5 +1,6 @@
 import * as fs from 'fs-extra';
 import { npm, yarn } from 'global-dirs';
+import os from 'os';
 import path from 'path';
 import type { Entry, ZipFile as YauzlZipFile } from 'yauzl';
 import { ZipFile as YazlZipFile } from 'yazl';
@@ -29,9 +30,23 @@ type Diff = (
   newSource?: Buffer,
 ) => Buffer | Promise<Buffer>;
 type Patch = (oldSource: Buffer, diffData: Buffer) => Buffer;
+type DiffStream = (
+  oldPath: string,
+  newPath: string,
+  outDiffPath: string,
+) => unknown | Promise<unknown>;
+type PatchStream = (
+  oldPath: string,
+  diffPath: string,
+  outNewPath: string,
+) => unknown | Promise<unknown>;
 type HdiffModule = {
   diff?: Diff;
   patch?: Patch;
+  diffStream?: DiffStream;
+  patchStream?: PatchStream;
+  diffSingleStream?: DiffStream;
+  patchSingleStream?: PatchStream;
 };
 type EntryMap = Record<string, { crc32: number; fileName: string }>;
 type CrcMap = Record<number, string>;
@@ -93,7 +108,71 @@ type BundleDiffOptions = {
   patchFn?: Patch;
   /** 测试用:覆写跳过变换尝试的 baseline 大小下限 */
   minBaselineBytes?: number;
+  /**
+   * bundle 尺寸达到该字节数时改走流式 diff:生成端内存 O(块匹配),
+   * 彻底绕开内存 diff 的后缀数组峰值(~6× bundle)。0/未设 = 关闭。
+   * 优先使用 single 格式流式生成(diffSingleStream,产物与 diff() 同格式,
+   * 老客户端可直接应用,任何轨道均可开启);仅当 single 流式不可用时回退
+   * HDIFF13(diffStream)——该格式老客户端不识别,只应在 v2 轨道下开启。
+   */
+  streamThresholdBytes?: number;
+  diffStreamFn?: DiffStream;
+  patchStreamFn?: PatchStream;
+  /** 流式产物是否为 single 格式(决定 baseline 轨道是否可用) */
+  streamEmitsSingleFormat?: boolean;
 };
+
+/**
+ * 大 bundle 流式路径:可选 HBC 变换(在 buffer 上做,写临时文件)后
+ * diffStream 生成 HDIFF13,并以 patchStream + T⁻¹ 做 round-trip 自检。
+ * 自检失败直接抛错(此路径没有 baseline 可回退——内存 diff 正是要避免的),
+ * 由上层按任务失败重试/告警处理。
+ */
+async function buildStreamBundlePatch(
+  originSource: Buffer,
+  newSource: Buffer,
+  options: BundleDiffOptions,
+): Promise<{ patchData: Buffer; hbcTransform?: HbcTransformMeta }> {
+  const diffStreamFn = options.diffStreamFn;
+  const patchStreamFn = options.patchStreamFn;
+  if (!diffStreamFn || !patchStreamFn) {
+    throw new Error(
+      'stream diff requires diffStream/patchStream from node-hdiffpatch',
+    );
+  }
+
+  const pair = options.hbcTransform
+    ? tryTransformPair(originSource, newSource)
+    : null;
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-stream-diff-'));
+  try {
+    const oldFile = path.join(tempRoot, 'old.bin');
+    const newFile = path.join(tempRoot, 'new.bin');
+    const patchFile = path.join(tempRoot, 'patch.bin');
+    const restoredFile = path.join(tempRoot, 'restored.bin');
+    fs.writeFileSync(oldFile, pair ? pair.tOld : originSource);
+    fs.writeFileSync(newFile, pair ? pair.tNew : newSource);
+
+    await diffStreamFn(oldFile, newFile, patchFile);
+
+    // round-trip 自检:patchStream 还原(变换域则再做 T⁻¹)必须与新 bundle 一致
+    await patchStreamFn(oldFile, patchFile, restoredFile);
+    const restoredRaw: Buffer = fs.readFileSync(restoredFile);
+    const restored = pair
+      ? transformHbcWithLayout(restoredRaw, pair.layout, true)
+      : restoredRaw;
+    if (!restored || Buffer.compare(restored, newSource) !== 0) {
+      throw new Error('stream diff round-trip verification failed');
+    }
+
+    return {
+      patchData: fs.readFileSync(patchFile),
+      ...(pair ? { hbcTransform: pair.meta } : {}),
+    };
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
 
 /**
  * 生成 bundle patch:默认现状路径;开启 hbcTransform 时对 Hermes bundle
@@ -106,6 +185,15 @@ async function buildBundlePatch(
   newSource: Buffer,
   options: BundleDiffOptions,
 ): Promise<{ patchData: Buffer; hbcTransform?: HbcTransformMeta }> {
+  if (
+    options.streamThresholdBytes &&
+    originSource &&
+    Math.max(originSource.length, newSource.length) >=
+      options.streamThresholdBytes
+  ) {
+    return buildStreamBundlePatch(originSource, newSource, options);
+  }
+
   const baseline = await diffFn(originSource, newSource);
   if (
     !options.hbcTransform ||
@@ -422,8 +510,13 @@ async function diffFromPackage(
 type DiffCommandOptions = {
   customDiff?: Diff;
   customPatch?: Patch;
+  customDiffStream?: DiffStream;
+  customPatchStream?: PatchStream;
+  customDiffSingleStream?: DiffStream;
+  customPatchSingleStream?: PatchStream;
   customHdiffModule?: HdiffModule;
   hbcTransform?: boolean;
+  bundleStreamThreshold?: number;
   [key: string]: any;
 };
 
@@ -453,17 +546,51 @@ function resolvePatchImplementation(
 function resolveBundleDiffOptions(
   options: DiffCommandOptions,
 ): BundleDiffOptions {
+  const hdiffModule = options.customHdiffModule ?? hdiff;
+  const streamOptions: Pick<
+    BundleDiffOptions,
+    | 'streamThresholdBytes'
+    | 'diffStreamFn'
+    | 'patchStreamFn'
+    | 'streamEmitsSingleFormat'
+  > = {};
+  if (
+    typeof options.bundleStreamThreshold === 'number' &&
+    options.bundleStreamThreshold > 0
+  ) {
+    const singleDiffStreamFn =
+      options.customDiffSingleStream ?? hdiffModule?.diffSingleStream;
+    const singlePatchStreamFn =
+      options.customPatchSingleStream ?? hdiffModule?.patchSingleStream;
+    const diffStreamFn = options.customDiffStream ?? hdiffModule?.diffStream;
+    const patchStreamFn = options.customPatchStream ?? hdiffModule?.patchStream;
+    if (singleDiffStreamFn && singlePatchStreamFn) {
+      streamOptions.streamThresholdBytes = options.bundleStreamThreshold;
+      streamOptions.diffStreamFn = singleDiffStreamFn;
+      streamOptions.patchStreamFn = singlePatchStreamFn;
+      streamOptions.streamEmitsSingleFormat = true;
+    } else if (diffStreamFn && patchStreamFn) {
+      streamOptions.streamThresholdBytes = options.bundleStreamThreshold;
+      streamOptions.diffStreamFn = diffStreamFn;
+      streamOptions.patchStreamFn = patchStreamFn;
+      streamOptions.streamEmitsSingleFormat = false;
+    } else {
+      console.warn(t('bundleStreamNeedsHdiffpatch'));
+    }
+  }
+
   if (!options.hbcTransform) {
-    return {};
+    return { ...streamOptions };
   }
   const patchFn = resolvePatchImplementation(options);
   if (!patchFn) {
     console.warn(t('hbcTransformNeedsPatch'));
-    return {};
+    return { ...streamOptions };
   }
   return {
     hbcTransform: true,
     patchFn,
+    ...streamOptions,
     ...(typeof options.hbcTransformMinBaseline === 'number'
       ? { minBaselineBytes: options.hbcTransformMinBaseline }
       : {}),
