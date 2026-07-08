@@ -32,7 +32,7 @@
     "cli.json"
   ],
   "scripts": {
-    "build": "rm -rf lib && swc src -d lib --strip-leading-paths && bun run typecheck:build && chmod +x lib/bin.js lib/bin-cresc.js",
+    "build": "rm -rf lib && tsc -p tsconfig.build.json && chmod +x lib/bin.js lib/bin-cresc.js",
     "prepublishOnly": "bun run build",
     "typecheck": "tsc --noEmit",
     "typecheck:build": "tsc -p tsconfig.build.json",
@@ -90,9 +90,8 @@
     "node": ">= 18.17.0"
   },
   "devDependencies": {
+    "@babel/parser": "^8.0.0",
     "@biomejs/biome": "^2.4.12",
-    "@swc/cli": "^0.8.1",
-    "@swc/core": "^1.15.41",
     "@types/bun": "^1.3.12",
     "@types/filesize-parser": "^1.5.3",
     "@types/fs-extra": "^11.0.4",
@@ -103,10 +102,9 @@
     "@types/yauzl": "^2.10.3",
     "@types/yazl": "^2.4.6",
     "node-hdiffpatch": "^2.2.1",
-    "typescript": "^6.0.2"
+    "typescript": "^7.0.1-rc"
   },
   "trustedDependencies": [
-    "@biomejs/biome",
-    "@swc/core"
+    "@biomejs/biome"
   ]
 }

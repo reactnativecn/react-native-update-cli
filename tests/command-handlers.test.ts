@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import * as parser from '@babel/parser';
 import fs from 'fs';
 import path from 'path';
-import ts from 'typescript';
 
 const commandFiles = [
   'src/app.ts',
@@ -15,49 +15,60 @@ const commandFiles = [
 
 function findThisUsagesInCommandMaps(filePath: string): string[] {
   const sourceText = fs.readFileSync(filePath, 'utf8');
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-  );
+  const ast = parser.parse(sourceText, {
+    sourceType: 'module',
+    plugins: ['typescript'],
+  });
   const errors: string[] = [];
 
-  function visitCommandMap(node: ts.Node): void {
-    function scanForThis(child: ts.Node): void {
-      if (child.kind === ts.SyntaxKind.ThisKeyword) {
-        const { line, character } = sourceFile.getLineAndCharacterOfPosition(
-          child.getStart(sourceFile),
-        );
-        errors.push(`${filePath}:${line + 1}:${character + 1}`);
+  function traverse(node: any, visit: (node: any) => void) {
+    if (!node || typeof node !== 'object') return;
+    visit(node);
+    for (const key in node) {
+      if (node[key] && typeof node[key] === 'object') {
+        if (Array.isArray(node[key])) {
+          for (const child of node[key]) {
+            traverse(child, visit);
+          }
+        } else if (node[key].type) {
+          traverse(node[key], visit);
+        }
       }
-      ts.forEachChild(child, scanForThis);
     }
+  }
 
+  function scanForThis(startNode: any): void {
+    traverse(startNode, (child) => {
+      if (child.type === 'ThisExpression') {
+        const line = child.loc?.start?.line ?? 0;
+        const column = child.loc?.start?.column ?? 0;
+        errors.push(`${filePath}:${line}:${column + 1}`);
+      }
+    });
+  }
+
+  traverse(ast, (node) => {
     if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text.endsWith('Commands') &&
-      node.initializer
+      node.type === 'VariableDeclarator' &&
+      node.id.type === 'Identifier' &&
+      node.id.name.endsWith('Commands') &&
+      node.init
     ) {
-      scanForThis(node.initializer);
-      return;
+      scanForThis(node.init);
     }
 
     if (
-      ts.isFunctionDeclaration(node) &&
-      node.name?.text.startsWith('get') &&
-      node.name.text.endsWith('Commands') &&
+      node.type === 'FunctionDeclaration' &&
+      node.id &&
+      node.id.type === 'Identifier' &&
+      node.id.name.startsWith('get') &&
+      node.id.name.endsWith('Commands') &&
       node.body
     ) {
       scanForThis(node.body);
-      return;
     }
+  });
 
-    ts.forEachChild(node, visitCommandMap);
-  }
-
-  visitCommandMap(sourceFile);
   return errors;
 }
 
