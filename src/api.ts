@@ -260,7 +260,10 @@ export async function uploadFile(
         method: 'PUT',
         body: fileStream,
         // 预签名 PUT 不接受 chunked 传输,必须显式声明长度
-        headers: { 'content-length': String(fileSize), ...(resp.headers || {}) },
+        headers: {
+          'content-length': String(fileSize),
+          ...(resp.headers || {}),
+        },
       });
     } catch (error) {
       if (isProxyRelatedError(error)) {
