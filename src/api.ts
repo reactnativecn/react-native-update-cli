@@ -202,10 +202,18 @@ export const post = queryWithBody('POST');
 export const put = queryWithBody('PUT');
 export const doDelete = queryWithBody('DELETE');
 
-export async function uploadFile(fn: string, key?: string) {
-  const { url, backupUrl, formData, maxSize } = await post('/upload', {
+export async function uploadFile(
+  fn: string,
+  key?: string,
+  appId?: string | number,
+) {
+  // appId 用于服务端路由:绑定了自托管节点(rnu-node)的应用,
+  // 上传指令会指向节点或其对象存储
+  const resp = await post('/upload', {
     ext: path.extname(fn),
+    ...(appId ? { appId: Number(appId) } : {}),
   });
+  const { url, backupUrl, formData, maxSize } = resp;
   let realUrl = url;
   if (backupUrl) {
     if (global.USE_ACC_OSS) {
@@ -239,6 +247,39 @@ export async function uploadFile(fn: string, key?: string) {
     incomplete: ' ',
     total: fileSize,
   });
+
+  // 自托管节点的 s3 直传:服务端下发预签名 PUT,字节直达用户的对象存储
+  if (resp.method === 'PUT') {
+    const fileStream = fs.createReadStream(fn);
+    fileStream.on('data', (data) => {
+      bar.tick(data.length);
+    });
+    let putRes: fetch.Response;
+    try {
+      putRes = await fetch(realUrl, {
+        method: 'PUT',
+        body: fileStream,
+        // 预签名 PUT 不接受 chunked 传输,必须显式声明长度
+        headers: { 'content-length': String(fileSize), ...(resp.headers || {}) },
+      });
+    } catch (error) {
+      if (isProxyRelatedError(error)) {
+        const rawMessage =
+          error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+        );
+      }
+      throw createRequestError(error, realUrl);
+    }
+    if (putRes.status > 299) {
+      throw createRequestError(
+        `${putRes.status}: ${putRes.statusText || 'Upload failed'}`,
+        realUrl,
+      );
+    }
+    return { hash: resp.key };
+  }
 
   const form = new FormData();
 

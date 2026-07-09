@@ -475,7 +475,7 @@ export const versionCommands = {
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
 
-    const { hash } = await uploadFile(fn);
+    const { hash } = await uploadFile(fn, undefined, appId);
 
     const versionName =
       name ||

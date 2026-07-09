@@ -141,7 +141,7 @@ async function uploadNativePackage(
     console.log(t('usingCustomVersion', { version: versionName }));
   }
 
-  const { hash } = await uploadFile(filePath);
+  const { hash } = await uploadFile(filePath, undefined, appId);
   const normalizedBuildTime = config.normalizeBuildTime
     ? config.normalizeBuildTime(buildTime)
     : buildTime;
