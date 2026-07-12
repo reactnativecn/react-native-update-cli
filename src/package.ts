@@ -4,6 +4,7 @@ import path from 'path';
 import Table from 'tty-table';
 import { doDelete, getAllPackages, post, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
+import { createSlimNativePackage } from './native-package';
 import type { Platform } from './types';
 import {
   getAabInfo,
@@ -141,26 +142,35 @@ async function uploadNativePackage(
     console.log(t('usingCustomVersion', { version: versionName }));
   }
 
-  const { hash } = await uploadFile(filePath, undefined, appId);
-  const normalizedBuildTime = config.normalizeBuildTime
-    ? config.normalizeBuildTime(buildTime)
-    : buildTime;
-  const uploadBuildTime = normalizeUploadBuildTime(normalizedBuildTime);
-
-  const { id } = await post(`/app/${appId}/package/create`, {
-    name: versionName,
-    hash,
-    buildTime: uploadBuildTime,
-    deps: depVersions,
-    commit: await getCommitInfo(),
-  });
-  console.log(
-    t(config.successKey, {
-      id,
-      version: versionName,
-      buildTime: uploadBuildTime,
-    }),
+  const tempRoot = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'rnu-native-package-upload-'),
   );
+  const slimPackagePath = path.join(tempRoot, `package${config.extension}`);
+  try {
+    await createSlimNativePackage(filePath, slimPackagePath, config.platform);
+    const { hash } = await uploadFile(slimPackagePath, undefined, appId);
+    const normalizedBuildTime = config.normalizeBuildTime
+      ? config.normalizeBuildTime(buildTime)
+      : buildTime;
+    const uploadBuildTime = normalizeUploadBuildTime(normalizedBuildTime);
+
+    const { id } = await post(`/app/${appId}/package/create`, {
+      name: versionName,
+      hash,
+      buildTime: uploadBuildTime,
+      deps: depVersions,
+      commit: await getCommitInfo(),
+    });
+    console.log(
+      t(config.successKey, {
+        id,
+        version: versionName,
+        buildTime: uploadBuildTime,
+      }),
+    );
+  } finally {
+    await fs.remove(tempRoot);
+  }
 }
 
 export async function listPackage(appId: string) {

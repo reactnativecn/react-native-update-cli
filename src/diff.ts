@@ -4,7 +4,8 @@ import os from 'os';
 import path from 'path';
 import type { Entry, ZipFile as YauzlZipFile } from 'yauzl';
 import { ZipFile as YazlZipFile } from 'yazl';
-import type { CommandContext } from './types';
+import { resolveNativePackageEntry } from './native-package';
+import type { CommandContext, Platform } from './types';
 import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
 import {
@@ -51,13 +52,11 @@ type HdiffModule = {
 type EntryMap = Record<string, { crc32: number; fileName: string }>;
 type CrcMap = Record<number, string>;
 type CopyMap = Record<string, string>;
-type PackagePathTransform = (v: string) => string | undefined;
 type DiffTarget =
   | { kind: 'ppk' }
   | {
       kind: 'package';
-      originBundleName: string;
-      transformPackagePath?: PackagePathTransform;
+      platform: Platform;
     };
 type DiffCommandConfig = {
   diffFnName: string;
@@ -419,8 +418,7 @@ async function diffFromPackage(
   next: string,
   output: string,
   diffFn: Diff,
-  originBundleName: string,
-  transformPackagePath: (v: string) => string | undefined = (v: string) => v,
+  platform: Platform,
   bundleOptions: BundleDiffOptions = {},
 ) {
   const originEntries: Record<string, number> = {};
@@ -437,17 +435,18 @@ async function diffFromPackage(
 
   await enumZipEntries(origin, async (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
-      const fn = transformPackagePath(entry.fileName);
-      if (!fn) {
+      const resolvedEntry = resolveNativePackageEntry(platform, entry.fileName);
+      if (!resolvedEntry) {
         return;
       }
+      const fn = resolvedEntry.diffPath;
 
       //console.log(fn);
       // isFile
       originEntries[fn] = entry.crc32;
       originMap[entry.crc32] = fn;
 
-      if (fn === originBundleName) {
+      if (resolvedEntry.kind === 'bundle') {
         // This is source.
         originSource = await readEntry(entry, zipFile);
       }
@@ -625,11 +624,6 @@ function diffArgsCheck(
   };
 }
 
-const transformIpaPackagePath: PackagePathTransform = (v) => {
-  const match = /^Payload\/[^/]+\/(.+)$/.exec(v);
-  return match?.[1];
-};
-
 const createDiffCommand =
   ({ diffFnName, target }: DiffCommandConfig) =>
   async ({ args, options }: CommandContext) => {
@@ -650,8 +644,7 @@ const createDiffCommand =
         next,
         realOutput,
         diffFn,
-        target.originBundleName,
-        target.transformPackagePath,
+        target.platform,
         bundleOptions,
       );
     }
@@ -668,22 +661,21 @@ export const diffCommands = {
     diffFnName: 'hdiffFromApk',
     target: {
       kind: 'package',
-      originBundleName: 'assets/index.android.bundle',
+      platform: 'android',
     },
   }),
   hdiffFromApp: createDiffCommand({
     diffFnName: 'hdiffFromApp',
     target: {
       kind: 'package',
-      originBundleName: 'resources/rawfile/bundle.harmony.js',
+      platform: 'harmony',
     },
   }),
   hdiffFromIpa: createDiffCommand({
     diffFnName: 'hdiffFromIpa',
     target: {
       kind: 'package',
-      originBundleName: 'main.jsbundle',
-      transformPackagePath: transformIpaPackagePath,
+      platform: 'ios',
     },
   }),
 };

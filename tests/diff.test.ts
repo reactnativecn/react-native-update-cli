@@ -511,6 +511,39 @@ describe('diff commands', () => {
     expect(diffMeta.copiesCrc['assets/keep.txt']).toBeUndefined();
   });
 
+  test('hdiffFromApk does not match OTA files against excluded native entries', async () => {
+    const originPath = path.join(tempRoot, 'origin-native-entry.apk');
+    const nextPath = path.join(tempRoot, 'next-native-entry.ppk');
+    const outputPath = path.join(tempRoot, 'out', 'native-entry-diff.ppk');
+
+    await createZip(originPath, {
+      'assets/index.android.bundle': 'old-bundle',
+      'classes.dex': 'same-as-new-resource',
+    });
+    await createZip(nextPath, {
+      'index.bundlejs': 'new-bundle',
+      'assets/new-resource.bin': 'same-as-new-resource',
+    });
+
+    await diffCommands.hdiffFromApk(
+      createContext([originPath, nextPath], {
+        output: outputPath,
+        customDiff: () => Buffer.from('patch'),
+      }),
+    );
+
+    const result = await readZipContent(outputPath);
+    expect(result.files['assets/new-resource.bin']?.toString()).toBe(
+      'same-as-new-resource',
+    );
+    const diffMeta = JSON.parse(
+      result.files['__diff.json'].toString('utf-8'),
+    ) as {
+      copies: Record<string, string>;
+    };
+    expect(diffMeta.copies['assets/new-resource.bin']).toBeUndefined();
+  });
+
   test('hdiffFromIpa ignores non-payload files when resolving origin package path', async () => {
     const originPath = path.join(tempRoot, 'origin-non-payload.ipa');
     const nextPath = path.join(tempRoot, 'next-non-payload.ppk');
