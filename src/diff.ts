@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'fs-extra';
 import { npm, yarn } from 'global-dirs';
 import os from 'os';
@@ -18,6 +19,7 @@ import {
   enumZipEntries,
   readEntry,
   readEntryPrefix,
+  writeEntry,
 } from './utils/zip-entries';
 import {
   ZIP_ENTRY_SNIFF_BYTES,
@@ -48,6 +50,26 @@ type HdiffModule = {
   patchStream?: PatchStream;
   diffSingleStream?: DiffStream;
   patchSingleStream?: PatchStream;
+  capabilities?: {
+    diffStreamVerifiesOutput?: boolean;
+    diffSingleStreamVerifiesOutput?: boolean;
+    diffWindowVerifiesOutput?: boolean;
+  };
+};
+type BundleSource =
+  | { kind: 'buffer'; data: Buffer }
+  | {
+      kind: 'file';
+      path: string;
+      size: number;
+      materializeDurationMs: number;
+    };
+type BundlePatch =
+  | { kind: 'buffer'; data: Buffer }
+  | { kind: 'file'; path: string };
+type BundlePatchResult = {
+  patch: BundlePatch;
+  hbcTransform?: HbcTransformMeta;
 };
 type EntryMap = Record<string, { crc32: number; fileName: string }>;
 type CrcMap = Record<number, string>;
@@ -119,19 +141,80 @@ type BundleDiffOptions = {
   patchStreamFn?: PatchStream;
   /** 流式产物是否为 single 格式(决定 baseline 轨道是否可用) */
   streamEmitsSingleFormat?: boolean;
+  /** diffStreamFn 内部已经完整 apply-and-compare,可跳过重复还原 */
+  streamOutputVerified?: boolean;
+  onDiffPhase?: (metric: {
+    phase: 'materialize' | 'diff' | 'verify';
+    durationMs: number;
+    inputBytes: number;
+    outputBytes?: number;
+    skipped?: boolean;
+  }) => void;
 };
 
+function reportDiffPhase(
+  options: BundleDiffOptions,
+  metric: Parameters<NonNullable<BundleDiffOptions['onDiffPhase']>>[0],
+) {
+  try {
+    options.onDiffPhase?.(metric);
+  } catch {
+    // Observability must never break patch generation.
+  }
+}
+
+const bundleSourceSize = (source: BundleSource) =>
+  source.kind === 'buffer' ? source.data.length : source.size;
+
+const bundleSourceBuffer = async (source: BundleSource) =>
+  source.kind === 'buffer' ? source.data : fs.readFile(source.path);
+
+async function bundleSourceFile(
+  source: BundleSource,
+  outputPath: string,
+): Promise<string> {
+  if (source.kind === 'file') {
+    return source.path;
+  }
+  await fs.writeFile(outputPath, source.data);
+  return outputPath;
+}
+
+async function hashFile(filePath: string): Promise<string> {
+  const hash = createHash('sha256');
+  for await (const chunk of fs.createReadStream(filePath)) {
+    hash.update(chunk as Buffer);
+  }
+  return hash.digest('hex');
+}
+
+async function filesEqual(leftPath: string, rightPath: string) {
+  const [leftStat, rightStat] = await Promise.all([
+    fs.stat(leftPath),
+    fs.stat(rightPath),
+  ]);
+  if (leftStat.size !== rightStat.size) {
+    return false;
+  }
+  const [leftHash, rightHash] = await Promise.all([
+    hashFile(leftPath),
+    hashFile(rightPath),
+  ]);
+  return leftHash === rightHash;
+}
+
 /**
- * 大 bundle 流式路径:可选 HBC 变换(在 buffer 上做,写临时文件)后
- * diffStream 生成 HDIFF13,并以 patchStream + T⁻¹ 做 round-trip 自检。
- * 自检失败直接抛错(此路径没有 baseline 可回退——内存 diff 正是要避免的),
- * 由上层按任务失败重试/告警处理。
+ * 大 bundle 流式路径:普通 bundle 直接从 ZIP entry 落盘后传入 native,
+ * 避免 old/new/restored 的整块 Buffer 副本。HBC 变换仍需 Buffer,因为
+ * T/T⁻¹ 当前是内存算法。native 已自校验的普通产物不再重复 patch;
+ * 自定义/变换路径仍保留 round-trip 校验。
  */
 async function buildStreamBundlePatch(
-  originSource: Buffer,
-  newSource: Buffer,
+  originSource: BundleSource,
+  newSource: BundleSource,
   options: BundleDiffOptions,
-): Promise<{ patchData: Buffer; hbcTransform?: HbcTransformMeta }> {
+  workRoot: string,
+): Promise<BundlePatchResult> {
   const diffStreamFn = options.diffStreamFn;
   const patchStreamFn = options.patchStreamFn;
   if (!diffStreamFn || !patchStreamFn) {
@@ -140,37 +223,100 @@ async function buildStreamBundlePatch(
     );
   }
 
-  const pair = options.hbcTransform
-    ? tryTransformPair(originSource, newSource)
+  const tempRoot = fs.mkdtempSync(path.join(workRoot, 'stream-'));
+  const inputBytes =
+    bundleSourceSize(originSource) + bundleSourceSize(newSource);
+  const extractionDurationMs =
+    (originSource.kind === 'file' ? originSource.materializeDurationMs : 0) +
+    (newSource.kind === 'file' ? newSource.materializeDurationMs : 0);
+  let phaseStartedAt = performance.now();
+  const rawOldFile = await bundleSourceFile(
+    originSource,
+    path.join(tempRoot, 'old.bin'),
+  );
+  const rawNewFile = await bundleSourceFile(
+    newSource,
+    path.join(tempRoot, 'new.bin'),
+  );
+  const originBuffer = options.hbcTransform
+    ? await bundleSourceBuffer(originSource)
     : null;
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-stream-diff-'));
-  try {
-    const oldFile = path.join(tempRoot, 'old.bin');
-    const newFile = path.join(tempRoot, 'new.bin');
-    const patchFile = path.join(tempRoot, 'patch.bin');
+  const newBuffer = options.hbcTransform
+    ? await bundleSourceBuffer(newSource)
+    : null;
+  const pair =
+    originBuffer && newBuffer
+      ? tryTransformPair(originBuffer, newBuffer)
+      : null;
+  const oldFile = pair
+    ? path.join(tempRoot, 'old-transformed.bin')
+    : rawOldFile;
+  const newFile = pair
+    ? path.join(tempRoot, 'new-transformed.bin')
+    : rawNewFile;
+  const patchFile = path.join(tempRoot, 'patch.bin');
+
+  if (pair) {
+    await Promise.all([
+      fs.writeFile(oldFile, pair.tOld),
+      fs.writeFile(newFile, pair.tNew),
+    ]);
+  }
+  reportDiffPhase(options, {
+    phase: 'materialize',
+    durationMs: extractionDurationMs + performance.now() - phaseStartedAt,
+    inputBytes,
+  });
+
+  phaseStartedAt = performance.now();
+  await diffStreamFn(oldFile, newFile, patchFile);
+  const patchBytes = (await fs.stat(patchFile)).size;
+  reportDiffPhase(options, {
+    phase: 'diff',
+    durationMs: performance.now() - phaseStartedAt,
+    inputBytes,
+    outputBytes: patchBytes,
+  });
+
+  // 变换路径必须验证 T⁻¹ 和元数据;未声明自校验的自定义 diff 也保留
+  // round-trip。node-hdiffpatch native 普通路径已经在返回前完整验证。
+  if (pair || !options.streamOutputVerified) {
+    phaseStartedAt = performance.now();
     const restoredFile = path.join(tempRoot, 'restored.bin');
-    fs.writeFileSync(oldFile, pair ? pair.tOld : originSource);
-    fs.writeFileSync(newFile, pair ? pair.tNew : newSource);
-
-    await diffStreamFn(oldFile, newFile, patchFile);
-
-    // round-trip 自检:patchStream 还原(变换域则再做 T⁻¹)必须与新 bundle 一致
     await patchStreamFn(oldFile, patchFile, restoredFile);
-    const restoredRaw: Buffer = fs.readFileSync(restoredFile);
-    const restored = pair
-      ? transformHbcWithLayout(restoredRaw, pair.layout, true)
-      : restoredRaw;
-    if (!restored || Buffer.compare(restored, newSource) !== 0) {
+    if (pair) {
+      const restoredRaw = await fs.readFile(restoredFile);
+      const restored = transformHbcWithLayout(restoredRaw, pair.layout, true);
+      if (
+        !restored ||
+        !newBuffer ||
+        Buffer.compare(restored, newBuffer) !== 0
+      ) {
+        throw new Error('stream diff round-trip verification failed');
+      }
+    } else if (!(await filesEqual(restoredFile, rawNewFile))) {
       throw new Error('stream diff round-trip verification failed');
     }
-
-    return {
-      patchData: fs.readFileSync(patchFile),
-      ...(pair ? { hbcTransform: pair.meta } : {}),
-    };
-  } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
+    reportDiffPhase(options, {
+      phase: 'verify',
+      durationMs: performance.now() - phaseStartedAt,
+      inputBytes,
+      outputBytes: patchBytes,
+    });
+  } else {
+    reportDiffPhase(options, {
+      phase: 'verify',
+      durationMs: 0,
+      inputBytes,
+      outputBytes: patchBytes,
+      skipped: true,
+    });
   }
+
+  return {
+    patch: { kind: 'file', path: patchFile },
+    ...(pair ? { hbcTransform: pair.meta } : {}),
+  };
 }
 
 /**
@@ -180,51 +326,61 @@ async function buildStreamBundlePatch(
  */
 async function buildBundlePatch(
   diffFn: Diff,
-  originSource: Buffer | undefined,
-  newSource: Buffer,
+  originSource: BundleSource | undefined,
+  newSource: BundleSource,
   options: BundleDiffOptions,
-): Promise<{ patchData: Buffer; hbcTransform?: HbcTransformMeta }> {
+  workRoot: string,
+): Promise<BundlePatchResult> {
   if (
     options.streamThresholdBytes &&
     originSource &&
-    Math.max(originSource.length, newSource.length) >=
+    Math.max(bundleSourceSize(originSource), bundleSourceSize(newSource)) >=
       options.streamThresholdBytes
   ) {
-    return buildStreamBundlePatch(originSource, newSource, options);
+    return buildStreamBundlePatch(originSource, newSource, options, workRoot);
   }
 
-  const baseline = await diffFn(originSource, newSource);
+  const [originBuffer, newBuffer] = await Promise.all([
+    originSource
+      ? bundleSourceBuffer(originSource)
+      : Promise.resolve(undefined),
+    bundleSourceBuffer(newSource),
+  ]);
+  const baseline = await diffFn(originBuffer, newBuffer);
   if (
     !options.hbcTransform ||
     !options.patchFn ||
-    !originSource ||
+    !originBuffer ||
     baseline.length <
       (options.minBaselineBytes ?? HBC_TRANSFORM_MIN_BASELINE_BYTES)
   ) {
-    return { patchData: baseline };
+    return { patch: { kind: 'buffer', data: baseline } };
   }
 
-  const pair = tryTransformPair(originSource, newSource);
+  const pair = tryTransformPair(originBuffer, newBuffer);
   if (!pair) {
-    return { patchData: baseline };
+    return { patch: { kind: 'buffer', data: baseline } };
   }
 
   try {
     const candidate = await diffFn(pair.tOld, pair.tNew);
     const metaOverhead = Buffer.byteLength(JSON.stringify(pair.meta));
     if (candidate.length + metaOverhead >= baseline.length) {
-      return { patchData: baseline };
+      return { patch: { kind: 'buffer', data: baseline } };
     }
 
     const patched = options.patchFn(pair.tOld, candidate);
     const restored = transformHbcWithLayout(patched, pair.layout, true);
-    if (!restored || Buffer.compare(restored, newSource) !== 0) {
+    if (!restored || Buffer.compare(restored, newBuffer) !== 0) {
       console.warn(t('hbcTransformRoundTripFailed'));
-      return { patchData: baseline };
+      return { patch: { kind: 'buffer', data: baseline } };
     }
-    return { patchData: candidate, hbcTransform: pair.meta };
+    return {
+      patch: { kind: 'buffer', data: candidate },
+      hbcTransform: pair.meta,
+    };
   } catch {
-    return { patchData: baseline };
+    return { patch: { kind: 'buffer', data: baseline } };
   }
 }
 
@@ -233,22 +389,69 @@ async function addBundlePatch(
   entry: Entry,
   nextZipfile: YauzlZipFile,
   diffFn: Diff,
-  originSource: Buffer | undefined,
+  originSource: BundleSource | undefined,
   bundleOptions: BundleDiffOptions,
   hbcTransformMetas: Record<string, HbcTransformMeta>,
+  workRoot: string,
 ) {
-  const newSource = await readEntry(entry, nextZipfile);
-  const { patchData, hbcTransform } = await buildBundlePatch(
+  const shouldStream =
+    !!bundleOptions.streamThresholdBytes &&
+    !!originSource &&
+    Math.max(bundleSourceSize(originSource), entry.uncompressedSize) >=
+      bundleOptions.streamThresholdBytes;
+  let newSource: BundleSource;
+  if (shouldStream) {
+    const nextRoot = fs.mkdtempSync(path.join(workRoot, 'next-'));
+    const nextPath = path.join(nextRoot, 'bundle.bin');
+    const startedAt = performance.now();
+    await writeEntry(entry, nextZipfile, nextPath);
+    newSource = {
+      kind: 'file',
+      path: nextPath,
+      size: entry.uncompressedSize,
+      materializeDurationMs: performance.now() - startedAt,
+    };
+  } else {
+    newSource = { kind: 'buffer', data: await readEntry(entry, nextZipfile) };
+  }
+
+  const { patch, hbcTransform } = await buildBundlePatch(
     diffFn,
     originSource,
     newSource,
     bundleOptions,
+    workRoot,
   );
   const patchEntryName = `${entry.fileName}.patch`;
   if (hbcTransform) {
     hbcTransformMetas[patchEntryName] = hbcTransform;
   }
-  zipfile.addBuffer(patchData, patchEntryName, zipOptionsForPatchEntry());
+  if (patch.kind === 'file') {
+    zipfile.addFile(patch.path, patchEntryName, zipOptionsForPatchEntry());
+  } else {
+    zipfile.addBuffer(patch.data, patchEntryName, zipOptionsForPatchEntry());
+  }
+}
+
+async function readOriginBundleSource(
+  entry: Entry,
+  zipFile: YauzlZipFile,
+  bundleOptions: BundleDiffOptions,
+  workRoot: string,
+): Promise<BundleSource> {
+  if (!bundleOptions.streamThresholdBytes) {
+    return { kind: 'buffer', data: await readEntry(entry, zipFile) };
+  }
+  const originRoot = fs.mkdtempSync(path.join(workRoot, 'origin-'));
+  const originPath = path.join(originRoot, 'bundle.bin');
+  const startedAt = performance.now();
+  await writeEntry(entry, zipFile, originPath);
+  return {
+    kind: 'file',
+    path: originPath,
+    size: entry.uncompressedSize,
+    materializeDurationMs: performance.now() - startedAt,
+  };
 }
 
 async function addFileFromZipEntry(
@@ -302,12 +505,13 @@ async function diffFromPPK(
   next: string,
   output: string,
   diffFn: Diff,
-  bundleOptions: BundleDiffOptions = {},
+  bundleOptions: BundleDiffOptions,
+  workRoot: string,
 ) {
   const originEntries: EntryMap = {};
   const originMap: CrcMap = {};
 
-  let originSource: Buffer | undefined;
+  let originSource: BundleSource | undefined;
 
   await enumZipEntries(origin, async (entry, zipFile) => {
     originEntries[entry.fileName] = entry;
@@ -317,7 +521,12 @@ async function diffFromPPK(
 
       if (isPPKBundleFileName(entry.fileName)) {
         // This is source.
-        originSource = await readEntry(entry, zipFile);
+        originSource = await readOriginBundleSource(
+          entry,
+          zipFile,
+          bundleOptions,
+          workRoot,
+        );
       }
     }
   });
@@ -365,6 +574,7 @@ async function diffFromPPK(
         originSource,
         bundleOptions,
         hbcTransformMetas,
+        workRoot,
       );
     } else {
       // If same file.
@@ -419,12 +629,13 @@ async function diffFromPackage(
   output: string,
   diffFn: Diff,
   platform: Platform,
-  bundleOptions: BundleDiffOptions = {},
+  bundleOptions: BundleDiffOptions,
+  workRoot: string,
 ) {
   const originEntries: Record<string, number> = {};
   const originMap: CrcMap = {};
 
-  let originSource: Buffer | undefined;
+  let originSource: BundleSource | undefined;
 
   // Content checksum (CRC32) for entries that are copied from a *different*
   // path in the origin package ("moved" entries). On Android these are the
@@ -448,7 +659,12 @@ async function diffFromPackage(
 
       if (resolvedEntry.kind === 'bundle') {
         // This is source.
-        originSource = await readEntry(entry, zipFile);
+        originSource = await readOriginBundleSource(
+          entry,
+          zipFile,
+          bundleOptions,
+          workRoot,
+        );
       }
     }
   });
@@ -475,6 +691,7 @@ async function diffFromPackage(
         originSource,
         bundleOptions,
         hbcTransformMetas,
+        workRoot,
       );
     } else {
       // If same file.
@@ -511,9 +728,12 @@ type DiffCommandOptions = {
   customPatch?: Patch;
   customDiffStream?: DiffStream;
   customPatchStream?: PatchStream;
+  customDiffStreamVerified?: boolean;
   customDiffSingleStream?: DiffStream;
   customPatchSingleStream?: PatchStream;
+  customDiffSingleStreamVerified?: boolean;
   customHdiffModule?: HdiffModule;
+  onDiffPhase?: BundleDiffOptions['onDiffPhase'];
   hbcTransform?: boolean;
   bundleStreamThreshold?: number;
   [key: string]: any;
@@ -552,7 +772,12 @@ function resolveBundleDiffOptions(
     | 'diffStreamFn'
     | 'patchStreamFn'
     | 'streamEmitsSingleFormat'
+    | 'streamOutputVerified'
   > = {};
+  const observerOptions =
+    typeof options.onDiffPhase === 'function'
+      ? { onDiffPhase: options.onDiffPhase }
+      : {};
   if (
     typeof options.bundleStreamThreshold === 'number' &&
     options.bundleStreamThreshold > 0
@@ -568,27 +793,34 @@ function resolveBundleDiffOptions(
       streamOptions.diffStreamFn = singleDiffStreamFn;
       streamOptions.patchStreamFn = singlePatchStreamFn;
       streamOptions.streamEmitsSingleFormat = true;
+      streamOptions.streamOutputVerified = options.customDiffSingleStream
+        ? options.customDiffSingleStreamVerified === true
+        : hdiffModule?.capabilities?.diffSingleStreamVerifiesOutput === true;
     } else if (diffStreamFn && patchStreamFn) {
       streamOptions.streamThresholdBytes = options.bundleStreamThreshold;
       streamOptions.diffStreamFn = diffStreamFn;
       streamOptions.patchStreamFn = patchStreamFn;
       streamOptions.streamEmitsSingleFormat = false;
+      streamOptions.streamOutputVerified = options.customDiffStream
+        ? options.customDiffStreamVerified === true
+        : hdiffModule?.capabilities?.diffStreamVerifiesOutput === true;
     } else {
       console.warn(t('bundleStreamNeedsHdiffpatch'));
     }
   }
 
   if (!options.hbcTransform) {
-    return { ...streamOptions };
+    return { ...observerOptions, ...streamOptions };
   }
   const patchFn = resolvePatchImplementation(options);
   if (!patchFn) {
     console.warn(t('hbcTransformNeedsPatch'));
-    return { ...streamOptions };
+    return { ...observerOptions, ...streamOptions };
   }
   return {
     hbcTransform: true,
     patchFn,
+    ...observerOptions,
     ...streamOptions,
     ...(typeof options.hbcTransformMinBaseline === 'number'
       ? { minBaselineBytes: options.hbcTransformMinBaseline }
@@ -636,17 +868,30 @@ const createDiffCommand =
       options as DiffCommandOptions,
     );
 
-    if (target.kind === 'ppk') {
-      await diffFromPPK(origin, next, realOutput, diffFn, bundleOptions);
-    } else {
-      await diffFromPackage(
-        origin,
-        next,
-        realOutput,
-        diffFn,
-        target.platform,
-        bundleOptions,
-      );
+    const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-bundle-diff-'));
+    try {
+      if (target.kind === 'ppk') {
+        await diffFromPPK(
+          origin,
+          next,
+          realOutput,
+          diffFn,
+          bundleOptions,
+          workRoot,
+        );
+      } else {
+        await diffFromPackage(
+          origin,
+          next,
+          realOutput,
+          diffFn,
+          target.platform,
+          bundleOptions,
+          workRoot,
+        );
+      }
+    } finally {
+      fs.rmSync(workRoot, { recursive: true, force: true });
     }
 
     console.log(t('diffPackageGenerated', { output: realOutput }));

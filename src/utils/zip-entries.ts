@@ -1,6 +1,7 @@
 import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
+import { pipeline } from 'stream/promises';
 import {
   type Entry,
   open as openZipFile,
@@ -30,6 +31,27 @@ export function readEntry(
       stream.on('error', (err) => {
         reject(err);
       });
+    });
+  });
+}
+
+export function writeEntry(
+  entry: Entry,
+  zipFile: YauzlZipFile,
+  outputPath: string,
+): Promise<void> {
+  fs.ensureDirSync(path.dirname(outputPath));
+  return new Promise((resolve, reject) => {
+    zipFile.openReadStream(entry, (err, stream) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      if (!stream) {
+        reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
+        return;
+      }
+      pipeline(stream, fs.createWriteStream(outputPath)).then(resolve, reject);
     });
   });
 }

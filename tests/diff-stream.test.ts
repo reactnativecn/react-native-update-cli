@@ -19,6 +19,8 @@ type HdiffFull = {
   patch: (a: Buffer, d: Buffer) => Buffer;
   diffStream: (o: string, n: string, out: string) => string;
   patchStream: (o: string, d: string, out: string) => string;
+  diffSingleStream: (o: string, n: string, out: string) => string;
+  patchSingleStream: (o: string, d: string, out: string) => string;
 };
 
 function loadHdiff(): HdiffFull | undefined {
@@ -224,6 +226,87 @@ describe('hdiff with bundleStreamThreshold (large-bundle stream path)', () => {
         patchData,
       );
       expect(Buffer.compare(restored, next)).toBe(0);
+    },
+  );
+
+  itIfStream(
+    'skips a duplicate round trip for an explicitly verified stream diff',
+    async () => {
+      const hd = loadHdiff() as unknown as HdiffFull;
+      let patchCalls = 0;
+      const phases: Array<{ phase: string; skipped?: boolean }> = [];
+      const origin = Buffer.from(`var a='${'x'.repeat(4000)}';`);
+      const next = Buffer.from(`var a='${'x'.repeat(4000)}';var b=2;`);
+      const files = await runHdiff(
+        { origin, next },
+        {
+          bundleStreamThreshold: 1,
+          customHdiffModule: {
+            diff: hd.diff,
+            patch: hd.patch,
+            diffSingleStream: hd.diffSingleStream,
+            patchSingleStream: (
+              oldPath: string,
+              diffPath: string,
+              outPath: string,
+            ) => {
+              patchCalls += 1;
+              return hd.patchSingleStream(oldPath, diffPath, outPath);
+            },
+            capabilities: {
+              diffSingleStreamVerifiesOutput: true,
+            },
+          },
+          onDiffPhase: (metric: { phase: string; skipped?: boolean }) => {
+            phases.push(metric);
+          },
+        },
+      );
+
+      expect(patchCalls).toBe(0);
+      expect(phases.map(({ phase }) => phase)).toEqual([
+        'materialize',
+        'diff',
+        'verify',
+      ]);
+      expect(phases.at(-1)?.skipped).toBe(true);
+      expect(
+        Buffer.compare(hd.patch(origin, files['index.bundlejs.patch']), next),
+      ).toBe(0);
+    },
+  );
+
+  itIfStream(
+    'keeps round-trip verification for an unverified custom stream diff',
+    async () => {
+      const hd = loadHdiff() as unknown as HdiffFull;
+      let patchCalls = 0;
+      const phases: Array<{ phase: string; skipped?: boolean }> = [];
+      const origin = Buffer.from(`var a='${'x'.repeat(4000)}';`);
+      const next = Buffer.from(`var a='${'x'.repeat(4000)}';var b=2;`);
+      await runHdiff(
+        { origin, next },
+        {
+          bundleStreamThreshold: 1,
+          customDiff: hd.diff,
+          customDiffSingleStream: hd.diffSingleStream,
+          customPatchSingleStream: (
+            oldPath: string,
+            diffPath: string,
+            outPath: string,
+          ) => {
+            patchCalls += 1;
+            return hd.patchSingleStream(oldPath, diffPath, outPath);
+          },
+          onDiffPhase: (metric: { phase: string; skipped?: boolean }) => {
+            phases.push(metric);
+          },
+        },
+      );
+
+      expect(patchCalls).toBe(1);
+      expect(phases.at(-1)?.phase).toBe('verify');
+      expect(phases.at(-1)?.skipped).toBeUndefined();
     },
   );
 

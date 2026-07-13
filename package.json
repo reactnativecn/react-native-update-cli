@@ -39,7 +39,8 @@
     "lint": "bun run typecheck && biome check .",
     "lint:fix": "bun run typecheck && biome check --write .",
     "test": "bun test",
-    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov"
+    "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov",
+    "benchmark:diff-stream": "bun scripts/benchmark-diff-stream.ts"
   },
   "repository": {
     "type": "git",
