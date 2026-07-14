@@ -18,22 +18,35 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      # Setup .npmrc file to publish to npm
-      - uses: actions/setup-node@v6
+      - name: Set up Node.js 18 for runtime verification
+        uses: actions/setup-node@v6
         with:
-          node-version: '24.x'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: '18.17.0'
 
       - run: bun install --frozen-lockfile
 
       - name: Prepare publish version
         run: bun scripts/prepublish.ts
 
+      - name: Build package
+        run: bun run build
+
+      - name: Verify built CLI with Node.js 18
+        run: |
+          node --version
+          node lib/bin.js -v
+
+      - name: Set up Node.js for npm publishing
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Publish to npm
         shell: bash
         run: |
           if [[ "${{ github.event.release.tag_name }}" == *"beta"* ]]; then
-            npm publish --provenance --access public --tag beta
+            npm publish --ignore-scripts --provenance --access public --tag beta
           else
-            npm publish --provenance --access public
+            npm publish --ignore-scripts --provenance --access public
           fi
