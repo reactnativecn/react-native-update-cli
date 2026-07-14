@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import { createServer } from 'net';
 import os from 'os';
@@ -84,6 +85,18 @@ describe('runtime JavaScript runner selection', () => {
     expect(getJavaScriptRuntime({ RNU_JS_RUNTIME: 'auto' })).toBe(
       isBunRuntime ? 'bun' : 'node',
     );
+  });
+});
+
+describe('CommonJS runtime dependencies', () => {
+  test('loads chalk with Node.js require', () => {
+    const result = spawnSync('node', ['-e', "require('chalk')"], {
+      cwd: path.resolve(import.meta.dir, '..'),
+      encoding: 'utf8',
+    });
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
   });
 });
 
