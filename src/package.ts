@@ -40,6 +40,8 @@ type PackageVersionRef = {
 type NativePackageInfo = {
   versionName?: string | number;
   buildTime?: string | number;
+  /** sha256 of the JS bundle embedded in the package (content identity) */
+  bundleHash?: string;
   appId?: string;
   appKey?: string;
   [key: string]: unknown;
@@ -112,7 +114,7 @@ async function uploadNativePackage(
   config: NativeUploadConfig,
 ): Promise<void> {
   const info = await config.getInfo(filePath);
-  const { versionName: extractedVersionName, buildTime } = info;
+  const { versionName: extractedVersionName, buildTime, bundleHash } = info;
   const { appId: appIdInPkg, appKey: appKeyInPkg } = info;
   const selectedApp = options.appId
     ? {
@@ -158,6 +160,10 @@ async function uploadNativePackage(
       name: versionName,
       hash,
       buildTime: uploadBuildTime,
+      // Content identity of the embedded JS bundle; the server matches it
+      // against the client-reported bundleHash to decide pdiff applicability.
+      // Old servers strip unknown fields, so this is forward-compatible.
+      ...(bundleHash ? { bundleHash } : {}),
       deps: depVersions,
       commit: await getCommitInfo(),
     });

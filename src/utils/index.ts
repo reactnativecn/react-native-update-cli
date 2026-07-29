@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { satisfies } from 'compare-versions';
+import { createHash } from 'crypto';
 import path from 'path';
 import type { Root as ProtobufRoot } from 'protobufjs';
 import { read } from 'read';
@@ -139,6 +140,19 @@ export function translateOptions<T extends Record<string, unknown>>(
   return result as T;
 }
 
+// bundleHash: sha256 of the raw bundle bytes extracted from the package. Must
+// stay byte-identical with what the client hashes at runtime (its embedded
+// bundle, which is also the pdiff source) — the server compares the two to
+// decide pdiff applicability. Raw bytes, no normalization of any kind.
+// getEntries is typed Buffer | Blob (app-info-parser's browser/node duality);
+// under Node it is always a Buffer, but handle both.
+async function sha256(data: Buffer | Blob): Promise<string> {
+  const buffer = Buffer.isBuffer(data)
+    ? data
+    : Buffer.from(await data.arrayBuffer());
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
 const ApkBundleFileName = /assets\/index.android.bundle/;
 const ApkUpdateJsonName = /res\/raw\/update.json/;
 
@@ -181,7 +195,12 @@ export async function getApkInfo(fn: string) {
   if (!Number.isFinite(buildTime) || buildTime === 0) {
     throw new Error(t('buildTimeNotFound'));
   }
-  return { versionName, buildTime, ...appCredential };
+  return {
+    versionName,
+    buildTime,
+    bundleHash: await sha256(bundleFile),
+    ...appCredential,
+  };
 }
 
 export async function getAppInfo(fn: string) {
@@ -217,7 +236,12 @@ export async function getAppInfo(fn: string) {
   if (!Number.isFinite(buildTime) || buildTime === 0) {
     throw new Error(t('buildTimeNotFound'));
   }
-  return { versionName, buildTime, ...appCredential };
+  return {
+    versionName,
+    buildTime,
+    bundleHash: await sha256(bundleFile),
+    ...appCredential,
+  };
 }
 
 const IpaBundleFileName = /payload\/.+?\.app\/main.jsbundle/;
@@ -259,7 +283,12 @@ export async function getIpaInfo(fn: string) {
     throw new Error(t('buildTimeNotFound'));
   }
   const buildTime = buildTimeTxtBuffer.toString().trim();
-  return { versionName, buildTime, ...appCredential };
+  return {
+    versionName,
+    buildTime,
+    bundleHash: await sha256(bundleFile),
+    ...appCredential,
+  };
 }
 
 export async function getAabInfo(fn: string) {
