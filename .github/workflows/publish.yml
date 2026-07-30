@@ -18,11 +18,6 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Set up Node.js 18 for runtime verification
-        uses: actions/setup-node@v6
-        with:
-          node-version: '18.17.0'
-
       - run: bun install --frozen-lockfile
 
       - name: Prepare publish version
@@ -30,6 +25,14 @@ jobs:
 
       - name: Build package
         run: bun run build
+
+      # Node 18 must only be on PATH for the verification below, not during
+      # the build: typescript >= 7 ships an extensionless ESM bin/tsc that
+      # Node 18.17 cannot load (ERR_UNKNOWN_FILE_EXTENSION).
+      - name: Set up Node.js 18 for runtime verification
+        uses: actions/setup-node@v6
+        with:
+          node-version: '18.17.0'
 
       - name: Verify built CLI with Node.js 18
         run: |
