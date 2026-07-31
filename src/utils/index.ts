@@ -372,7 +372,26 @@ export async function getAabInfo(fn: string) {
     throw new Error(t('buildTimeNotFound'));
   }
 
-  return { versionName, buildTime, ...appCredential };
+  // The JS bundle lives in the base module; these are the same bytes the
+  // extracted APK carries (extractApk copies entries verbatim), so the hash
+  // matches what uploadAab ends up registering via getApkInfo. Lenient on
+  // absence — getAabInfo is display-only (parseAab); the upload path goes
+  // through extractApk → getApkInfo which enforces the bundle's presence.
+  let bundleHash: string | undefined;
+  try {
+    bundleHash = await sha256(
+      await readZipEntry(fn, 'base/assets/index.android.bundle'),
+    );
+  } catch {
+    // no embedded bundle (e.g. debug AAB); omit the field
+  }
+
+  return {
+    versionName,
+    buildTime,
+    ...(bundleHash ? { bundleHash } : {}),
+    ...appCredential,
+  };
 }
 
 async function readZipEntry(fn: string, entryName: string): Promise<Buffer> {
