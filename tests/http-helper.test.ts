@@ -68,7 +68,7 @@ describe('testUrls edge cases', () => {
     expect(result).toBe('http://success.local');
   });
 
-  test('Fastest Response: returns the URL that resolves first', async () => {
+  test('Fastest Response: returns the URL that resolves first when all launch together', async () => {
     runtimeFetchMock.mockImplementation((url: string) => {
       if (url === 'http://fast.local') {
         return new Promise((resolve) =>
@@ -83,8 +83,55 @@ describe('testUrls edge cases', () => {
       return Promise.reject(new Error('fail'));
     });
 
-    const result = await testUrls(['http://slow.local', 'http://fast.local']);
+    // hedgeDelayMs 0 launches every url at once — pure race semantics.
+    const result = await testUrls(
+      ['http://slow.local', 'http://fast.local'],
+      0,
+    );
     expect(result).toBe('http://fast.local');
+  });
+
+  test('Hedged: only pings the first url when it answers within the hedge delay', async () => {
+    runtimeFetchMock.mockImplementation(
+      () =>
+        new Promise((resolve) => setTimeout(() => resolve({ status: 200 }), 5)),
+    );
+
+    const result = await testUrls(
+      ['http://first.local', 'http://second.local'],
+      500,
+    );
+    expect(result).toBe('http://first.local');
+    expect(runtimeFetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('Hedged: does not wait for a slow first url and aborts the loser', async () => {
+    const signals: Record<string, AbortSignal | undefined> = {};
+    runtimeFetchMock.mockImplementation(
+      (url: string, options?: { signal?: AbortSignal }) =>
+        new Promise((resolve, reject) => {
+          signals[url] = options?.signal;
+          const ms = url === 'http://slow.local' ? 2000 : 10;
+          const timer = setTimeout(() => resolve({ status: 200 }), ms);
+          options?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('aborted'));
+          });
+        }),
+    );
+
+    const start = Date.now();
+    const result = await testUrls(
+      ['http://slow.local', 'http://fast.local'],
+      20,
+    );
+    const elapsed = Date.now() - start;
+
+    expect(result).toBe('http://fast.local');
+    // Must complete in roughly hedgeDelay + fast-url time, not 2s.
+    expect(elapsed).toBeLessThan(500);
+    expect(signals['http://slow.local']?.aborted).toBe(true);
+    expect(signals['http://fast.local']?.aborted).toBe(false);
   });
 
   test('All Failures (Fallback): returns urls[0] without throwing', async () => {
