@@ -113,7 +113,10 @@ function createOutputZip(output: string) {
   const zipfile = new YazlZipFile();
   const writePromise = new Promise<void>((resolve, reject) => {
     zipfile.outputStream.on('error', reject);
-    zipfile.outputStream.pipe(fs.createWriteStream(output)).on('close', () => {
+    const writeStream = fs.createWriteStream(output);
+    // without this, a full disk / read-only target left the promise pending
+    writeStream.on('error', reject);
+    zipfile.outputStream.pipe(writeStream).on('close', () => {
       resolve(void 0);
     });
   });
@@ -248,18 +251,13 @@ async function buildStreamBundlePatch(
     originBuffer && newBuffer
       ? tryTransformPair(originBuffer, newBuffer)
       : null;
-  const oldFile = pair
-    ? path.join(tempRoot, 'old-transformed.bin')
-    : rawOldFile;
-  const newFile = pair
-    ? path.join(tempRoot, 'new-transformed.bin')
-    : rawNewFile;
-  const patchFile = path.join(tempRoot, 'patch.bin');
+  const transformedOldFile = path.join(tempRoot, 'old-transformed.bin');
+  const transformedNewFile = path.join(tempRoot, 'new-transformed.bin');
 
   if (pair) {
     await Promise.all([
-      fs.writeFile(oldFile, pair.tOld),
-      fs.writeFile(newFile, pair.tNew),
+      fs.writeFile(transformedOldFile, pair.tOld),
+      fs.writeFile(transformedNewFile, pair.tNew),
     ]);
   }
   reportDiffPhase(options, {
@@ -268,9 +266,29 @@ async function buildStreamBundlePatch(
     inputBytes,
   });
 
+  // 与内存路径同一约束:变换候选连同元数据开销必须比 baseline 更小才采用,
+  // 因此变换命中时两个候选都要生成再比较。
   phaseStartedAt = performance.now();
-  await diffStreamFn(oldFile, newFile, patchFile);
-  const patchBytes = (await fs.stat(patchFile)).size;
+  const rawPatchFile = path.join(tempRoot, 'patch-raw.bin');
+  await diffStreamFn(rawOldFile, rawNewFile, rawPatchFile);
+  let patchFile = rawPatchFile;
+  let patchBytes = (await fs.stat(rawPatchFile)).size;
+  let chosenPair: typeof pair = null;
+  if (pair) {
+    const transformedPatchFile = path.join(tempRoot, 'patch-transformed.bin');
+    await diffStreamFn(
+      transformedOldFile,
+      transformedNewFile,
+      transformedPatchFile,
+    );
+    const transformedPatchBytes = (await fs.stat(transformedPatchFile)).size;
+    const metaOverhead = Buffer.byteLength(JSON.stringify(pair.meta));
+    if (transformedPatchBytes + metaOverhead < patchBytes) {
+      patchFile = transformedPatchFile;
+      patchBytes = transformedPatchBytes;
+      chosenPair = pair;
+    }
+  }
   reportDiffPhase(options, {
     phase: 'diff',
     durationMs: performance.now() - phaseStartedAt,
@@ -280,13 +298,21 @@ async function buildStreamBundlePatch(
 
   // 变换路径必须验证 T⁻¹ 和元数据;未声明自校验的自定义 diff 也保留
   // round-trip。node-hdiffpatch native 普通路径已经在返回前完整验证。
-  if (pair || !options.streamOutputVerified) {
+  if (chosenPair || !options.streamOutputVerified) {
     phaseStartedAt = performance.now();
     const restoredFile = path.join(tempRoot, 'restored.bin');
-    await patchStreamFn(oldFile, patchFile, restoredFile);
-    if (pair) {
+    await patchStreamFn(
+      chosenPair ? transformedOldFile : rawOldFile,
+      patchFile,
+      restoredFile,
+    );
+    if (chosenPair) {
       const restoredRaw = await fs.readFile(restoredFile);
-      const restored = transformHbcWithLayout(restoredRaw, pair.layout, true);
+      const restored = transformHbcWithLayout(
+        restoredRaw,
+        chosenPair.layout,
+        true,
+      );
       if (
         !restored ||
         !newBuffer ||
@@ -315,7 +341,7 @@ async function buildStreamBundlePatch(
 
   return {
     patch: { kind: 'file', path: patchFile },
-    ...(pair ? { hbcTransform: pair.meta } : {}),
+    ...(chosenPair ? { hbcTransform: chosenPair.meta } : {}),
   };
 }
 

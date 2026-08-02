@@ -311,6 +311,38 @@ describe('hdiff with bundleStreamThreshold (large-bundle stream path)', () => {
   );
 
   itIfStream(
+    'stream path drops the hbc transform when its patch is not smaller than baseline',
+    async () => {
+      // 该 diff 把补丁写成完整的 new 内容:raw/transformed 两个候选大小
+      // 几乎一致,加上元数据开销后变换候选必然不占优,必须回退 baseline
+      const copyDiff = (_o: string, n: string, out: string) => {
+        fs.writeFileSync(out, fs.readFileSync(n));
+        return out;
+      };
+      const copyPatch = (_o: string, d: string, out: string) => {
+        fs.writeFileSync(out, fs.readFileSync(d));
+        return out;
+      };
+      const origin = fixture('v96-a.hbc');
+      const next = fixture('v96-b.hbc');
+      const files = await runHdiff(
+        { origin, next },
+        {
+          hbcTransform: true,
+          bundleStreamThreshold: 1,
+          customDiff: (loadHdiff() as HdiffFull).diff,
+          customDiffSingleStream: copyDiff,
+          customPatchSingleStream: copyPatch,
+        },
+      );
+      const manifest = JSON.parse(files['__diff.json'].toString('utf8'));
+      expect(manifest.hbcTransform).toBeUndefined();
+      // 采用的是 raw 基线候选:补丁内容就是未变换的 new bundle
+      expect(Buffer.compare(files['index.bundlejs.patch'], next)).toBe(0);
+    },
+  );
+
+  itIfStream(
     'bundles below the threshold keep the in-memory single-format path',
     async () => {
       const origin = fixture('v96-a.hbc');

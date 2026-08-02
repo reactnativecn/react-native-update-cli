@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
+import { ApkBundleFileName, IpaBundleFileName } from '../src/utils';
 import { IpaParser } from '../src/utils/app-info-parser/ipa';
 import { Zip } from '../src/utils/app-info-parser/zip';
 
@@ -61,6 +62,34 @@ describe('app-info-parser Zip', () => {
       'manifest',
     );
     expect((buffers['res/icon.png'] as Buffer).toString()).toBe('icon');
+  });
+
+  test('bundle patterns only match the exact bundle entry, not .map/.backup siblings', async () => {
+    const apkPath = path.join(tempRoot, 'app.apk');
+    await writeZip(apkPath, {
+      'assets/index.android.bundle': 'REAL_BUNDLE',
+      // later entries used to overwrite the real match via the unanchored regex
+      'assets/index.android.bundle.map': 'SOURCE_MAP',
+      'assets/index.android.bundle.backup': 'BACKUP',
+      'foo/assets/index.android.bundle.tmp': 'TMP',
+    });
+
+    const apkEntries = await new Zip(apkPath).getEntries([ApkBundleFileName]);
+    expect((apkEntries[String(ApkBundleFileName)] as Buffer).toString()).toBe(
+      'REAL_BUNDLE',
+    );
+
+    const ipaPath = path.join(tempRoot, 'app-bundle.ipa');
+    await writeZip(ipaPath, {
+      'Payload/Test.app/main.jsbundle': 'REAL_IPA_BUNDLE',
+      'Payload/Test.app/main.jsbundle.map': 'IPA_SOURCE_MAP',
+      'Payload/Test.app/mainXjsbundle': 'NOT_A_BUNDLE',
+    });
+
+    const ipaEntries = await new Zip(ipaPath).getEntries([IpaBundleFileName]);
+    expect((ipaEntries[String(IpaBundleFileName)] as Buffer).toString()).toBe(
+      'REAL_IPA_BUNDLE',
+    );
   });
 
   test('parses ipa plist with current plist package exports', async () => {

@@ -88,7 +88,14 @@ export class AabParser extends Zip {
           '--overwrite',
           ...modulesArgs,
         ]);
-      } catch (_e) {
+      } catch (e) {
+        // Only fall back when bundletool itself is missing from PATH (spawn
+        // ENOENT). Any other failure (corrupt AAB, Java issues, bad args,
+        // non-zero exit) must surface as-is instead of being masked by an
+        // online npx install.
+        if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+          throw e;
+        }
         // Fallback to npx node-bundletool if bundletool is not in PATH
         // We use -y to avoid interactive prompt for installation
         if (await needsNpxDownload()) {
@@ -140,6 +147,7 @@ export class AabParser extends Zip {
                   zipfile.close();
                   resolve();
                 });
+                readStream.on('error', reject);
                 writeStream.on('error', reject);
               });
             } else {

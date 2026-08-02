@@ -153,8 +153,11 @@ async function sha256(data: Buffer | Blob): Promise<string> {
   return createHash('sha256').update(buffer).digest('hex');
 }
 
-const ApkBundleFileName = /assets\/index.android.bundle/;
-const ApkUpdateJsonName = /res\/raw\/update.json/;
+// Anchored exact paths: unanchored/unescaped patterns also matched entries
+// like index.android.bundle.map or .backup, and a later match would silently
+// overwrite the real bundle, registering a wrong bundleHash.
+export const ApkBundleFileName = /^assets\/index\.android\.bundle$/;
+const ApkUpdateJsonName = /^res\/raw\/update\.json$/;
 
 export async function getApkInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);
@@ -208,9 +211,9 @@ export async function getAppInfo(fn: string) {
   // single scan (and single nested .hap extraction) for all three entries
   const [bundleFile, updateJsonFile, metaJsonFile] =
     await appInfoParser.parser.getEntriesFromHarmonyApp([
-      /rawfile\/bundle.harmony.js/,
-      /rawfile\/update.json/,
-      /rawfile\/meta.json/,
+      /^resources\/rawfile\/bundle\.harmony\.js$/,
+      /^resources\/rawfile\/update\.json$/,
+      /^resources\/rawfile\/meta\.json$/,
     ]);
   if (!bundleFile) {
     throw new Error(
@@ -244,12 +247,14 @@ export async function getAppInfo(fn: string) {
   };
 }
 
-const IpaBundleFileName = /payload\/.+?\.app\/main.jsbundle/;
-const IpaUpdateJsonName = /payload\/.+?\.app\/assets\/update.json/;
-const IpaBuildTimeName = /payload\/.+?\.app\/pushy_build_time.txt/;
+// lowercase because the zip reader also matches against the lowercased entry
+// name (real IPAs use "Payload/")
+export const IpaBundleFileName = /^payload\/[^/]+\.app\/main\.jsbundle$/;
+const IpaUpdateJsonName = /^payload\/[^/]+\.app\/assets\/update\.json$/;
+const IpaBuildTimeName = /^payload\/[^/]+\.app\/pushy_build_time\.txt$/;
 // Not in root bundle when use `use_frameworks`
 const IpaBuildTimeFrameworkName =
-  /payload\/.+?\.app\/frameworks\/react_native_update.framework\/pushy_build_time.txt/;
+  /^payload\/[^/]+\.app\/frameworks\/react_native_update\.framework\/pushy_build_time\.txt$/;
 
 export async function getIpaInfo(fn: string) {
   const appInfoParser = new AppInfoParser(fn);

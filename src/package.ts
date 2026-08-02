@@ -270,10 +270,12 @@ export const packageCommands = {
   }) => {
     const source = ensureFileByExt(args[0], '.aab', 'usageUploadAab');
 
-    const output = path.join(
-      os.tmpdir(),
-      `${path.basename(source, path.extname(source))}-${Date.now()}.apk`,
+    // private temp dir: unpredictable path, safe against symlink squatting in
+    // the shared tmpdir and against concurrent uploads of same-named AABs
+    const tempRoot = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'rnu-aab-upload-'),
     );
+    const output = path.join(tempRoot, 'universal.apk');
 
     const includeAllSplits = parseBooleanOption(options.includeAllSplits);
     const splits = parseCsvOption(options.splits);
@@ -289,9 +291,7 @@ export const packageCommands = {
         options,
       });
     } finally {
-      if (await fs.pathExists(output)) {
-        await fs.remove(output);
-      }
+      await fs.remove(tempRoot);
     }
   },
   uploadApp: async ({
