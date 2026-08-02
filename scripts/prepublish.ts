@@ -39,10 +39,19 @@ async function main(): Promise<void> {
     process.env.PUBLISH_DRY_RUN === 'true' ||
     process.env.npm_config_dry_run === 'true';
 
-  const gitVersion = (await $`git describe --tags --always`.text())
-    .replace('v', '')
-    .trim();
-  const version = process.env.PUBLISH_VERSION ?? gitVersion;
+  const rawVersion =
+    process.env.PUBLISH_VERSION ??
+    (await $`git describe --tags --always`.text());
+  const version = rawVersion.trim().replace(/^v/, '');
+
+  if (!/^\d+\.\d+\.\d+/.test(version)) {
+    console.error(
+      `❌ Refusing to publish with non-semver version "${version}" (from ${
+        process.env.PUBLISH_VERSION ? 'PUBLISH_VERSION' : 'git describe'
+      })`,
+    );
+    process.exit(1);
+  }
 
   if (isDryRun) {
     console.log(`Dry run publish detected; using version ${version}`);
