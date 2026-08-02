@@ -81,6 +81,9 @@ export default {
   nativeVersion: '原生版本',
   nativeVersionNotFoundGte: '未查询到 >= {{version}} 的原生版本',
   nativeVersionNotFoundLte: '未查询到 <= {{version}} 的原生版本',
+  nativeVersionNotFoundBetween: '未查询到 {{min}} 至 {{max}} 之间的原生版本',
+  conflictingPackageSelectors:
+    'packageId / packageVersion / packageVersionRange / minPackageVersion+maxPackageVersion 只能使用其中一组，不能混用',
   nativeVersionNotFoundMatch: '未查询到匹配原生版本：{{version}}',
   nativePackageIdNotFound: '未查询到原生包 id: {{id}}',
   noPackagesFound: '未查询到任何原生包（appId: {{appId}}）',

@@ -87,6 +87,10 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   nativeVersion: 'Native Version',
   nativeVersionNotFoundGte: 'No native version found >= {{version}}',
   nativeVersionNotFoundLte: 'No native version found <= {{version}}',
+  nativeVersionNotFoundBetween:
+    'No native version found between {{min}} and {{max}}',
+  conflictingPackageSelectors:
+    'Only one of packageId / packageVersion / packageVersionRange / minPackageVersion+maxPackageVersion can be used at a time',
   nativeVersionNotFoundMatch: 'No matching native version found: {{version}}',
   nativePackageIdNotFound: 'No native package id found: {{id}}',
   noPackagesFound: 'No packages found. (appId: {{appId}})',

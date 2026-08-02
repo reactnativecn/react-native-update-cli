@@ -606,22 +606,40 @@ export const versionCommands = {
 
     let pkgsToBind: Package[] = [];
 
-    if (minPkgVersion) {
-      minPkgVersion = String(minPkgVersion).trim();
-      pkgsToBind = allPkgs.filter((pkg: Package) =>
-        compare(pkg.name, minPkgVersion!, '>='),
-      );
-      if (pkgsToBind.length === 0) {
-        throw new Error(
-          t('nativeVersionNotFoundGte', { version: minPkgVersion }),
-        );
-      }
-    } else if (maxPkgVersion) {
-      maxPkgVersion = String(maxPkgVersion).trim();
+    const selectorGroups = [
+      pkgId,
+      pkgVersion,
+      packageVersionRange,
+      minPkgVersion || maxPkgVersion,
+    ].filter(Boolean);
+    if (selectorGroups.length > 1) {
+      throw new Error(t('conflictingPackageSelectors'));
+    }
+
+    if (minPkgVersion || maxPkgVersion) {
+      minPkgVersion = minPkgVersion && String(minPkgVersion).trim();
+      maxPkgVersion = maxPkgVersion && String(maxPkgVersion).trim();
       pkgsToBind = allPkgs.filter((pkg: Package) => {
-        return compare(pkg.name, maxPkgVersion!, '<=');
+        const aboveMin =
+          !minPkgVersion || compare(pkg.name, minPkgVersion, '>=');
+        const belowMax =
+          !maxPkgVersion || compare(pkg.name, maxPkgVersion, '<=');
+        return aboveMin && belowMax;
       });
       if (pkgsToBind.length === 0) {
+        if (minPkgVersion && maxPkgVersion) {
+          throw new Error(
+            t('nativeVersionNotFoundBetween', {
+              min: minPkgVersion,
+              max: maxPkgVersion,
+            }),
+          );
+        }
+        if (minPkgVersion) {
+          throw new Error(
+            t('nativeVersionNotFoundGte', { version: minPkgVersion }),
+          );
+        }
         throw new Error(
           t('nativeVersionNotFoundLte', { version: maxPkgVersion }),
         );

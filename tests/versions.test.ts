@@ -311,6 +311,69 @@ describe('versionCommands.update package range selection', () => {
     ]);
   });
 
+  test('intersects minPackageVersion and maxPackageVersion when both are given', async () => {
+    const appId = 'range-app';
+
+    await versionCommands.update({
+      options: {
+        appId,
+        versionId: '200',
+        minPackageVersion: '1.1.0',
+        maxPackageVersion: '1.2.0',
+      },
+    });
+
+    const bindingCalls = postSpy.mock.calls.filter(
+      ([url]) => url === `/app/${appId}/binding`,
+    );
+
+    expect(bindingCalls).toHaveLength(1);
+    expect(bindingCalls[0]).toEqual([
+      `/app/${appId}/binding`,
+      {
+        versionId: '200',
+        rollout: undefined,
+        packageIds: [11, 12],
+      },
+    ]);
+  });
+
+  test('fails when min/max bounds match no package', async () => {
+    await expect(
+      versionCommands.update({
+        options: {
+          appId: 'empty-range-app',
+          versionId: '200',
+          minPackageVersion: '2.0.0',
+          maxPackageVersion: '2.5.0',
+        },
+      }),
+    ).rejects.toThrow('2.0.0');
+
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
+  test('rejects mixing different package selectors', async () => {
+    for (const options of [
+      { packageId: '10', packageVersion: '1.0.0' },
+      { packageVersion: '1.0.0', packageVersionRange: '^1.0.0' },
+      { packageId: '10', minPackageVersion: '1.0.0' },
+      { packageVersionRange: '^1.0.0', maxPackageVersion: '1.2.0' },
+    ]) {
+      await expect(
+        versionCommands.update({
+          options: {
+            appId: 'conflict-app',
+            versionId: '200',
+            ...options,
+          },
+        }),
+      ).rejects.toThrow(/packageVersionRange/);
+    }
+
+    expect(postSpy).not.toHaveBeenCalled();
+  });
+
   test('fails instead of prompting for package id in non-interactive mode', async () => {
     global.NO_INTERACTIVE = true;
 

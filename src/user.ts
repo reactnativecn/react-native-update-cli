@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { closeSession, get, post, replaceSession, saveSession } from './api';
 import type { CommandContext } from './types';
 import { question } from './utils';
+import { addGitIgnore } from './utils/add-gitignore';
 import { t } from './utils/i18n';
 
 function md5(str: string) {
@@ -18,6 +19,9 @@ export const userCommands = {
     });
     replaceSession({ token });
     await saveSession();
+    // make sure the token file is ignored before the user's next commit,
+    // not only when they first run `bundle`
+    addGitIgnore();
     console.log(t('welcomeMessage', { name: info.name }));
   },
   logout: async (_context: CommandContext) => {

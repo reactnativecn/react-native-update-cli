@@ -72,6 +72,28 @@ describe('CLIProviderImpl', () => {
     });
   });
 
+  test('publish forwards appId and config so callers can target an app explicitly', async () => {
+    publishSpy = spyOn(versions.versionCommands, 'publish').mockResolvedValue(
+      'v1',
+    );
+
+    const result = await provider.publish({
+      filePath: 'bundle.ppk',
+      platform: 'android',
+      appId: '42',
+      config: 'custom-update.json',
+    });
+
+    expect(result.success).toBe(true);
+    expect(publishSpy).toHaveBeenCalledWith({
+      args: ['bundle.ppk'],
+      options: expect.objectContaining({
+        appId: '42',
+        config: 'custom-update.json',
+      }),
+    });
+  });
+
   test('updateVersion passes appId and versionId as command options', async () => {
     updateSpy = spyOn(versions.versionCommands, 'update').mockResolvedValue(
       undefined,

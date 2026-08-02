@@ -101,6 +101,24 @@ describe('api.ts session management', () => {
     expect(JSON.parse(writtenData as string).token).toBe('changed-token');
   });
 
+  test('saveSession restricts the token file to owner-only permissions', () => {
+    writeFileSyncSpy = spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+    const chmodSyncSpy = spyOn(fs, 'chmodSync').mockImplementation(() => {});
+
+    try {
+      replaceSession({ token: 'perm-token' });
+      saveSession();
+
+      expect(writeFileSyncSpy.mock.calls[0][2]).toEqual({
+        encoding: 'utf8',
+        mode: 0o600,
+      });
+      expect(chmodSyncSpy).toHaveBeenCalledWith(expect.any(String), 0o600);
+    } finally {
+      chmodSyncSpy.mockRestore();
+    }
+  });
+
   test('closeSession removes credential file and clears session', () => {
     existsSyncSpy = spyOn(fs, 'existsSync').mockReturnValue(true);
     unlinkSyncSpy = spyOn(fs, 'unlinkSync').mockImplementation(() => {});

@@ -118,6 +118,8 @@ export class CLIProviderImpl implements CLIProvider {
             maxPackageVersion: options.maxPackageVersion,
             packageVersionRange: options.packageVersionRange,
             platform: options.platform,
+            appId: options.appId,
+            config: options.config,
             'no-interactive': true,
             rollout:
               options.rollout === undefined

@@ -64,7 +64,13 @@ export const saveSession = () => {
   if (session !== savedSession) {
     const current = session;
     const data = JSON.stringify(current, null, 4);
-    fs.writeFileSync(credentialFile, data, 'utf8');
+    fs.writeFileSync(credentialFile, data, { encoding: 'utf8', mode: 0o600 });
+    try {
+      // mode above only applies on creation; tighten pre-existing files too
+      fs.chmodSync(credentialFile, 0o600);
+    } catch {
+      // best-effort (e.g. exotic filesystems); the token is still saved
+    }
     savedSession = current;
   }
 };
