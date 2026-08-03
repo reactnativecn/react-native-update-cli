@@ -663,11 +663,14 @@ async function diffFromPackage(
 
   let originSource: BundleSource | undefined;
 
-  // Content checksum (CRC32) for entries that are copied from a *different*
-  // path in the origin package ("moved" entries). On Android these are the
-  // res/ drawables (images), whose on-device path differs between an APK
-  // baseline and an AAB(split-apk) install due to resource path shortening,
-  // so the client cannot locate them by path and must fall back to content.
+  // Content checksum (CRC32) for every copied entry, keyed by target path.
+  // Two consumers on the client: locating a file by content when its origin
+  // path is not present verbatim on device (APK baseline diff applied on an
+  // AAB/split-apk install whose res/ paths were shortened), and verifying
+  // that a path-matched file still has the expected bytes before copying
+  // (BUNDLEHASH_MIGRATION.md §4.2.1 — a rebuilt binary may keep the path but
+  // drift the content; mismatch must fall back to full instead of silently
+  // installing a wrong resource).
   const copiesCrc: Record<string, number> = {};
 
   await enumZipEntries(origin, async (entry, zipFile) => {
@@ -723,15 +726,13 @@ async function diffFromPackage(
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
         copies[entry.fileName] = '';
+        copiesCrc[entry.fileName] = entry.crc32;
         return;
       }
       // If moved from other place
       const movedFrom = originMap[entry.crc32];
       if (movedFrom) {
         copies[entry.fileName] = movedFrom;
-        // Record the content checksum so the client can locate this file by
-        // content when the origin path does not exist verbatim on device
-        // (APK baseline -> AAB install path shortening).
         copiesCrc[entry.fileName] = entry.crc32;
         return;
       }

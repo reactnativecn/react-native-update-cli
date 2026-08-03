@@ -452,7 +452,7 @@ describe('diff commands', () => {
     expect(result.files['assets/new.txt']?.toString('utf-8')).toBe('new-file');
   });
 
-  test('hdiffFromApk emits copiesCrc for moved (res/) entries only', async () => {
+  test('hdiffFromApk emits copiesCrc for every copied entry', async () => {
     const originPath = path.join(tempRoot, 'origin-crc.apk');
     const nextPath = path.join(tempRoot, 'next-crc.ppk');
     const outputPath = path.join(tempRoot, 'out', 'apk-crc-diff.ppk');
@@ -506,9 +506,16 @@ describe('diff commands', () => {
       'res/drawable-xhdpi-v4/x.webp',
     );
     expect(diffMeta.copiesCrc['drawable-xhdpi/x.webp']).toBe(originImageCrc);
-    // same-path asset -> no crc needed (efficiency: only moved entries get one)
+    // same-path asset -> crc recorded too, so the client can verify a
+    // path-matched file before copying (rebuilt binary may drift content)
+    let keepCrc = -1;
+    await enumZipEntries(originPath, async (entry) => {
+      if (entry.fileName === 'assets/keep.txt') {
+        keepCrc = entry.crc32;
+      }
+    });
     expect(diffMeta.copies['assets/keep.txt']).toBe('');
-    expect(diffMeta.copiesCrc['assets/keep.txt']).toBeUndefined();
+    expect(diffMeta.copiesCrc['assets/keep.txt']).toBe(keepCrc);
   });
 
   test('hdiffFromApk does not match OTA files against excluded native entries', async () => {
