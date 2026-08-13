@@ -14,21 +14,25 @@ React Native Update 命令行工具，用于打包、上传原生包、发布 OT
 ## 安装
 
 ```bash
-npm install react-native-update-cli
+npm install -g react-native-update-cli
 ```
+
+命令行工具始终全局安装，直接调用 `pushy` 或 `cresc`；不要使用项目本地 CLI，也不要给命令添加 `npx` 前缀。
 
 ## 基础用法
 
 ```bash
-npx pushy help
-npx pushy list
+pushy help
+pushy list
 
-npx pushy bundle --platform ios
-npx pushy publish --platform ios --name 1.0.0
-npx pushy uploadIpa ./app.ipa
+pushy bundle --platform ios
+pushy publish --platform ios --name 1.0.0
+pushy uploadIpa ./app.ipa
 ```
 
 ## 编程调用
+
+Provider API 属于库集成，与全局 CLI 分开。只有在代码中导入该 API 时才把包加入构建工具依赖；命令行仍然使用全局的 `pushy` / `cresc`。
 
 ```typescript
 import { CLIProviderImpl } from 'react-native-update-cli';
@@ -147,7 +151,7 @@ sentry-cli sourcemaps upload --debug-id-reference
 旧版 self-hosted Sentry 或旧版 `@sentry/cli` 不支持 Debug ID 时，可以显式指定 legacy release/dist：
 
 ```bash
-npx pushy bundle --platform android --name "4.1" --sentry-release "com.example@1.0.0+10+pushy:4.1" --sentry-dist "pushy:4.1"
+pushy bundle --platform android --name "4.1" --sentry-release "com.example@1.0.0+10+pushy:4.1" --sentry-dist "pushy:4.1"
 ```
 
 这种 legacy 模式要求 App 运行时上报到 Sentry 的 `release` 和 `dist` 与上传参数完全一致。
