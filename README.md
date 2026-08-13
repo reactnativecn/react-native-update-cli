@@ -14,21 +14,25 @@ A React Native Update command line tool for bundling, uploading native packages,
 ## Installation
 
 ```bash
-npm install react-native-update-cli
+npm install -g react-native-update-cli
 ```
+
+The command-line tool is installed globally. Invoke `pushy` or `cresc` directly; do not use a project-local CLI or prefix commands with `npx`.
 
 ## Basic Usage
 
 ```bash
-npx pushy help
-npx pushy list
+pushy help
+pushy list
 
-npx pushy bundle --platform ios
-npx pushy publish --platform ios --name 1.0.0
-npx pushy uploadIpa ./app.ipa
+pushy bundle --platform ios
+pushy publish --platform ios --name 1.0.0
+pushy uploadIpa ./app.ipa
 ```
 
 ## Programmatic Usage
+
+The Provider API is a library integration, separate from the globally installed CLI. Add the package to build-tool dependencies only when importing this API; command-line usage continues to use the global `pushy` / `cresc` binaries.
 
 ```typescript
 import { CLIProviderImpl } from 'react-native-update-cli';
@@ -147,7 +151,7 @@ sentry-cli sourcemaps upload --debug-id-reference
 For older self-hosted Sentry versions or older `@sentry/cli` versions without Debug ID support, pass explicit legacy release/dist values:
 
 ```bash
-npx pushy bundle --platform android --name "4.1" --sentry-release "com.example@1.0.0+10+pushy:4.1" --sentry-dist "pushy:4.1"
+pushy bundle --platform android --name "4.1" --sentry-release "com.example@1.0.0+10+pushy:4.1" --sentry-dist "pushy:4.1"
 ```
 
 In legacy mode, the app runtime must report exactly the same Sentry `release` and `dist` values.
