@@ -3,6 +3,7 @@
 import { loadSession } from './api';
 import { getAppCommands } from './app';
 import { bundleCommands } from './bundle';
+import { cacheCommands } from './cache';
 import { diffCommands } from './diff';
 import { installCommands } from './install';
 import { packageCommands } from './package';
@@ -46,6 +47,7 @@ function printUsage(exitCode = 1) {
 const commandHandlers: Record<string, CliCommandHandler> = {
   ...userCommands,
   ...bundleCommands,
+  ...cacheCommands,
   ...diffCommands,
   ...getAppCommands(),
   ...packageCommands,

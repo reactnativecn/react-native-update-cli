@@ -262,6 +262,20 @@
         "hermes": {
           "default": false
         },
+        "hermesBase": {
+          "default": "auto",
+          "hasValue": true,
+          "description": "Hermes -base-bytecode: auto (previous version of this app, default) | none | path to .hbc/.ppk/.apk/.ipa"
+        },
+        "verifyHermesBase": {
+          "default": "true",
+          "hasValue": true,
+          "description": "After a base compile, check the bytecode is equivalent to a plain compile (disassembly compare); falls back on mismatch. Pass false to skip"
+        },
+        "cacheMaxMb": {
+          "hasValue": true,
+          "description": "Local bundle cache limit in MB (default 500)"
+        },
         "name": {
           "hasValue": true,
           "description": "Version name for publishing"
@@ -358,6 +372,10 @@
     },
     "install": {
       "description": "Install optional dependencies to the CLI",
+      "options": {}
+    },
+    "cache": {
+      "description": "Inspect or clean the local bundle cache: cache [clean]",
       "options": {}
     }
   },

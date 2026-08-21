@@ -3,6 +3,16 @@ import { satisfies } from 'compare-versions';
 import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
+import { getHermesBase } from './api';
+import {
+  classifyHermesCommand,
+  type HermesBaseOption,
+  type HermesBaseSelection,
+  hermescArgsWithBase,
+  probeHbcVersion,
+  resolveHermesBase,
+  verifyHermesBaseEquivalence,
+} from './utils/hermes-base';
 import { t } from './utils/i18n';
 import {
   getJavaScriptRuntime,
@@ -28,8 +38,24 @@ export interface RunBundleCommandOptions {
   sourcemapOutput: string;
   config?: string;
   forceHermes?: boolean;
+  /** Hermes -base-bytecode settings; omitted → compile without a base */
+  hermesBase?: HermesBaseRequest;
   cli: BundleCliOptions;
   isSentry: boolean;
+}
+
+export interface HermesBaseRequest {
+  option: HermesBaseOption;
+  appId?: string;
+  verify: boolean;
+  cacheMaxMb?: number;
+}
+
+export interface HermesCompileResult {
+  bytecodeVersion: number | null;
+  base: HermesBaseSelection | null;
+  /** true when --verifyHermesBase ran and passed; false when it failed (base dropped) */
+  verified?: boolean;
 }
 
 interface GradleConfig {
@@ -170,9 +196,10 @@ export async function runReactNativeBundleCommand({
   sourcemapOutput,
   config,
   forceHermes,
+  hermesBase,
   cli,
   isSentry,
-}: RunBundleCommandOptions): Promise<void> {
+}: RunBundleCommandOptions): Promise<HermesCompileResult | null> {
   let gradleConfig: GradleConfig = {};
   if (platform === 'android') {
     gradleConfig = await checkGradleConfig();
@@ -298,6 +325,7 @@ export async function runReactNativeBundleCommand({
     `Running bundle command: ${jsRuntime} ${reactNativeBundleArgs.join(' ')}`,
   );
 
+  let hermesResult: HermesCompileResult | null = null;
   await new Promise<void>((resolve, reject) => {
     reactNativeBundleProcess.stdout.on('data', (data) => {
       console.log(data.toString().trim());
@@ -354,11 +382,12 @@ export async function runReactNativeBundleCommand({
         }
 
         if (hermesEnabled) {
-          await compileHermesByteCode(
+          hermesResult = await compileHermesByteCode(
             bundleName,
             outputFolder,
             sourcemapOutput,
             !isSentry,
+            hermesBase,
           );
         }
 
@@ -384,6 +413,7 @@ export async function runReactNativeBundleCommand({
       }
     });
   });
+  return hermesResult;
 }
 
 function getHermesOSBin() {
@@ -513,38 +543,129 @@ async function checkGradleConfig(): Promise<GradleConfig> {
   };
 }
 
+/**
+ * hermesc argument policy. `-output-source-map` is always passed: hermesc then
+ * strips the debug info section from the bytecode (like React Native's own
+ * release builds, 15-40% smaller bytecode and smaller hot-update patches) and
+ * writes its own `<bundle>.map` next to the output. When the user asked for a
+ * sourcemap that file is composed with the packager map as before; otherwise it
+ * simply stays in the intermediate directory (never packed into the ppk) so
+ * `address at` stack frames can still be symbolicated later.
+ */
+export function buildHermescArgs(bundlePath: string): string[] {
+  return [
+    '-emit-binary',
+    '-out',
+    bundlePath,
+    bundlePath,
+    '-O',
+    '-output-source-map',
+  ];
+}
+
 async function compileHermesByteCode(
   bundleName: string,
   outputFolder: string,
   sourcemapOutput: string,
   shouldCleanSourcemap: boolean,
-) {
+  baseRequest?: HermesBaseRequest,
+): Promise<HermesCompileResult> {
   console.log(t('hermesEnabledCompiling'));
   const hermesCommand = resolveHermesCommand();
 
-  const args = [
-    '-emit-binary',
-    '-out',
-    path.join(outputFolder, bundleName),
-    path.join(outputFolder, bundleName),
-    '-O',
-  ];
+  const bundlePath = path.join(outputFolder, bundleName);
+  const plainArgs = buildHermescArgs(bundlePath);
   if (sourcemapOutput) {
     fs.copyFileSync(
       sourcemapOutput,
       path.join(outputFolder, `${bundleName}.txt.map`),
     );
-    args.push('-output-source-map');
+  } else {
+    console.log(t('hermesSourcemapKept', { file: `${bundlePath}.map` }));
   }
-  console.log(
-    t('runningHermesc', { command: hermesCommand, args: args.join(' ') }),
-  );
-  assertSuccessfulSyncProcess(
-    spawnSync(hermesCommand, args, {
-      stdio: 'ignore',
-    }),
-    hermesCommand,
-  );
+
+  const result: HermesCompileResult = { bytecodeVersion: null, base: null };
+  const base = await selectHermesBase(hermesCommand, baseRequest, result);
+
+  // hermesc reads its input in full before writing, so compiling in place is
+  // safe; keep the JS bundle aside while a base compile may still fail or be
+  // rejected by the equivalence check.
+  const jsBackup = base ? `${bundlePath}.js.bak` : '';
+  if (base) fs.copyFileSync(bundlePath, jsBackup);
+  let usedBase = false;
+  if (base) {
+    const args = hermescArgsWithBase(plainArgs, base.path);
+    console.log(
+      t('runningHermesc', { command: hermesCommand, args: args.join(' ') }),
+    );
+    const attempt = spawnSync(hermesCommand, args, {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    if (attempt.status === 0) {
+      usedBase = true;
+    } else {
+      const stderr = attempt.stderr
+        ? String(attempt.stderr).trim().split('\n').slice(-3).join(' ')
+        : '';
+      console.warn(
+        t('hermesBaseCompileFailed', {
+          reason: stderr || `exit ${attempt.status}`,
+        }),
+      );
+      fs.copyFileSync(jsBackup, bundlePath);
+    }
+  }
+  if (usedBase && baseRequest?.verify) {
+    // plain compile next to it, compare disassembly, keep whichever is right
+    const plainOut = `${bundlePath}.plain.hbc`;
+    const plain = spawnSync(
+      hermesCommand,
+      // same flags as the real compile (only the base differs), otherwise
+      // debug-info settings would make the two dumps legitimately differ
+      ['-emit-binary', '-out', plainOut, jsBackup, '-O', '-output-source-map'],
+      { stdio: 'ignore' },
+    );
+    let ok = plain.status === 0;
+    if (ok) {
+      try {
+        ok = await verifyHermesBaseEquivalence(
+          hermesCommand,
+          bundlePath,
+          plainOut,
+        );
+      } catch {
+        ok = false;
+      }
+    }
+    fs.removeSync(plainOut);
+    fs.removeSync(`${plainOut}.map`);
+    result.verified = ok;
+    if (ok) {
+      console.log(t('hermesBaseVerified'));
+    } else {
+      console.warn(t('hermesBaseVerifyFailed'));
+      fs.copyFileSync(jsBackup, bundlePath);
+      usedBase = false;
+    }
+  }
+  if (jsBackup) fs.removeSync(jsBackup);
+  if (!usedBase) {
+    console.log(
+      t('runningHermesc', {
+        command: hermesCommand,
+        args: plainArgs.join(' '),
+      }),
+    );
+    assertSuccessfulSyncProcess(
+      spawnSync(hermesCommand, plainArgs, {
+        stdio: 'ignore',
+      }),
+      hermesCommand,
+    );
+    result.base = null;
+  } else {
+    result.base = base;
+  }
   if (sourcemapOutput) {
     let composerPath: string;
     try {
@@ -555,7 +676,7 @@ async function compileHermesByteCode(
       );
     } catch {
       console.warn(t('composeSourceMapsNotFound'));
-      return;
+      return result;
     }
     console.log(t('composingSourceMap'));
     assertSuccessfulSyncProcess(
@@ -576,6 +697,49 @@ async function compileHermesByteCode(
   }
   if (shouldCleanSourcemap) {
     fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+  }
+  return result;
+}
+
+async function selectHermesBase(
+  hermesCommand: string,
+  request: HermesBaseRequest | undefined,
+  result: HermesCompileResult,
+): Promise<HermesBaseSelection | null> {
+  if (!request || request.option === 'none') {
+    if (request) {
+      console.log(t('hermesBaseNone', { reason: 'disabled by option' }));
+    }
+    return null;
+  }
+  const gate = classifyHermesCommand(hermesCommand);
+  if (!gate.allowed) {
+    console.log(
+      t('hermesBaseNone', { reason: gate.reason ?? 'hermesc not eligible' }),
+    );
+    return null;
+  }
+  const bytecodeVersion = probeHbcVersion(hermesCommand);
+  result.bytecodeVersion = bytecodeVersion;
+  if (bytecodeVersion === null) {
+    console.log(t('hermesBaseNone', { reason: 'could not probe HBC version' }));
+    return null;
+  }
+  try {
+    return await resolveHermesBase({
+      option: request.option,
+      hermesCommand,
+      bytecodeVersion,
+      appId: request.appId,
+      cacheMaxMb: request.cacheMaxMb,
+      fetchBase: getHermesBase,
+      log: (message) => console.log(message),
+    });
+  } catch (error: any) {
+    console.log(
+      t('hermesBaseNone', { reason: error?.message ?? String(error) }),
+    );
+    return null;
   }
 }
 

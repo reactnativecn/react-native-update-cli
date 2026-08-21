@@ -68,6 +68,10 @@ const publishResult = await provider.publish({
 - `hdiffFromApp`: 基于 APP 文件生成 hdiff
 - `hdiffFromIpa`: 基于 IPA 文件生成 hdiff
 
+Hermes 工程：`bundle` 调用 hermesc 时始终带 `-output-source-map`，因此字节码不含 debug info 段（小 15%～40%，与 React Native 自身 release 构建一致）。Hermes sourcemap 保留在中间目录（`.pushy/intermedia/<platform>/<bundle>.map`，不会打进 ppk）；传 `--sourcemap` 时照旧与 packager map 合成。留着它可以事后符号化 `address at` 形式的崩溃堆栈。
+
+Hermes delta 模式（`-base-bytecode`）：默认 `--hermesBase auto`，`bundle` 会以同一应用上一版的 HBC 为 base 编译，让 Hermes 字符串 ID 跨版本稳定，热更 patch 可缩小 5～30 倍。base 由服务端（`GET /app/:id/hermesBase`）给出、按 sha256 校验并存入本地缓存（`.pushy/cache/<sha256>`，默认 500 MB / 20 个，可用 `PUSHY_CACHE_DIR` / `--cacheMaxMb` 调整，`pushy cache [clean]` 查看或清空）。`--hermesBase none` 关闭；`--hermesBase <file.hbc|.ppk|.apk|.ipa>` 指定本地文件（比如商店包）作 base。`--verifyHermesBase`（默认开）会再做一次普通编译并比对两份反汇编；任何不一致或失败都静默回退到普通编译，不会阻塞发版。只有包含上游 delta 模式修复的 hermesc 才会启用（经典 `react-native/sdks/hermesc`，或 `hermes-compiler` ≥ 250829098）。
+
 ### Version
 
 - `publish`: 发布新版本

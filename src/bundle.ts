@@ -1,5 +1,5 @@
 import path from 'path';
-import { getPlatform } from './app';
+import { getPlatform, getSelectedApp } from './app';
 import { packBundle } from './bundle-pack';
 import {
   copyDebugidForSentry,
@@ -13,6 +13,11 @@ import { addGitIgnore } from './utils/add-gitignore';
 import { checkLockFiles } from './utils/check-lockfile';
 import { tempDir } from './utils/constants';
 import { depVersions } from './utils/dep-versions';
+import {
+  cleanStaleTmp,
+  type HermesBaseMeta,
+  hermesBaseMeta,
+} from './utils/hermes-base';
 import { t } from './utils/i18n';
 import {
   getBooleanOption,
@@ -32,6 +37,9 @@ type NormalizedBundleOptions = {
   expo: boolean;
   rncli: boolean;
   hermes: boolean;
+  hermesBase: string;
+  verifyHermesBase: boolean;
+  cacheMaxMb?: number;
   name?: string;
   description?: string;
   metaInfo?: string;
@@ -46,6 +54,11 @@ type NormalizedBundleOptions = {
   sentryDist?: string;
 };
 
+function parseCacheMaxMb(value: unknown): number | undefined {
+  const parsed = typeof value === 'string' ? Number(value) : (value as number);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 type PublishBundlePayload = {
   name?: string;
   description?: string;
@@ -57,6 +70,7 @@ type PublishBundlePayload = {
   packageVersionRange?: string;
   rollout?: string;
   dryRun?: boolean;
+  hermesBase?: HermesBaseMeta;
 };
 
 function getAliasedOptionalStringOption(
@@ -98,6 +112,13 @@ export function normalizeBundleOptions(
     expo: getBooleanOption(translatedOptions, 'expo', false),
     rncli: getBooleanOption(translatedOptions, 'rncli', false),
     hermes: getBooleanOption(translatedOptions, 'hermes', false),
+    hermesBase: getStringOption(translatedOptions, 'hermesBase', 'auto'),
+    verifyHermesBase: getBooleanOption(
+      translatedOptions,
+      'verifyHermesBase',
+      true,
+    ),
+    cacheMaxMb: parseCacheMaxMb(translatedOptions.cacheMaxMb),
     name: getOptionalStringOption(translatedOptions, 'name'),
     description: getOptionalStringOption(translatedOptions, 'description'),
     metaInfo: getOptionalStringOption(translatedOptions, 'metaInfo'),
@@ -206,7 +227,24 @@ export const bundleCommands = {
 
     console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
 
-    await runReactNativeBundleCommand({
+    await cleanStaleTmp().catch(() => {});
+    // the hermes base lookup needs the app; resolve it up front but never
+    // fail the bundle over it (publishing resolves it again and reports)
+    let appIdForBase: string | undefined =
+      typeof options.appId === 'string' && options.appId
+        ? options.appId
+        : undefined;
+    if (!appIdForBase && normalized.hermesBase === 'auto') {
+      try {
+        appIdForBase = (
+          await getSelectedApp(platform, options.config as string | undefined)
+        ).appId;
+      } catch {
+        appIdForBase = undefined;
+      }
+    }
+
+    const hermesResult = await runReactNativeBundleCommand({
       bundleName: normalized.bundleName,
       dev: normalized.dev,
       entryFile: normalized.entryFile,
@@ -215,6 +253,15 @@ export const bundleCommands = {
       sourcemapOutput:
         normalized.sourcemap || bundleParams.sourcemap ? sourcemapOutput : '',
       forceHermes: normalized.hermes,
+      hermesBase:
+        normalized.dev === 'true'
+          ? undefined
+          : {
+              option: normalized.hermesBase,
+              appId: appIdForBase,
+              verify: normalized.verifyHermesBase,
+              cacheMaxMb: normalized.cacheMaxMb,
+            },
       cli: {
         taro: normalized.taro,
         expo: normalized.expo,
@@ -228,6 +275,9 @@ export const bundleCommands = {
       realOutput,
       normalized.bundleName,
     );
+    const baseMeta = hermesResult
+      ? hermesBaseMeta(hermesResult.base, hermesResult.bytecodeVersion)
+      : undefined;
 
     if (normalized.name) {
       await publishBundleVersion(realOutput, platform, {
@@ -241,6 +291,7 @@ export const bundleCommands = {
         packageVersionRange: normalized.packageVersionRange,
         rollout: normalized.rollout,
         dryRun: normalized.dryRun,
+        hermesBase: baseMeta,
       });
       await uploadSentryArtifactsIfNeeded(
         bundleParams.sentry,
@@ -259,7 +310,9 @@ export const bundleCommands = {
     if (!getBooleanOption(options, 'no-interactive', false)) {
       const v = await question(t('uploadBundlePrompt'));
       if (v.toLowerCase() === 'y') {
-        await publishBundleVersion(realOutput, platform, {});
+        await publishBundleVersion(realOutput, platform, {
+          hermesBase: baseMeta,
+        });
         await uploadSentryArtifactsIfNeeded(
           bundleParams.sentry,
           normalized.bundleName,

@@ -202,6 +202,7 @@ export async function getApkInfo(fn: string) {
     versionName,
     buildTime,
     bundleHash: await sha256(bundleFile),
+    bundleFile,
     ...appCredential,
   };
 }
@@ -243,6 +244,7 @@ export async function getAppInfo(fn: string) {
     versionName,
     buildTime,
     bundleHash: await sha256(bundleFile),
+    bundleFile,
     ...appCredential,
   };
 }
@@ -292,6 +294,7 @@ export async function getIpaInfo(fn: string) {
     versionName,
     buildTime,
     bundleHash: await sha256(bundleFile),
+    bundleFile,
     ...appCredential,
   };
 }

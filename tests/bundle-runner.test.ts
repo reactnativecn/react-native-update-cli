@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import {
+  buildHermescArgs,
   buildSentrySourcemapsUploadArgs,
   hasProjectDependency,
   prepareSentryUploadArtifacts,
@@ -440,5 +441,19 @@ describe('prepareSentryUploadArtifacts', () => {
       bundlePath: path.join(tempRoot, 'index.bundlejs'),
       sourcemapPath: path.join(tempRoot, 'index.bundlejs.map'),
     });
+  });
+});
+
+describe('buildHermescArgs', () => {
+  test('always emits a hermes sourcemap so the bytecode debug info is stripped', () => {
+    const bundlePath = '/tmp/out/index.bundlejs';
+    expect(buildHermescArgs(bundlePath)).toEqual([
+      '-emit-binary',
+      '-out',
+      bundlePath,
+      bundlePath,
+      '-O',
+      '-output-source-map',
+    ]);
   });
 });

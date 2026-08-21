@@ -91,6 +91,8 @@ export class CLIProviderImpl implements CLIProvider {
           expo: options.expo || false,
           rncli: options.rncli || false,
           hermes: options.hermes || false,
+          hermesBase: options.hermesBase || 'auto',
+          verifyHermesBase: options.verifyHermesBase ?? true,
           sentryRelease: options.sentryRelease,
           sentryDist: options.sentryDist,
         });

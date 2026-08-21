@@ -126,6 +126,8 @@ export default {
     '已在原生版本 {{versions}} 上设置灰度发布 {{rollout}}% 热更包 {{version}}',
   rolloutRangeError: 'rollout 必须是 1-100 的整数',
   runningHermesc: '运行 hermesc：{{- command}} {{- args}}',
+  hermesSourcemapKept:
+    '字节码已剥离 debug info（与 RN release 构建一致）；Hermes sourcemap 保留在 {{- file}}，可用于事后符号化崩溃堆栈。',
   sentryReactNativeNotFound: '无法找到 @sentry/react-native，请确保已正确安装',
   sentryCliNotFound: '无法找到 Sentry CLI 工具，请确保已正确安装 @sentry/cli',
   sentryReleaseCreated: '已为版本 {{version}} 创建 Sentry release',
@@ -196,4 +198,14 @@ export default {
   unsupportedPlatformForHermes: 'Hermes 不支持当前系统平台：{{platform}}',
   invalidManifest: '无效的 manifest',
   failedToResolveResource: '资源解析失败：{{error}}',
+  hermesBaseNone: 'Hermes base：未使用（{{- reason}}），按普通方式编译',
+  hermesBaseUsing: 'Hermes base：{{- source}}（HBC v{{version}}）',
+  hermesBaseDownloading: 'Hermes base：下载 {{- url}}',
+  hermesBaseCompileFailed:
+    'Hermes base 编译失败（{{- reason}}），改为不带 -base-bytecode 重编',
+  hermesBaseVerified: 'Hermes base：字节码与普通编译等价，校验通过',
+  hermesBaseVerifyFailed:
+    'Hermes base：字节码与普通编译不等价，放弃 base 重新编译',
+  cacheCleaned: '已清理 {{count}} 个缓存 bundle',
+  cacheStats: 'bundle 缓存：{{- dir}} — {{files}} 个文件，{{mb}} MB',
 };

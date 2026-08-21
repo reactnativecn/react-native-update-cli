@@ -136,6 +136,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'Set {{rollout}}% rollout for OTA update {{version}} on native version(s) {{versions}}',
   rolloutRangeError: 'rollout must be an integer between 1-100',
   runningHermesc: 'Running hermesc: {{- command}} {{- args}}',
+  hermesSourcemapKept:
+    'Debug info is stripped from the bytecode (like RN release builds); the Hermes sourcemap is kept at {{- file}} for symbolicating crash stacks later.',
   sentryReactNativeNotFound:
     'Cannot find @sentry/react-native, please make sure it is properly installed',
   sentryCliNotFound:
@@ -212,4 +214,16 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   unsupportedPlatformForHermes: 'Unsupported platform for Hermes: {{platform}}',
   invalidManifest: 'Invalid manifest',
   failedToResolveResource: 'Failed to resolve resource: {{error}}',
+  hermesBaseNone:
+    'Hermes base: none ({{- reason}}); compiling without -base-bytecode',
+  hermesBaseUsing: 'Hermes base: {{- source}} (HBC v{{version}})',
+  hermesBaseDownloading: 'Hermes base: downloading {{- url}}',
+  hermesBaseCompileFailed:
+    'Hermes base compile failed ({{- reason}}); retrying without -base-bytecode',
+  hermesBaseVerified:
+    'Hermes base: bytecode verified equivalent to a plain compile',
+  hermesBaseVerifyFailed:
+    'Hermes base: bytecode differs from a plain compile; dropping the base and recompiling',
+  cacheCleaned: 'Removed {{count}} cached bundle(s)',
+  cacheStats: 'Bundle cache: {{- dir}} — {{files}} file(s), {{mb}} MB',
 };

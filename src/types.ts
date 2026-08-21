@@ -57,6 +57,10 @@ export interface BundleOptions {
   expo?: boolean;
   rncli?: boolean;
   hermes?: boolean;
+  /** 'auto' (default) | 'none' | path to a .hbc/.ppk/.apk/.ipa used as hermesc -base-bytecode */
+  hermesBase?: string;
+  /** run the disassembly equivalence check after a base compile (default true) */
+  verifyHermesBase?: boolean;
   sentryRelease?: string;
   sentryDist?: string;
 }

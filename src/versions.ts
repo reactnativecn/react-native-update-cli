@@ -8,6 +8,13 @@ import type { Package, Platform, Version } from './types';
 import { isNonInteractive, question } from './utils';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import { getHbcVersion } from './utils/hbcTransform';
+import {
+  cachePut,
+  extractBundleFromArchive,
+  type HermesBaseMeta,
+  sha256Hex,
+} from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getBooleanOption, getStringListOption } from './utils/options';
 
@@ -31,6 +38,8 @@ interface VersionCommandOptions {
   dryRun?: boolean;
   versionDeps?: Record<string, string>;
   warnDepsChanges?: boolean;
+  /** internal: chain metadata from the bundle step (not a CLI flag) */
+  hermesBase?: HermesBaseMeta;
   'no-interactive'?: boolean | string;
 }
 
@@ -450,6 +459,32 @@ export const bindVersionToPackages = async ({
   console.log(t('operationComplete', { count: pkgs.length }));
 };
 
+/**
+ * Content identity of the ppk's bundle for the server (bundleHash, HBC version)
+ * plus the base used to compile it, and a copy of the bundle in the local
+ * cache so it can serve as a future base without a download.
+ */
+async function describePpkBundle(
+  ppkPath: string,
+  base?: HermesBaseMeta,
+): Promise<Record<string, unknown>> {
+  const meta: Record<string, unknown> = {};
+  try {
+    const bundle = await extractBundleFromArchive(ppkPath);
+    if (bundle) {
+      meta.bundleHash = sha256Hex(bundle);
+      const hbcVersion = getHbcVersion(bundle);
+      meta.bytecodeVersion = hbcVersion ?? base?.bytecodeVersion ?? null;
+      await cachePut(bundle).catch(() => {});
+    }
+  } catch {
+    // best effort: metadata never blocks a publish
+  }
+  meta.baseVersionId = base?.baseVersionId ?? null;
+  meta.baseHash = base?.baseHash ?? null;
+  return meta;
+}
+
 export const versionCommands = {
   publish: async ({
     args,
@@ -476,6 +511,7 @@ export const versionCommands = {
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
 
     const { hash } = await uploadFile(fn, undefined, appId);
+    const bundleMeta = await describePpkBundle(fn, options.hermesBase);
 
     const versionName =
       name ||
@@ -492,6 +528,8 @@ export const versionCommands = {
         (nonInteractive ? '' : await question(t('versionMetaInfoQuestion'))),
       deps: depVersions,
       commit: await getCommitInfo(),
+      // Hermes delta-mode chain metadata (old servers drop unknown fields)
+      ...bundleMeta,
     });
     console.log(t('packageUploadSuccess', { id }));
 

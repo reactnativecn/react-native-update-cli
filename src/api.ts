@@ -7,6 +7,7 @@ import ProgressBar from 'progress';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
 import { credentialFile, IS_CRESC, pricingPageUrl } from './utils/constants';
+import type { HermesBaseServerRecord } from './utils/hermes-base';
 import { getBaseUrl } from './utils/http-helper';
 import { t } from './utils/i18n';
 import {
@@ -333,6 +334,33 @@ export async function uploadFile(
 
   // const body = await response.json();
   return { hash: key || formData.key };
+}
+
+/**
+ * Ask the server for the Hermes base of (app, HBC version): the earliest
+ * existing version of that epoch, or the newest version when the epoch is not
+ * known yet. Old servers answer 404 → treated as "no base".
+ */
+export async function getHermesBase(
+  appId: string,
+  bytecodeVersion: number,
+): Promise<HermesBaseServerRecord | null> {
+  try {
+    const data = await get(
+      `/app/${appId}/hermesBase?bytecodeVersion=${bytecodeVersion}`,
+    );
+    const record =
+      data && typeof data === 'object' && 'data' in data ? data.data : data;
+    if (!record || typeof record !== 'object' || !record.url || !record.hash) {
+      return null;
+    }
+    return record as HermesBaseServerRecord;
+  } catch (error) {
+    if ((error as { status?: number })?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export const getAllPackages = async (appId: string) => {

@@ -16,6 +16,7 @@ import {
 import { AabParser } from './utils/app-info-parser/aab';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import { cachePut } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getStringListOption } from './utils/options';
 
@@ -115,6 +116,7 @@ async function uploadNativePackage(
 ): Promise<void> {
   const info = await config.getInfo(filePath);
   const { versionName: extractedVersionName, buildTime, bundleHash } = info;
+  const bundleFile = (info as { bundleFile?: Buffer }).bundleFile;
   const { appId: appIdInPkg, appKey: appKeyInPkg } = info;
   const selectedApp = options.appId
     ? {
@@ -151,6 +153,11 @@ async function uploadNativePackage(
   try {
     await createSlimNativePackage(filePath, slimPackagePath, config.platform);
     const { hash } = await uploadFile(slimPackagePath, undefined, appId);
+    if (bundleFile) {
+      // keep the embedded bundle locally so a later `bundle` can use it as
+      // hermes base without downloading it back (see hermes-base.ts)
+      await cachePut(bundleFile).catch(() => {});
+    }
     const normalizedBuildTime = config.normalizeBuildTime
       ? config.normalizeBuildTime(buildTime)
       : buildTime;
