@@ -415,9 +415,33 @@ describe('helpers', () => {
     expect(
       normalizeDisassemblyLine('Offset in debug table: source 0x0000', strings),
     ).toBeNull();
+    // operand-width variants and padding fold together (foreign base → wide ids)
+    expect(
+      normalizeDisassemblyLine(
+        '    GetByIdShort      r1, r1, 4, "process"',
+        strings,
+      ),
+    ).toBe(
+      normalizeDisassemblyLine(
+        '    GetById           r1, r1, 4, "process"',
+        strings,
+      ),
+    );
+    expect(
+      normalizeDisassemblyLine('    LoadConstStringLongIndex r0, "x"', strings),
+    ).toBe('    LoadConstString r0, "x"');
+    expect(
+      normalizeDisassemblyLine(
+        '    StringSwitchImm   r13, 2, 4024, L146, 150',
+        strings,
+      ),
+    ).toBe('    StringSwitchImm r13, 2, <jt>, L146, 150');
+    expect(normalizeDisassemblyLine('  offset 4024', strings)).toBe(
+      '  offset <jt>',
+    );
     expect(
       normalizeDisassemblyLine('    GetByIdShort r3, r0, 2, "s"', strings),
-    ).toBe('    GetByIdShort r3, r0, 2, "s"');
+    ).toBe('    GetById r3, r0, 2, "s"');
   });
 });
 

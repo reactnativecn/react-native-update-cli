@@ -622,7 +622,19 @@ export function normalizeDisassemblyLine(
   m = /^(\s*J[A-Za-z]+?)(Long)?\s+(L\d+|\d+)(.*)$/.exec(line);
   if (m) return `${m[1]} <tgt>${m[4]}`;
   m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)$/.exec(line);
-  if (m) return `${m[1]}"${strings.get(Number(m[2])) ?? `?${m[2]}`}"`;
+  if (m) line = `${m[1]}"${strings.get(Number(m[2])) ?? `?${m[2]}`}"`;
+  // Operand-width variants of one instruction (GetByIdShort/GetById/GetByIdLong,
+  // LoadConstString/LoadConstStringLongIndex, ...) only differ by how wide a
+  // string/function id or offset is encoded — a foreign base hands the new
+  // code's hot strings large ids, so the delta build legitimately picks the
+  // wider form. Fold the suffix and the column padding that follows it.
+  m = /^(\s*)([A-Za-z]+?)(?:LongIndex|Long|Short)?(\s+.*|)$/.exec(line);
+  if (m) line = `${m[1]}${m[2]}${m[3].replace(/\s+/g, ' ')}`;
+  // switch jump tables sit after the instructions; their relative offset (and
+  // the table header hermesc prints for them) moves with instruction widths
+  m = /^(\s*(?:String|UInt)?SwitchImm r\d+, \d+, )\d+(, .*)$/.exec(line);
+  if (m) line = `${m[1]}<jt>${m[2]}`;
+  if (/^\s*offset \d+$/.test(line)) line = line.replace(/\d+$/, '<jt>');
   return line;
 }
 
