@@ -643,9 +643,16 @@ export function normalizeDisassemblyLine(
   // wider form. Fold the suffix and the column padding that follows it.
   m = /^(\s*)([A-Za-z]+?)(?:LongIndex|Long|Short)?(\s+.*|)$/.exec(line);
   if (m) line = `${m[1]}${m[2]}${m[3].replace(/\s+/g, ' ')}`;
-  // switch jump tables sit after the instructions; their relative offset (and
-  // the table header hermesc prints for them) moves with instruction widths
+  // Switch jump tables sit after the instructions; their relative offset (and
+  // the table header hermesc prints for them) moves with instruction widths.
+  // The two switch instructions carry that offset in different operands:
+  //   StringSwitchImm rX, <id>, <jtOffset>, <defaultLabel>, <count>
+  //   UIntSwitchImm   rX, <jtOffset>, <defaultLabel>, <min>, <max>
+  // Folding only the first shape let a shifted UIntSwitchImm offset read as a
+  // real difference and drop an otherwise good delta build.
   m = /^(\s*(?:String|UInt)?SwitchImm r\d+, \d+, )\d+(, .*)$/.exec(line);
+  if (m) line = `${m[1]}<jt>${m[2]}`;
+  m = /^(\s*(?:String|UInt)?SwitchImm r\d+, )\d+(, L\d+, .*)$/.exec(line);
   if (m) line = `${m[1]}<jt>${m[2]}`;
   if (/^\s*offset \d+$/.test(line)) line = line.replace(/\d+$/, '<jt>');
   return line;

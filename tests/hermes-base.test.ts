@@ -461,6 +461,19 @@ describe('helpers', () => {
         strings,
       ),
     ).toBe('    StringSwitchImm r13, 2, <jt>, L146, 150');
+    // UIntSwitchImm carries the jump-table offset one operand earlier
+    expect(
+      normalizeDisassemblyLine(
+        '    UIntSwitchImm     r40, 5937, L3, 0, 31',
+        strings,
+      ),
+    ).toBe('    UIntSwitchImm r40, <jt>, L3, 0, 31');
+    expect(
+      normalizeDisassemblyLine(
+        '    UIntSwitchImm     r40, 5938, L3, 0, 31',
+        strings,
+      ),
+    ).toBe('    UIntSwitchImm r40, <jt>, L3, 0, 31');
     expect(normalizeDisassemblyLine('  offset 4024', strings)).toBe(
       '  offset <jt>',
     );
