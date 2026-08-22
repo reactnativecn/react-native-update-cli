@@ -468,22 +468,29 @@ async function describePpkBundle(
   ppkPath: string,
   base?: HermesBaseMeta,
 ): Promise<Record<string, unknown>> {
+  // Only known values are sent: the server's optional-field parsers treat an
+  // explicit JSON null as invalid (that contract broke 2.22.0/2.22.1 publishes
+  // with "Expected baseHash string"), and omitting a field is what every
+  // server version — strict, tolerant or too old to know the field — accepts.
   const meta: Record<string, unknown> = {};
   try {
     const bundle = await extractBundleFromArchive(ppkPath);
     if (bundle) {
       meta.bundleHash = sha256Hex(bundle);
-      const hbcVersion = getHbcVersion(bundle);
-      meta.bytecodeVersion = hbcVersion ?? base?.bytecodeVersion ?? null;
+      const hbcVersion = getHbcVersion(bundle) ?? base?.bytecodeVersion;
+      if (hbcVersion != null) meta.bytecodeVersion = hbcVersion;
       await cachePut(bundle).catch(() => {});
     }
   } catch {
     // best effort: metadata never blocks a publish
   }
-  meta.baseVersionId = base?.baseVersionId ?? null;
-  meta.baseHash = base?.baseHash ?? null;
+  if (base?.baseVersionId != null) meta.baseVersionId = base.baseVersionId;
+  if (base?.baseHash) meta.baseHash = base.baseHash;
   return meta;
 }
+
+/** Exported for tests: the version/create fields derived from a ppk + base. */
+export const describePpkBundleForTests = describePpkBundle;
 
 export const versionCommands = {
   publish: async ({

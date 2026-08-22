@@ -526,3 +526,34 @@ describe.if(hasHermesc)('with a real hermesc', () => {
     );
   });
 });
+
+describe('publish metadata never sends JSON null', () => {
+  test('describePpkBundle omits unknown chain fields', async () => {
+    const { describePpkBundleForTests } = await import('../src/versions');
+    const dir = mkTemp('rnu-publish-meta-');
+    try {
+      const ppk = path.join(dir, 'v.ppk');
+      await writeZip(ppk, { 'index.bundlejs': fakeHbc(98, 'meta') });
+      const noBase = await describePpkBundleForTests(ppk, undefined);
+      expect(noBase.bundleHash).toBe(sha256Hex(fakeHbc(98, 'meta')));
+      expect(noBase.bytecodeVersion).toBe(98);
+      expect('baseVersionId' in noBase).toBe(false);
+      expect('baseHash' in noBase).toBe(false);
+      expect(Object.values(noBase).some((v) => v === null)).toBe(false);
+      const withBase = await describePpkBundleForTests(ppk, {
+        bytecodeVersion: 98,
+        baseVersionId: 7,
+        baseHash: 'objkey',
+      });
+      expect(withBase.baseVersionId).toBe(7);
+      expect(withBase.baseHash).toBe('objkey');
+      // plain JS bundle: no bytecodeVersion at all rather than null
+      const js = path.join(dir, 'js.ppk');
+      await writeZip(js, { 'index.bundlejs': Buffer.from('var a = 1;') });
+      const plain = await describePpkBundleForTests(js, undefined);
+      expect('bytecodeVersion' in plain).toBe(false);
+    } finally {
+      fs.removeSync(dir);
+    }
+  });
+});
