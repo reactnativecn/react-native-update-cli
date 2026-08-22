@@ -28,9 +28,9 @@ export interface HermesBaseSelection {
   bundleHash: string;
   /** server version id when the base came from the server */
   versionId?: number;
-  /** server object key of the base ppk when known */
+  /** server object key of the base artifact when known */
   hash?: string;
-  source: 'cache' | 'download' | 'local' | 'latest-version';
+  source: 'cache' | 'download' | 'local' | 'latest-version' | 'native-package';
 }
 
 /** Metadata attached to version/create so the server can track the chain. */
@@ -397,8 +397,9 @@ export async function downloadToFile(
 // ---------------------------------------------------------------------------
 
 export interface HermesBaseServerRecord {
-  versionId: number;
+  versionId?: number | null;
   hash: string;
+  artifactType?: 'ppk' | 'apk' | 'ipa' | 'app';
   bundleHash?: string | null;
   bytecodeVersion?: number | null;
   url: string;
@@ -412,8 +413,8 @@ export interface ResolveHermesBaseParams {
   cacheMaxMb?: number;
   /**
    * server lookup; returns null when the app has no usable base. The server
-   * itself falls back to the newest version when the epoch is still unknown
-   * (its bytecodeVersion is then null and verified here after download).
+   * itself falls back to the newest legacy version, then the newest native
+   * package (bytecodeVersion is null and verified here after download).
    */
   fetchBase: (
     appId: string,
@@ -480,7 +481,11 @@ export async function resolveHermesBase(
     return null;
   }
   const source: HermesBaseSelection['source'] =
-    record?.bytecodeVersion == null ? 'latest-version' : 'download';
+    record?.artifactType && record.artifactType !== 'ppk'
+      ? 'native-package'
+      : record?.bytecodeVersion == null
+        ? 'latest-version'
+        : 'download';
   if (!record) {
     log(t('hermesBaseNone', { reason: 'no published version yet' }));
     return null;
@@ -502,7 +507,7 @@ export async function resolveHermesBase(
     if (hit) {
       log(
         t('hermesBaseUsing', {
-          source: `cache ${record.bundleHash.slice(0, 12)} (version ${record.versionId})`,
+          source: `cache ${record.bundleHash.slice(0, 12)}${record.versionId == null ? '' : ` (version ${record.versionId})`}`,
           version: bytecodeVersion,
         }),
       );
@@ -510,7 +515,7 @@ export async function resolveHermesBase(
         path: hit,
         bytecodeVersion,
         bundleHash: record.bundleHash,
-        versionId: record.versionId,
+        versionId: record.versionId ?? undefined,
         hash: record.hash,
         source: 'cache',
       };
@@ -520,9 +525,14 @@ export async function resolveHermesBase(
   for (let attempt = 1; attempt <= 2; attempt++) {
     const dir = tmpDir();
     await fs.ensureDir(dir);
+    const artifactType = ['ppk', 'apk', 'ipa', 'app'].includes(
+      record.artifactType ?? '',
+    )
+      ? record.artifactType
+      : 'ppk';
     const archive = path.join(
       dir,
-      `base-${process.pid}-${Date.now()}-${attempt}.ppk`,
+      `base-${process.pid}-${Date.now()}-${attempt}.${artifactType}`,
     );
     try {
       log(t('hermesBaseDownloading', { url: record.url }));
@@ -548,7 +558,10 @@ export async function resolveHermesBase(
       const cached = await cachePut(bundle, params.cacheMaxMb);
       log(
         t('hermesBaseUsing', {
-          source: `version ${record.versionId} ${record.hash.slice(0, 8)}`,
+          source:
+            record.versionId == null
+              ? `native package ${record.hash.slice(0, 8)}`
+              : `version ${record.versionId} ${record.hash.slice(0, 8)}`,
           version: bytecodeVersion,
         }),
       );
@@ -556,7 +569,7 @@ export async function resolveHermesBase(
         path: cached.path,
         bytecodeVersion,
         bundleHash: cached.bundleHash,
-        versionId: record.versionId,
+        versionId: record.versionId ?? undefined,
         hash: record.hash,
         source,
       };

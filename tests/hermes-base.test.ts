@@ -283,11 +283,16 @@ describe('resolveHermesBase', () => {
     const bundleHash = sha256Hex(bundle);
     const ppk = path.join(dir, 'server.ppk');
     await writeZip(ppk, { 'main.jsbundle': bundle });
+    const nativeBundle = fakeHbc(98, 'native');
+    const apk = path.join(dir, 'native.apk');
+    await writeZip(apk, { 'assets/index.android.bundle': nativeBundle });
     const server = Bun.serve({
       port: 0,
       fetch: async (req) => {
         if (new URL(req.url).pathname === '/good.ppk')
           return new Response(Bun.file(ppk));
+        if (new URL(req.url).pathname === '/native.apk')
+          return new Response(Bun.file(apk));
         return new Response('nope', { status: 404 });
       },
     });
@@ -335,6 +340,26 @@ describe('resolveHermesBase', () => {
         fetchBase: async () => legacy,
       });
       expect(fromLatest?.source).toBe('latest-version');
+      await cleanCache();
+      const fromNativePackage = await resolveHermesBase({
+        ...common,
+        option: 'auto',
+        appId: '1',
+        fetchBase: async () => ({
+          versionId: null,
+          hash: 'nativekey',
+          artifactType: 'apk',
+          bundleHash: sha256Hex(nativeBundle),
+          bytecodeVersion: null,
+          url: `http://127.0.0.1:${server.port}/native.apk`,
+        }),
+      });
+      expect(fromNativePackage?.source).toBe('native-package');
+      expect(fromNativePackage?.versionId).toBeUndefined();
+      expect(fromNativePackage?.hash).toBe('nativekey');
+      expect(
+        fs.readFileSync(fromNativePackage!.path).equals(nativeBundle),
+      ).toBe(true);
       // server has a different epoch → no base
       expect(
         await resolveHermesBase({
