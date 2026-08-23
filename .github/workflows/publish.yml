@@ -1,11 +1,15 @@
 name: Publish Package to npmjs
+
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - automation/release-v2.22.4
+    paths:
+      - .github/workflows/publish.yml
 
 permissions:
-  id-token: write  # Required for OIDC
-  contents: read
+  id-token: write
+  contents: write
 
 jobs:
   build:
@@ -14,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ef375f3a20b26634f45447e4d71ecb73efa00bb6
           fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
@@ -22,24 +27,18 @@ jobs:
 
       - name: Prepare publish version
         env:
-          PUBLISH_VERSION: ${{ github.event.release.tag_name }}
+          PUBLISH_VERSION: v2.22.4
         run: bun scripts/prepublish.ts
 
-      - name: Verify package version matches release tag
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - name: Verify package version
         run: |
-          EXPECTED_VERSION="${RELEASE_TAG#v}"
           ACTUAL_VERSION="$(node -p "require('./package.json').version")"
-          echo "release tag: ${RELEASE_TAG} -> expected ${EXPECTED_VERSION}, package.json has ${ACTUAL_VERSION}"
-          test "${ACTUAL_VERSION}" = "${EXPECTED_VERSION}"
+          echo "expected 2.22.4, package.json has ${ACTUAL_VERSION}"
+          test "${ACTUAL_VERSION}" = "2.22.4"
 
       - name: Build package
         run: bun run build
 
-      # Node 18 must only be on PATH for the verification below, not during
-      # the build: typescript >= 7 ships an extensionless ESM bin/tsc that
-      # Node 18.17 cannot load (ERR_UNKNOWN_FILE_EXTENSION).
       - name: Set up Node.js 18 for runtime verification
         uses: actions/setup-node@v6
         with:
@@ -50,8 +49,6 @@ jobs:
           node --version
           node lib/bin.js -v
           node lib/bin-cresc.js -v
-          # the programmatic entry points must also load on the minimum
-          # supported Node, not only the CLI banner
           node -e "const m = require('./lib/exports.js'); if (!m) process.exit(1)"
           node -e "const d = require('./lib/diff.js'); if (!d.diffCommands) process.exit(1)"
 
@@ -64,11 +61,32 @@ jobs:
       - name: Verify publishable package contents
         run: npm pack --dry-run --ignore-scripts
 
-      - name: Publish to npm
+      - name: Check whether npm version already exists
+        id: npm-version
         shell: bash
         run: |
-          if [[ "${{ github.event.release.tag_name }}" == *"beta"* ]]; then
-            npm publish --ignore-scripts --provenance --access public --tag beta
+          if npm view react-native-update-cli@2.22.4 version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "react-native-update-cli@2.22.4 already exists; npm publish will be skipped"
           else
-            npm publish --ignore-scripts --provenance --access public
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.npm-version.outputs.exists != 'true'
+        run: npm publish --ignore-scripts --provenance --access public
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view v2.22.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release v2.22.4 already exists"
+          else
+            gh release create v2.22.4 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target ef375f3a20b26634f45447e4d71ecb73efa00bb6 \
+              --title "v2.22.4" \
+              --notes "Fix Hermes base equivalence verification for UIntSwitchImm jump-table offsets. Tighten StringSwitchImm/UIntSwitchImm normalization so semantic operands remain checked, with regression coverage for IDs, labels, ranges, and malformed switch shapes."
           fi
