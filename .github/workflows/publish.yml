@@ -6,13 +6,21 @@ on:
       - automation/release-v2.22.4
     paths:
       - .github/workflows/publish.yml
+  pull_request:
+    branches:
+      - master
 
 permissions:
   id-token: write
   contents: write
 
+concurrency:
+  group: release-v2.22.4
+  cancel-in-progress: false
+
 jobs:
   build:
+    if: github.event_name == 'push' || github.head_ref == 'automation/release-v2.22.4'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -74,7 +82,16 @@ jobs:
 
       - name: Publish to npm
         if: steps.npm-version.outputs.exists != 'true'
-        run: npm publish --ignore-scripts --provenance --access public
+        shell: bash
+        run: |
+          if npm publish --ignore-scripts --provenance --access public; then
+            exit 0
+          fi
+          if npm view react-native-update-cli@2.22.4 version >/dev/null 2>&1; then
+            echo "2.22.4 became available concurrently; treating publish as successful"
+            exit 0
+          fi
+          exit 1
 
       - name: Create GitHub release
         env:
@@ -83,10 +100,13 @@ jobs:
         run: |
           if gh release view v2.22.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "GitHub release v2.22.4 already exists"
-          else
-            gh release create v2.22.4 \
-              --repo "$GITHUB_REPOSITORY" \
-              --target ef375f3a20b26634f45447e4d71ecb73efa00bb6 \
-              --title "v2.22.4" \
-              --notes "Fix Hermes base equivalence verification for UIntSwitchImm jump-table offsets. Tighten StringSwitchImm/UIntSwitchImm normalization so semantic operands remain checked, with regression coverage for IDs, labels, ranges, and malformed switch shapes."
+            exit 0
           fi
+          if gh release create v2.22.4 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target ef375f3a20b26634f45447e4d71ecb73efa00bb6 \
+            --title "v2.22.4" \
+            --notes "Fix Hermes base equivalence verification for UIntSwitchImm jump-table offsets. Tighten StringSwitchImm/UIntSwitchImm normalization so semantic operands remain checked, with regression coverage for IDs, labels, ranges, and malformed switch shapes."; then
+            exit 0
+          fi
+          gh release view v2.22.4 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1
