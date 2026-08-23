@@ -1,0 +1,133 @@
+name: Apply Hermes switch hardening
+
+on:
+  push:
+    branches:
+      - automation/hermes-switch-release-20260823
+    paths:
+      - .github/workflows/apply-hermes-switch-hardening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: automation/hermes-switch-release-20260823
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Apply hardening
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source_path = Path('src/utils/hermes-base.ts')
+          source = source_path.read_text()
+          old = r'''  m = /^(\s*(?:String|UInt)?SwitchImm r\d+, \d+, )\d+(, .*)$/.exec(line);
+          if (m) line = `${m[1]}<jt>${m[2]}`;
+          m = /^(\s*(?:String|UInt)?SwitchImm r\d+, )\d+(, L\d+, .*)$/.exec(line);
+          if (m) line = `${m[1]}<jt>${m[2]}`;
+          '''
+          new = r'''  // Keep the opcode-specific shapes strict: folding another operand could
+          // hide a semantic change if Hermes changes its pretty-disassembly format.
+          m = /^(\s*StringSwitchImm r\d+, \d+, )\d+(, L\d+, \d+)$/.exec(line);
+          if (m) line = `${m[1]}<jt>${m[2]}`;
+          m = /^(\s*UIntSwitchImm r\d+, )\d+(, L\d+, \d+, \d+)$/.exec(line);
+          if (m) line = `${m[1]}<jt>${m[2]}`;
+          '''
+          if source.count(old) != 1:
+              raise SystemExit(f'expected exactly one switch normalization block, found {source.count(old)}')
+          source_path.write_text(source.replace(old, new))
+
+          test_path = Path('tests/hermes-switch-normalization.test.ts')
+          if test_path.exists():
+              raise SystemExit(f'{test_path} already exists')
+          test_path.write_text(r'''import { describe, expect, test } from 'bun:test';
+          import { normalizeDisassemblyLine } from '../src/utils/hermes-base';
+
+          const normalize = (line: string) =>
+            normalizeDisassemblyLine(line, new Map<number, string>());
+
+          describe('Hermes switch jump-table normalization', () => {
+            test('normalizes only the StringSwitchImm jump-table offset', () => {
+              const baseline = normalize(
+                '    StringSwitchImm r13, 2, 4024, L146, 150',
+              );
+              expect(baseline).toBe(
+                '    StringSwitchImm r13, 2, <jt>, L146, 150',
+              );
+              expect(
+                normalize('    StringSwitchImm r13, 2, 4025, L146, 150'),
+              ).toBe(baseline);
+              expect(
+                normalize('    StringSwitchImm r13, 3, 4024, L146, 150'),
+              ).not.toBe(baseline);
+              expect(
+                normalize('    StringSwitchImm r13, 2, 4024, L147, 150'),
+              ).not.toBe(baseline);
+              expect(
+                normalize('    StringSwitchImm r13, 2, 4024, L146, 151'),
+              ).not.toBe(baseline);
+            });
+
+            test('normalizes only the UIntSwitchImm jump-table offset', () => {
+              const baseline = normalize(
+                '    UIntSwitchImm r40, 5937, L3, 0, 31',
+              );
+              expect(baseline).toBe(
+                '    UIntSwitchImm r40, <jt>, L3, 0, 31',
+              );
+              expect(
+                normalize('    UIntSwitchImm r40, 5938, L3, 0, 31'),
+              ).toBe(baseline);
+              expect(
+                normalize('    UIntSwitchImm r40, 5937, L4, 0, 31'),
+              ).not.toBe(baseline);
+              expect(
+                normalize('    UIntSwitchImm r40, 5937, L3, 1, 31'),
+              ).not.toBe(baseline);
+              expect(
+                normalize('    UIntSwitchImm r40, 5937, L3, 0, 32'),
+              ).not.toBe(baseline);
+            });
+
+            test('does not fold unsupported or malformed switch shapes', () => {
+              expect(normalize('    SwitchImm r1, 2, 3, L4, 5')).toBe(
+                '    SwitchImm r1, 2, 3, L4, 5',
+              );
+              expect(normalize('    UIntSwitchImm r40, 5937, 3, 0, 31')).toBe(
+                '    UIntSwitchImm r40, 5937, 3, 0, 31',
+              );
+            });
+          });
+          ''')
+          PY
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint and typecheck
+        run: bun run lint
+
+      - name: Test
+        run: bun test
+
+      - name: Build
+        run: bun run build
+
+      - name: Commit verified changes
+        shell: bash
+        run: |
+          rm .github/workflows/apply-hermes-switch-hardening.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/utils/hermes-base.ts tests/hermes-switch-normalization.test.ts .github/workflows/apply-hermes-switch-hardening.yml
+          git commit -m "fix(hermes-base): harden switch jump-table normalization"
+          git push origin HEAD:automation/hermes-switch-release-20260823
