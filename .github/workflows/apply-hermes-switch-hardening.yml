@@ -1,11 +1,9 @@
 name: Apply Hermes switch hardening
 
 on:
-  push:
+  pull_request:
     branches:
-      - automation/hermes-switch-release-20260823
-    paths:
-      - .github/workflows/apply-hermes-switch-hardening.yml
+      - master
 
 permissions:
   contents: write
