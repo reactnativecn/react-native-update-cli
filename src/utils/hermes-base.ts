@@ -650,9 +650,9 @@ export function normalizeDisassemblyLine(
   //   UIntSwitchImm   rX, <jtOffset>, <defaultLabel>, <min>, <max>
   // Folding only the first shape let a shifted UIntSwitchImm offset read as a
   // real difference and drop an otherwise good delta build.
-  m = /^(\s*(?:String|UInt)?SwitchImm r\d+, \d+, )\d+(, .*)$/.exec(line);
+  m = /^(\s*StringSwitchImm r\d+, \d+, )\d+(, L\d+, \d+)$/.exec(line);
   if (m) line = `${m[1]}<jt>${m[2]}`;
-  m = /^(\s*(?:String|UInt)?SwitchImm r\d+, )\d+(, L\d+, .*)$/.exec(line);
+  m = /^(\s*UIntSwitchImm r\d+, )\d+(, L\d+, \d+, \d+)$/.exec(line);
   if (m) line = `${m[1]}<jt>${m[2]}`;
   if (/^\s*offset \d+$/.test(line)) line = line.replace(/\d+$/, '<jt>');
   return line;
