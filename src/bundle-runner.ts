@@ -552,6 +552,37 @@ async function checkGradleConfig(): Promise<GradleConfig> {
  * simply stays in the intermediate directory (never packed into the ppk) so
  * `address at` stack frames can still be symbolicated later.
  */
+/**
+ * hermesc echoes every diagnostic as three lines (header, the offending source
+ * line, a caret line). Minified bundles put a whole module on one line, so a
+ * single warning can be 100k+ characters and blindly keeping the tail of stderr
+ * buries the actual error under warning noise. Keep the diagnostic headers,
+ * prefer errors over warnings, and cap the length of whatever survives.
+ */
+export function summarizeHermescStderr(stderr: string): string {
+  const raw = String(stderr ?? '').split(/\r?\n/);
+  const kept: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const line = raw[i].trim();
+    if (!line) continue;
+    if (/^\^~*$/.test(line)) continue; // caret line
+    // the line before a caret is the echoed source, never the message
+    const next = raw[i + 1]?.trim();
+    if (next && /^\^~*$/.test(next)) continue;
+    kept.push(line.length > 300 ? `${line.slice(0, 300)}…` : line);
+  }
+  if (kept.length === 0) return '';
+  const isError = (line: string) =>
+    /(?::\s*|^)(?:fatal error|error)\b/i.test(line) ||
+    /^(?:Assertion|Stack dump|PLEASE submit a bug report)/i.test(line);
+  const errors = kept.filter(isError);
+  if (errors.length > 0) return errors.slice(-3).join(' ');
+  const notWarnings = kept.filter(
+    (line) => !/:\s*(?:warning|note):/i.test(line),
+  );
+  return (notWarnings.length > 0 ? notWarnings : kept).slice(-3).join(' ');
+}
+
 export function buildHermescArgs(bundlePath: string): string[] {
   return [
     '-emit-binary',
@@ -604,14 +635,21 @@ async function compileHermesByteCode(
     if (attempt.status === 0) {
       usedBase = true;
     } else {
-      const stderr = attempt.stderr
-        ? String(attempt.stderr).trim().split('\n').slice(-3).join(' ')
-        : '';
+      const fullStderr = attempt.stderr ? String(attempt.stderr) : '';
+      const reason = summarizeHermescStderr(fullStderr);
       console.warn(
         t('hermesBaseCompileFailed', {
-          reason: stderr || `exit ${attempt.status}`,
+          reason: reason || `exit ${attempt.status}`,
         }),
       );
+      if (fullStderr.trim()) {
+        // the summary drops warning noise; keep everything for bug reports
+        const logPath = path.join(outputFolder, 'hermes-base-error.log');
+        try {
+          fs.writeFileSync(logPath, fullStderr);
+          console.warn(t('hermesBaseCompileFailedLog', { file: logPath }));
+        } catch {}
+      }
       fs.copyFileSync(jsBackup, bundlePath);
     }
   }

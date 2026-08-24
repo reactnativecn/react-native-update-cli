@@ -220,6 +220,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   hermesBaseDownloading: 'Hermes base: downloading {{- url}}',
   hermesBaseCompileFailed:
     'Hermes base compile failed ({{- reason}}); retrying without -base-bytecode',
+  hermesBaseCompileFailedLog:
+    'Hermes base: full compiler output written to {{- file}}',
   hermesBaseVerified:
     'Hermes base: bytecode verified equivalent to a plain compile',
   hermesBaseVerifyFailed:

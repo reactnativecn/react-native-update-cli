@@ -203,6 +203,7 @@ export default {
   hermesBaseDownloading: 'Hermes base：下载 {{- url}}',
   hermesBaseCompileFailed:
     'Hermes base 编译失败（{{- reason}}），改为不带 -base-bytecode 重编',
+  hermesBaseCompileFailedLog: 'Hermes base：完整编译错误已写入 {{- file}}',
   hermesBaseVerified: 'Hermes base：字节码与普通编译等价，校验通过',
   hermesBaseVerifyFailed:
     'Hermes base：字节码与普通编译不等价，放弃 base 重新编译',

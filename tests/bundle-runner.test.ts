@@ -11,6 +11,7 @@ import {
   resolveExpoCli,
   resolveHermesCommand,
   resolveSentryUploadMode,
+  summarizeHermescStderr,
 } from '../src/bundle-runner';
 
 function mkTempDir(prefix: string): string {
@@ -455,5 +456,44 @@ describe('buildHermescArgs', () => {
       '-O',
       '-output-source-map',
     ]);
+  });
+});
+
+describe('summarizeHermescStderr', () => {
+  const warning = [
+    'index.bundlejs:204:115354: warning: the variable "clearTimeout" was not declared in anonymous function',
+    `__d(function(e,n,t){${'x'.repeat(2000)}})`,
+    `${' '.repeat(500)}^~~~~~~~~~~~~`,
+  ].join('\n');
+
+  test('surfaces the error instead of the warning noise around it', () => {
+    const stderr = [
+      warning,
+      'index.bundlejs:1:1: error: base bytecode is not compatible',
+      'var a = 1;',
+      '^~~',
+      warning,
+    ].join('\n');
+    expect(summarizeHermescStderr(stderr)).toBe(
+      'index.bundlejs:1:1: error: base bytecode is not compatible',
+    );
+  });
+
+  test('drops source and caret lines and caps the remaining length', () => {
+    const summary = summarizeHermescStderr(warning);
+    expect(summary).toContain('was not declared in anonymous function');
+    expect(summary).not.toContain('__d(function');
+    expect(summary.length).toBeLessThan(400);
+  });
+
+  test('keeps crash output that carries no error: prefix', () => {
+    const stderr = `${warning}\nAssertion \`baseBCProvider\` failed.`;
+    expect(summarizeHermescStderr(stderr)).toBe(
+      'Assertion `baseBCProvider` failed.',
+    );
+  });
+
+  test('returns an empty string for empty stderr', () => {
+    expect(summarizeHermescStderr('')).toBe('');
   });
 });
