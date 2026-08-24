@@ -10,6 +10,7 @@ import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { getHbcVersion } from './utils/hbcTransform';
 import {
+  BUNDLE_ENTRY_NAMES,
   cachePut,
   extractBundleFromArchive,
   type HermesBaseMeta,
@@ -17,6 +18,7 @@ import {
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getBooleanOption, getStringListOption } from './utils/options';
+import { locateZipEntry, ZIP_DEFLATED, ZIP_STORED } from './utils/zip-range';
 
 interface VersionCommandOptions {
   [key: string]: unknown;
@@ -480,6 +482,21 @@ async function describePpkBundle(
       const hbcVersion = getHbcVersion(bundle) ?? base?.bytecodeVersion;
       if (hbcVersion != null) meta.bytecodeVersion = hbcVersion;
       await cachePut(bundle).catch(() => {});
+      // where the bundle's compressed bytes live inside the ppk, so the next
+      // build can fetch just them with one HTTP Range request
+      const location = await locateZipEntry(ppkPath, (name) =>
+        BUNDLE_ENTRY_NAMES.includes(name),
+      ).catch(() => null);
+      if (
+        location &&
+        location.compressedSize > 0 &&
+        (location.compressionMethod === ZIP_STORED ||
+          location.compressionMethod === ZIP_DEFLATED)
+      ) {
+        meta.bundleOffset = location.dataOffset;
+        meta.bundleCompressedSize = location.compressedSize;
+        meta.bundleCompression = location.compressionMethod;
+      }
     }
   } catch {
     // best effort: metadata never blocks a publish

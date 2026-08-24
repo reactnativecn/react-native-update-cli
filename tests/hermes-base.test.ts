@@ -23,6 +23,7 @@ import {
   tmpDir,
   verifyHermesBaseEquivalence,
 } from '../src/utils/hermes-base';
+import { locateZipEntry } from '../src/utils/zip-range';
 
 // A real hermesc when the workspace has one (Example app of the SDK repo);
 // the compile-dependent tests are skipped otherwise.
@@ -388,6 +389,71 @@ describe('resolveHermesBase', () => {
   });
 });
 
+describe('resolveHermesBase over HTTP Range', () => {
+  test('a located ppk bundle is fetched with one Range request', async () => {
+    const dir = mkTemp('rnu-hermes-range-');
+    process.env.PUSHY_CACHE_DIR = path.join(dir, 'cache');
+    const bundle = fakeHbc(98, 'ranged');
+    const ppk = path.join(dir, 'server.ppk');
+    await writeZip(ppk, {
+      'assets/a.bin': Buffer.alloc(200 * 1024, 1),
+      'index.bundlejs': bundle,
+    });
+    const file = fs.readFileSync(ppk);
+    const requests: string[] = [];
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        const range = req.headers.get('range') ?? 'full';
+        requests.push(range);
+        const match = /^bytes=(\d+)-(\d+)$/.exec(range);
+        if (!match) return new Response(file);
+        const [start, end] = [Number(match[1]), Number(match[2])];
+        return new Response(file.subarray(start, end + 1), {
+          status: 206,
+          headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` },
+        });
+      },
+    });
+    const messages: string[] = [];
+    try {
+      const location = (await locateZipEntry(
+        ppk,
+        (n) => n === 'index.bundlejs',
+      ))!;
+      const selection = await resolveHermesBase({
+        option: 'auto',
+        hermesCommand:
+          '/x/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
+        bytecodeVersion: 98,
+        appId: '1',
+        log: (m) => messages.push(m),
+        fetchBase: async () => ({
+          versionId: 9,
+          hash: 'objkey',
+          bundleHash: sha256Hex(bundle),
+          bytecodeVersion: 98,
+          url: `http://127.0.0.1:${server.port}/server.ppk`,
+          bundleOffset: location.dataOffset,
+          bundleCompressedSize: location.compressedSize,
+          bundleCompression: location.compressionMethod,
+        }),
+      });
+      expect(selection?.source).toBe('download');
+      expect(selection?.versionId).toBe(9);
+      expect(fs.readFileSync(selection!.path).equals(bundle)).toBe(true);
+      expect(requests).toEqual([
+        `bytes=${location.dataOffset}-${location.dataOffset + location.compressedSize - 1}`,
+      ]);
+      expect(messages.some((m) => m.includes('HTTP Range'))).toBe(true);
+    } finally {
+      server.stop(true);
+      delete process.env.PUSHY_CACHE_DIR;
+      fs.removeSync(dir);
+    }
+  });
+});
+
 describe('helpers', () => {
   test('hermescArgsWithBase appends the base flag', () => {
     expect(hermescArgsWithBase(['-emit-binary'], '/b.hbc')).toEqual([
@@ -550,6 +616,11 @@ describe('publish metadata never sends JSON null', () => {
       const noBase = await describePpkBundleForTests(ppk, undefined);
       expect(noBase.bundleHash).toBe(sha256Hex(fakeHbc(98, 'meta')));
       expect(noBase.bytecodeVersion).toBe(98);
+      // bundle location inside the ppk for single-Range base downloads
+      const location = await locateZipEntry(ppk, (n) => n === 'index.bundlejs');
+      expect(noBase.bundleOffset).toBe(location!.dataOffset);
+      expect(noBase.bundleCompressedSize).toBe(location!.compressedSize);
+      expect(noBase.bundleCompression).toBe(location!.compressionMethod);
       expect('baseVersionId' in noBase).toBe(false);
       expect('baseHash' in noBase).toBe(false);
       expect(Object.values(noBase).some((v) => v === null)).toBe(false);

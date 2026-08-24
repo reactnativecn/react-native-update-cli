@@ -201,6 +201,10 @@ export default {
   hermesBaseNone: 'Hermes base：未使用（{{- reason}}），按普通方式编译',
   hermesBaseUsing: 'Hermes base：{{- source}}（HBC v{{version}}）',
   hermesBaseDownloading: 'Hermes base：下载 {{- url}}',
+  hermesBaseRangeFetched:
+    'Hermes base：已通过 HTTP Range 仅下载 bundle（{{fetchedKb}} KB / 整包 {{totalKb}} KB）',
+  hermesBaseRangeFallback:
+    'Hermes base：无法按需下载（{{- reason}}），改为下载整包',
   hermesBaseCompileFailed:
     'Hermes base 编译失败（{{- reason}}），改为不带 -base-bytecode 重编',
   hermesBaseCompileFailedLog: 'Hermes base：完整编译错误已写入 {{- file}}',

@@ -18,6 +18,14 @@ import { tempDir } from './constants';
 import { getHbcVersion } from './hbcTransform';
 import { t } from './i18n';
 import { enumZipEntries, readEntry } from './zip-entries';
+import {
+  fetchZipEntryData,
+  openRemoteZip,
+  RangeUnsupportedError,
+  readRemoteZipEntry,
+  ZIP_DEFLATED,
+  ZIP_STORED,
+} from './zip-range';
 
 export type HermesBaseOption = 'auto' | 'none' | string;
 
@@ -181,6 +189,22 @@ export const BUNDLE_ENTRY_NAMES = [
 const APK_BUNDLE = /^assets\/index\.android\.bundle$/;
 const IPA_BUNDLE = /^payload\/[^/]+\.app\/main\.jsbundle$/i;
 
+export type BaseArtifactType = 'ppk' | 'apk' | 'ipa' | 'app';
+
+/** Which zip entry holds the JS/HBC bundle in each kind of artifact. */
+export function bundleEntryMatcher(
+  artifactType: BaseArtifactType,
+): (name: string) => boolean {
+  switch (artifactType) {
+    case 'apk':
+      return (name) => APK_BUNDLE.test(name);
+    case 'ipa':
+      return (name) => IPA_BUNDLE.test(name.toLowerCase());
+    default:
+      return (name) => BUNDLE_ENTRY_NAMES.includes(name);
+  }
+}
+
 /**
  * Extract the JS/HBC bundle from a local artifact: a raw bundle file, a ppk,
  * or a native package (apk / ipa / harmony app). Returns null when not found.
@@ -198,17 +222,10 @@ export async function extractBundleFromArchive(
   ) {
     return fs.readFile(filePath);
   }
-  if (ext === '.ppk') {
-    return readFirstZipEntry(filePath, (name) =>
-      BUNDLE_ENTRY_NAMES.includes(name),
-    );
-  }
-  if (ext === '.apk') {
-    return readFirstZipEntry(filePath, (name) => APK_BUNDLE.test(name));
-  }
-  if (ext === '.ipa') {
-    return readFirstZipEntry(filePath, (name) =>
-      IPA_BUNDLE.test(name.toLowerCase()),
+  if (ext === '.ppk' || ext === '.apk' || ext === '.ipa') {
+    return readFirstZipEntry(
+      filePath,
+      bundleEntryMatcher(ext.slice(1) as BaseArtifactType),
     );
   }
   if (ext === '.app') {
@@ -399,10 +416,139 @@ export async function downloadToFile(
 export interface HermesBaseServerRecord {
   versionId?: number | null;
   hash: string;
-  artifactType?: 'ppk' | 'apk' | 'ipa' | 'app';
+  artifactType?: BaseArtifactType;
   bundleHash?: string | null;
   bytecodeVersion?: number | null;
   url: string;
+  /**
+   * Location of the bundle's compressed bytes inside the ppk, reported by the
+   * publishing CLI; lets the base be fetched with a single HTTP Range request.
+   */
+  bundleOffset?: number | null;
+  bundleCompressedSize?: number | null;
+  /** zip compression method: 0 stored, 8 deflate */
+  bundleCompression?: number | null;
+}
+
+interface FetchedBaseBundle {
+  bundle: Buffer;
+  /** how the bytes were obtained, for the log line */
+  transport: 'range-entry' | 'range-zip' | 'full';
+  fetchedBytes?: number;
+  totalBytes?: number;
+}
+
+function hasBundleLocation(record: HermesBaseServerRecord): boolean {
+  return (
+    record.bundleOffset != null &&
+    record.bundleCompressedSize != null &&
+    record.bundleCompression != null &&
+    (record.bundleCompression === ZIP_STORED ||
+      record.bundleCompression === ZIP_DEFLATED)
+  );
+}
+
+async function saveResponse(
+  response: Response,
+  destination: string,
+): Promise<void> {
+  if (!response.body) throw new Error('empty response body');
+  await fs.ensureDir(path.dirname(destination));
+  const { Readable } = await import('stream');
+  await pipeline(
+    Readable.fromWeb(response.body as any),
+    fs.createWriteStream(destination),
+  );
+}
+
+/**
+ * Obtain the base bundle with as little traffic as possible, in order:
+ *  1. one Range request for the bundle's compressed bytes when the server
+ *     knows their location (ppk published by a CLI that reported it);
+ *  2. the archive's central directory over Range, then just the bundle
+ *     entry (any zip: ppk, apk, ipa — harmony .app nests a second zip and
+ *     is skipped);
+ *  3. the whole archive, as before.
+ * A server that ignores Range (HTTP 200) streams the full archive into
+ * `archive` without a second request. Range results are verified against
+ * `record.bundleHash` here; a mismatch (e.g. re-packaged object) falls
+ * through to the next transport instead of failing the resolution.
+ */
+export async function fetchBaseBundle(
+  record: HermesBaseServerRecord,
+  artifactType: BaseArtifactType,
+  archive: string,
+  log: (message: string) => void = () => {},
+): Promise<FetchedBaseBundle | null> {
+  const matches = bundleEntryMatcher(artifactType);
+  const verified = (bundle: Buffer | null): Buffer | null => {
+    if (!bundle) throw new Error('bundle entry not found');
+    if (record.bundleHash && sha256Hex(bundle) !== record.bundleHash) {
+      throw new Error('bundleHash mismatch');
+    }
+    return bundle;
+  };
+  const fromFullResponse = async (
+    response: Response,
+  ): Promise<FetchedBaseBundle | null> => {
+    await saveResponse(response, archive);
+    const bundle = await extractBundleFromArchive(archive);
+    return bundle ? { bundle, transport: 'full' } : null;
+  };
+  const skip = (reason: string) =>
+    log(t('hermesBaseRangeFallback', { reason }));
+
+  if (artifactType === 'ppk' && hasBundleLocation(record)) {
+    try {
+      const { data, fetchedBytes, totalBytes } = await fetchZipEntryData(
+        record.url,
+        {
+          dataOffset: record.bundleOffset as number,
+          compressedSize: record.bundleCompressedSize as number,
+          compressionMethod: record.bundleCompression as number,
+        },
+      );
+      return {
+        bundle: verified(data) as Buffer,
+        transport: 'range-entry',
+        fetchedBytes,
+        totalBytes,
+      };
+    } catch (error: any) {
+      if (error instanceof RangeUnsupportedError) {
+        skip('server ignores Range');
+        return fromFullResponse(error.response);
+      }
+      skip(`entry range: ${error?.message ?? error}`);
+    }
+  }
+
+  if (artifactType !== 'app') {
+    try {
+      const remote = await openRemoteZip(record.url);
+      if (remote.kind === 'full') {
+        skip('server ignores Range');
+        return fromFullResponse(remote.response);
+      }
+      const bundle = await readRemoteZipEntry(remote.zipFile, matches);
+      return {
+        bundle: verified(bundle) as Buffer,
+        transport: 'range-zip',
+        fetchedBytes: remote.reader.fetchedBytes,
+        totalBytes: remote.reader.totalSize,
+      };
+    } catch (error: any) {
+      if (error instanceof RangeUnsupportedError) {
+        skip('server ignores Range');
+        return fromFullResponse(error.response);
+      }
+      skip(`zip range: ${error?.message ?? error}`);
+    }
+  }
+
+  await downloadToFile(record.url, archive);
+  const bundle = await extractBundleFromArchive(archive);
+  return bundle ? { bundle, transport: 'full' } : null;
 }
 
 export interface ResolveHermesBaseParams {
@@ -525,10 +671,13 @@ export async function resolveHermesBase(
   for (let attempt = 1; attempt <= 2; attempt++) {
     const dir = tmpDir();
     await fs.ensureDir(dir);
-    const artifactType = ['ppk', 'apk', 'ipa', 'app'].includes(
-      record.artifactType ?? '',
-    )
-      ? record.artifactType
+    const artifactType: BaseArtifactType = [
+      'ppk',
+      'apk',
+      'ipa',
+      'app',
+    ].includes(record.artifactType ?? '')
+      ? (record.artifactType as BaseArtifactType)
       : 'ppk';
     const archive = path.join(
       dir,
@@ -536,10 +685,18 @@ export async function resolveHermesBase(
     );
     try {
       log(t('hermesBaseDownloading', { url: record.url }));
-      await downloadToFile(record.url, archive);
-      const bundle = await extractBundleFromArchive(archive);
-      if (!bundle)
+      const fetched = await fetchBaseBundle(record, artifactType, archive, log);
+      if (!fetched)
         throw new Error('bundle entry not found in downloaded package');
+      const { bundle } = fetched;
+      if (fetched.transport !== 'full') {
+        log(
+          t('hermesBaseRangeFetched', {
+            fetchedKb: Math.ceil((fetched.fetchedBytes ?? 0) / 1024),
+            totalKb: Math.ceil((fetched.totalBytes ?? 0) / 1024),
+          }),
+        );
+      }
       const actualHash = sha256Hex(bundle);
       if (record.bundleHash && actualHash !== record.bundleHash) {
         throw new Error(

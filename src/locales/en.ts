@@ -218,6 +218,10 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'Hermes base: none ({{- reason}}); compiling without -base-bytecode',
   hermesBaseUsing: 'Hermes base: {{- source}} (HBC v{{version}})',
   hermesBaseDownloading: 'Hermes base: downloading {{- url}}',
+  hermesBaseRangeFetched:
+    'Hermes base: fetched only the bundle via HTTP Range ({{fetchedKb}} KB of {{totalKb}} KB)',
+  hermesBaseRangeFallback:
+    'Hermes base: partial download unavailable ({{- reason}}); downloading the whole package',
   hermesBaseCompileFailed:
     'Hermes base compile failed ({{- reason}}); retrying without -base-bytecode',
   hermesBaseCompileFailedLog:
