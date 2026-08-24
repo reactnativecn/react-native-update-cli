@@ -23,10 +23,15 @@ export const ZIP_DEFLATED = 8;
 
 const LOCAL_HEADER_SIGNATURE = 0x04034b50;
 const LOCAL_HEADER_SIZE = 30;
-/** covers the EOCD (≤ 22 + 65535 bytes) and, for small archives, everything */
-const TAIL_BYTES = 64 * 1024;
+/**
+ * Exactly what yauzl reads to find the EOCD (22 + 65535 comment + 20 zip64
+ * locator), so its first read is a cache hit; small archives fit entirely.
+ */
+const TAIL_BYTES = 22 + 0xffff + 20;
 /** minimum span fetched for header reads, so header + directory share a request */
 const CHUNK_BYTES = 64 * 1024;
+/** extra bytes past a hinted entry, covering a longer local extra field */
+const HINT_SLACK_BYTES = 4 * 1024;
 
 export interface ZipEntryLocation {
   fileName: string;
@@ -43,8 +48,36 @@ export async function locateZipEntry(
   zipPath: string,
   matches: (name: string) => boolean,
 ): Promise<ZipEntryLocation | null> {
-  const entry = await findEntry(zipPath, matches);
-  if (!entry) return null;
+  const found = await openFirstEntry(zipPath, matches);
+  if (!found) return null;
+  found.zipFile.close();
+  return locationOfEntry(zipPath, found.entry);
+}
+
+/**
+ * Content and data location of the first matching entry in one pass over the
+ * archive (publish needs both: the bundle to hash and cache, its location to
+ * report to the server).
+ */
+export async function readZipEntryWithLocation(
+  zipPath: string,
+  matches: (name: string) => boolean,
+): Promise<{ data: Buffer; location: ZipEntryLocation } | null> {
+  const found = await openFirstEntry(zipPath, matches);
+  if (!found) return null;
+  let data: Buffer;
+  try {
+    data = await readEntry(found.entry, found.zipFile);
+  } finally {
+    found.zipFile.close();
+  }
+  return { data, location: await locationOfEntry(zipPath, found.entry) };
+}
+
+async function locationOfEntry(
+  zipPath: string,
+  entry: Entry,
+): Promise<ZipEntryLocation> {
   const header = Buffer.alloc(LOCAL_HEADER_SIZE);
   const fd = await fs.open(zipPath, 'r');
   try {
@@ -79,28 +112,67 @@ export async function locateZipEntry(
   };
 }
 
-function findEntry(
+/** Open a local zip and stop at the first matching entry (caller closes). */
+function openFirstEntry(
   zipPath: string,
   matches: (name: string) => boolean,
-): Promise<Entry | null> {
+): Promise<{ zipFile: ZipFile; entry: Entry } | null> {
   return new Promise((resolve, reject) => {
-    openZipFile(zipPath, { lazyEntries: true }, (err, zipFile) => {
-      if (err) return reject(err);
-      let found: Entry | null = null;
-      zipFile.on('error', reject);
-      zipFile.on('end', () => resolve(found));
-      zipFile.on('entry', (entry: Entry) => {
-        if (!found && matches(entry.fileName)) {
-          found = entry;
-          zipFile.close();
-          resolve(found);
-          return;
-        }
+    openZipFile(
+      zipPath,
+      { lazyEntries: true, autoClose: false },
+      (err, zipFile) => {
+        if (err) return reject(err);
+        let settled = false;
+        zipFile.on('error', (error) => {
+          if (!settled) {
+            settled = true;
+            reject(error);
+          }
+        });
+        zipFile.on('end', () => {
+          if (!settled) {
+            settled = true;
+            zipFile.close();
+            resolve(null);
+          }
+        });
+        zipFile.on('entry', (entry: Entry) => {
+          if (settled) return;
+          if (matches(entry.fileName)) {
+            settled = true;
+            resolve({ zipFile, entry });
+            return;
+          }
+          zipFile.readEntry();
+        });
         zipFile.readEntry();
-      });
-      zipFile.readEntry();
-    });
+      },
+    );
   });
+}
+
+/**
+ * The `bundleOffset` / `bundleCompressedSize` / `bundleCompression` fields for
+ * version/create and package/create, or nothing when the entry cannot be
+ * fetched by a single Range request (unknown, empty or exotic compression).
+ */
+export function bundleLocationFields(
+  location: ZipEntryLocation | null | undefined,
+): Record<string, number> {
+  if (
+    !location ||
+    location.compressedSize <= 0 ||
+    (location.compressionMethod !== ZIP_STORED &&
+      location.compressionMethod !== ZIP_DEFLATED)
+  ) {
+    return {};
+  }
+  return {
+    bundleOffset: location.dataOffset,
+    bundleCompressedSize: location.compressedSize,
+    bundleCompression: location.compressionMethod,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -208,11 +280,15 @@ export async function fetchZipEntryData(
 
 /**
  * yauzl reader over HTTP Range. Header reads (EOCD, central directory, local
- * file headers) are widened to CHUNK_BYTES and cached so a small archive costs
- * one request; entry data streams straight from its own request.
+ * file headers) are widened to CHUNK_BYTES and cached — adjacent or
+ * overlapping chunks are merged so a read never re-fetches bytes it already
+ * has — and entry data reuses whatever prefix the cache holds (typically the
+ * bytes following the local file header) before requesting the rest.
  */
 export class HttpRangeReader extends RandomAccessReader {
-  private readonly chunks: { start: number; data: Buffer }[] = [];
+  private chunks: { start: number; data: Buffer }[] = [];
+  /** span a header read inside it should widen to (see `hintEntry`) */
+  private hint: { start: number; end: number } | null = null;
   requests = 0;
   fetchedBytes = 0;
 
@@ -222,26 +298,97 @@ export class HttpRangeReader extends RandomAccessReader {
     tail?: { start: number; data: Buffer },
   ) {
     super();
-    if (tail) this.chunks.push(tail);
+    if (tail) this.addChunk(tail.start, tail.data);
+  }
+
+  /**
+   * The next entry to be read: yauzl first reads its local file header, and
+   * widening that read to the entry's data makes the data stream a cache hit
+   * — one request for header + bundle instead of two. The central directory
+   * may understate the local header's extra field, hence the slack.
+   */
+  hintEntry(entry: Entry): void {
+    const start = entry.relativeOffsetOfLocalHeader;
+    const end =
+      start +
+      LOCAL_HEADER_SIZE +
+      entry.fileNameLength +
+      entry.extraFieldLength +
+      entry.compressedSize +
+      HINT_SLACK_BYTES;
+    this.hint = { start, end: Math.min(end, this.totalSize) };
+  }
+
+  /** Cache `data` at `start`, merging with any chunk it touches. */
+  addChunk(start: number, data: Buffer): void {
+    if (data.length === 0) return;
+    let lo = start;
+    let hi = start + data.length;
+    const pieces: { start: number; data: Buffer }[] = [{ start, data }];
+    const rest: { start: number; data: Buffer }[] = [];
+    for (const chunk of this.chunks) {
+      const chunkEnd = chunk.start + chunk.data.length;
+      if (chunk.start <= hi && chunkEnd >= lo) {
+        pieces.push(chunk);
+        lo = Math.min(lo, chunk.start);
+        hi = Math.max(hi, chunkEnd);
+      } else {
+        rest.push(chunk);
+      }
+    }
+    if (pieces.length === 1) {
+      rest.push(pieces[0]);
+    } else {
+      const merged = Buffer.alloc(hi - lo);
+      // the new data is written last so it wins over stale overlaps
+      for (const piece of pieces.reverse()) {
+        piece.data.copy(merged, piece.start - lo);
+      }
+      rest.push({ start: lo, data: merged });
+    }
+    rest.sort((a, b) => a.start - b.start);
+    this.chunks = rest;
+  }
+
+  /** cached bytes starting exactly at `start`, up to `end` (may be shorter) */
+  private cachedPrefix(start: number, end: number): Buffer | null {
+    for (const chunk of this.chunks) {
+      const chunkEnd = chunk.start + chunk.data.length;
+      if (start >= chunk.start && start < chunkEnd) {
+        return chunk.data.subarray(
+          start - chunk.start,
+          Math.min(end, chunkEnd) - chunk.start,
+        );
+      }
+    }
+    return null;
   }
 
   private cached(start: number, end: number): Buffer | null {
+    const prefix = this.cachedPrefix(start, end);
+    return prefix && prefix.length === end - start ? prefix : null;
+  }
+
+  /** start of the cached chunk holding byte `end - 1`, when there is one */
+  private cachedSuffixStart(end: number): number | null {
     for (const chunk of this.chunks) {
-      if (start >= chunk.start && end <= chunk.start + chunk.data.length) {
-        return chunk.data.subarray(start - chunk.start, end - chunk.start);
+      if (end - 1 >= chunk.start && end - 1 < chunk.start + chunk.data.length) {
+        return chunk.start;
       }
     }
     return null;
   }
 
   _readStreamForRange(start: number, end: number): Readable {
-    const hit = this.cached(start, end);
-    if (hit) return Readable.from([hit]);
+    const prefix = this.cachedPrefix(start, end);
+    if (prefix && prefix.length === end - start) return Readable.from([prefix]);
     const out = new PassThrough();
+    if (prefix) out.write(prefix);
+    const from = start + (prefix?.length ?? 0);
     this.requests++;
-    fetchRange(this.url, start, end)
+    fetchRange(this.url, from, end)
       .then((response) => {
-        this.fetchedBytes += end - start;
+        this.fetchedBytes += end - from;
         const body = Readable.fromWeb(response.body as any);
         body.on('error', (error) => out.destroy(error));
         body.pipe(out);
@@ -263,21 +410,64 @@ export class HttpRangeReader extends RandomAccessReader {
       setImmediate(() => callback(null, length));
       return;
     }
-    const end = Math.min(
-      this.totalSize,
-      Math.max(position + length, position + CHUNK_BYTES),
-    );
+    // fetch only what the cache lacks: skip a cached prefix, stop at a cached
+    // suffix (yauzl's EOCD read may just exceed the tail), and otherwise widen
+    // so the next header read is free
+    const requestEnd = position + length;
+    const from =
+      position + (this.cachedPrefix(position, requestEnd)?.length ?? 0);
+    const suffixStart = this.cachedSuffixStart(requestEnd);
+    let end: number;
+    if (suffixStart !== null && suffixStart > from) {
+      end = suffixStart;
+    } else {
+      end = Math.min(this.totalSize, Math.max(requestEnd, from + CHUNK_BYTES));
+      if (
+        this.hint &&
+        position >= this.hint.start &&
+        position < this.hint.end
+      ) {
+        end = Math.max(end, this.hint.end);
+      }
+    }
     this.requests++;
-    fetchRangeBuffer(this.url, position, end).then(
+    fetchRangeBuffer(this.url, from, end).then(
       ({ data }) => {
         this.fetchedBytes += data.length;
-        this.chunks.push({ start: position, data });
-        data.copy(buffer, offset, 0, length);
+        this.addChunk(from, data);
+        const full = this.cached(position, position + length);
+        if (!full) {
+          callback(new Error('range read did not cover the requested bytes'));
+          return;
+        }
+        full.copy(buffer, offset);
         callback(null, length);
       },
       (error) => callback(error),
     );
   }
+}
+
+/** End-of-central-directory record: where the central directory lives. */
+const EOCD_SIGNATURE = 0x06054b50;
+const EOCD_SIZE = 22;
+/** central directories larger than this are left to yauzl's paged reads */
+const MAX_PREFETCH_BYTES = 8 * 1024 * 1024;
+
+export function parseEndOfCentralDirectory(
+  tail: Buffer,
+): { cdOffset: number; cdSize: number } | null {
+  for (let i = tail.length - EOCD_SIZE; i >= 0; i--) {
+    if (tail.readUInt32LE(i) !== EOCD_SIGNATURE) continue;
+    const commentLength = tail.readUInt16LE(i + 20);
+    if (i + EOCD_SIZE + commentLength !== tail.length) continue;
+    const cdSize = tail.readUInt32LE(i + 12);
+    const cdOffset = tail.readUInt32LE(i + 16);
+    // zip64 markers: let yauzl resolve the real values itself
+    if (cdSize === 0xffffffff || cdOffset === 0xffffffff) return null;
+    return { cdOffset, cdSize };
+  }
+  return null;
 }
 
 export type RemoteZip =
@@ -317,6 +507,24 @@ export async function openRemoteZip(url: string): Promise<RemoteZip> {
   });
   reader.requests = 1;
   reader.fetchedBytes = data.length;
+  // Large archives (apk / ipa with thousands of files) keep their central
+  // directory well before the tail; yauzl would otherwise page it in with one
+  // sequential request per CHUNK_BYTES. Fetch the missing part at once.
+  const eocd = parseEndOfCentralDirectory(data);
+  if (
+    eocd &&
+    eocd.cdOffset < range.start &&
+    range.start - eocd.cdOffset <= MAX_PREFETCH_BYTES
+  ) {
+    const { data: directory } = await fetchRangeBuffer(
+      url,
+      eocd.cdOffset,
+      range.start,
+    );
+    reader.requests++;
+    reader.fetchedBytes += directory.length;
+    reader.addChunk(eocd.cdOffset, directory);
+  }
   const zipFile = await new Promise<ZipFile>((resolve, reject) => {
     fromRandomAccessReader(
       reader,
@@ -328,10 +536,14 @@ export async function openRemoteZip(url: string): Promise<RemoteZip> {
   return { kind: 'zip', zipFile, reader };
 }
 
-/** Read the first matching entry of an opened remote zip, then close it. */
+/**
+ * Read the first matching entry of an opened remote zip, then close it. With
+ * `reader` given, the entry's header and data are fetched in one request.
+ */
 export function readRemoteZipEntry(
   zipFile: ZipFile,
   matches: (name: string) => boolean,
+  reader?: HttpRangeReader,
 ): Promise<Buffer | null> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -348,6 +560,7 @@ export function readRemoteZipEntry(
         zipFile.readEntry();
         return;
       }
+      reader?.hintEntry(entry);
       readEntry(entry, zipFile).then(
         (data) => finish(null, data),
         (error) => finish(error),

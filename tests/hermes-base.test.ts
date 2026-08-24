@@ -551,10 +551,14 @@ describe('helpers', () => {
 
 describe.if(hasHermesc)('with a real hermesc', () => {
   let dir: string;
+  const previousCache = process.env.PUSHY_CACHE_DIR;
   beforeEach(() => {
     dir = mkTemp('rnu-hermes-real-');
+    process.env.PUSHY_CACHE_DIR = path.join(dir, 'cache');
   });
   afterEach(() => {
+    if (previousCache === undefined) delete process.env.PUSHY_CACHE_DIR;
+    else process.env.PUSHY_CACHE_DIR = previousCache;
     fs.removeSync(dir);
   });
 
@@ -640,4 +644,148 @@ describe('publish metadata never sends JSON null', () => {
       fs.removeSync(dir);
     }
   });
+});
+
+/** the regex-per-line implementation the fast path replaced; must agree */
+function legacyNormalize(
+  line: string,
+  strings: Map<number, string>,
+): string | null {
+  if (/^Offset in debug table/.test(line)) return null;
+  let m =
+    /^(\s*New(?:Array|Object)WithBuffer)(?:Long)?(?:AndParent)?\s+(r\d+)(.*)$/.exec(
+      line,
+    );
+  if (m) {
+    const nums = m[3].match(/\d+/g) ?? [];
+    return `${m[1]} ${m[2]} sizes=${nums.slice(0, 1).join(',')}`;
+  }
+  m = /^(\s*J[A-Za-z]+?)(Long)?\s+(L\d+|\d+)(.*)$/.exec(line);
+  if (m) return `${m[1]} <tgt>${m[4]}`;
+  m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)$/.exec(line);
+  if (m) line = `${m[1]}"${strings.get(Number(m[2])) ?? `?${m[2]}`}"`;
+  m = /^(\s*)([A-Za-z]+?)(?:LongIndex|Long|Short)?(\s+.*|)$/.exec(line);
+  if (m) line = `${m[1]}${m[2]}${m[3].replace(/\s+/g, ' ')}`;
+  m = /^(\s*StringSwitchImm r\d+, \d+, )\d+(, L\d+, \d+)$/.exec(line);
+  if (m) line = `${m[1]}<jt>${m[2]}`;
+  m = /^(\s*UIntSwitchImm r\d+, )\d+(, L\d+, \d+, \d+)$/.exec(line);
+  if (m) line = `${m[1]}<jt>${m[2]}`;
+  if (/^\s*offset \d+$/.test(line)) line = line.replace(/\d+$/, '<jt>');
+  return line;
+}
+
+describe('normalizeDisassemblyLine fast path', () => {
+  test('agrees with the regex-only implementation on representative lines', () => {
+    const strings = new Map([
+      [3, 'foo'],
+      [42, 'bar'],
+    ]);
+    const corpus = [
+      'Offset in debug table: source 0x0, lexical 0x0',
+      '    NewArrayWithBuffer r1, 3, 3, 12',
+      '    NewArrayWithBufferLong r1, 300, 300, 65540',
+      '    NewObjectWithBuffer r2, 2, 2, 0, 0',
+      '    NewObjectWithBufferLong r2, 2, 2, 70000, 70000',
+      '    NewObjectWithBufferAndParent r2, r3, 2, 2, 0, 0',
+      '    Jmp L5',
+      '    JmpLong L5',
+      '    JNotEqual L3, r1, r2',
+      '    JmpTrue 12, r4',
+      '    JStrictEqualLong L9, r0, r1',
+      '    DefineOwnById r0, r1, 1, 3',
+      '    DefineOwnByIdLong r0, r1, 1, 42',
+      '    DefineOwnByIdShort r0, r1, 1, 7',
+      '    GetByIdShort   r1, r0, 1, "foo"',
+      '    GetById        r1, r0, 1, "foo"',
+      '    GetByIdLong    r1, r0, 1, "foo"',
+      '    LoadConstString r3, "x"',
+      '    LoadConstStringLongIndex r3, "x"',
+      '    Mov     r1,\tr2',
+      '    Ret r0',
+      '    Long r1',
+      '    Short',
+      '    LongLong r2',
+      '    ShortLong r2',
+      '    XLongIndexLong r2',
+      '    StringSwitchImm r1, 5, 120, L2, 3',
+      '    StringSwitchImm r1, 5, 120, L2, 3, 9',
+      '    UIntSwitchImm r1, 96, L4, 0, 5',
+      '    UIntSwitchImm r1, 96, L4, 0, 5, 1',
+      '  offset 96',
+      '    offset 12 ',
+      'offset abc',
+      'Function<global>(1 params, 12 registers, 0 symbols):',
+      'Function<foo>(2 params, 3 registers):',
+      'L1:',
+      '  L2:',
+      '',
+      '   ',
+      '\tRet\tr0',
+      'Exception Handlers:',
+      '  0: start = L1, end = L2, target = L3',
+      '    ; comment-like',
+      'i5[ASCII, 0..2]: foo',
+      's0[UTF-16, 3..5] #ABCD: bar',
+      'CJSModuleTable:',
+      '    Debugger',
+      '    Debugger ',
+      '    CreateClosureLongIndex r1, r0, Function<bar>',
+      '    Call r1, r2, 3',
+      '    NewArray r1, 0',
+      '    Newarrays r1',
+      '    New r1',
+      '    JmpUndefined',
+      '    J',
+      'Jmp L1',
+      'NewArrayWithBuffer r1, 3, 3, 12',
+    ];
+    for (const line of corpus) {
+      expect(normalizeDisassemblyLine(line, strings)).toBe(
+        legacyNormalize(line, strings),
+      );
+    }
+  });
+});
+
+describe('probeHbcVersion cache', () => {
+  let dir: string;
+  const previous = process.env.PUSHY_CACHE_DIR;
+  beforeEach(() => {
+    dir = mkTemp('rnu-hermes-probe-cache-');
+    process.env.PUSHY_CACHE_DIR = path.join(dir, 'cache');
+  });
+  afterEach(() => {
+    if (previous === undefined) delete process.env.PUSHY_CACHE_DIR;
+    else process.env.PUSHY_CACHE_DIR = previous;
+    fs.removeSync(dir);
+  });
+
+  test.if(os.platform() !== 'win32')(
+    'compiles once per hermesc binary and again when the binary changes',
+    () => {
+      const fixture = path.join(dir, 'probe.hbc');
+      fs.writeFileSync(fixture, fakeHbc(96));
+      const calls = path.join(dir, 'calls.log');
+      const script = path.join(dir, 'hermesc');
+      const write = (marker: string) =>
+        fs.writeFileSync(
+          script,
+          `#!/bin/sh\n# ${marker}\necho run >> "${calls}"\nwhile [ $# -gt 0 ]; do if [ "$1" = "-out" ]; then cp "${fixture}" "$2"; shift; fi; shift; done\n`,
+          { mode: 0o755 },
+        );
+      write('v1');
+      expect(probeHbcVersion(script)).toBe(96);
+      expect(probeHbcVersion(script)).toBe(96);
+      expect(fs.readFileSync(calls, 'utf8').trim().split('\n')).toHaveLength(1);
+      expect(fs.existsSync(path.join(cacheDir(), 'hbc-versions.json'))).toBe(
+        true,
+      );
+      // a different binary (size changes) is probed again
+      write('v2-longer');
+      expect(probeHbcVersion(script)).toBe(96);
+      expect(fs.readFileSync(calls, 'utf8').trim().split('\n')).toHaveLength(2);
+      // the sha256-named bundle cache ignores the probe file
+      expect(fs.readdirSync(cacheDir())).toEqual(['hbc-versions.json']);
+    },
+  );
 });

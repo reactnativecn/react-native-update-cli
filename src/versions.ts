@@ -18,7 +18,10 @@ import {
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getBooleanOption, getStringListOption } from './utils/options';
-import { locateZipEntry, ZIP_DEFLATED, ZIP_STORED } from './utils/zip-range';
+import {
+  bundleLocationFields,
+  readZipEntryWithLocation,
+} from './utils/zip-range';
 
 interface VersionCommandOptions {
   [key: string]: unknown;
@@ -476,27 +479,22 @@ async function describePpkBundle(
   // server version — strict, tolerant or too old to know the field — accepts.
   const meta: Record<string, unknown> = {};
   try {
-    const bundle = await extractBundleFromArchive(ppkPath);
+    // one pass over the ppk: the bundle itself plus where its compressed
+    // bytes live, so the next build can fetch just them with one HTTP Range
+    // request
+    const found = ppkPath.toLowerCase().endsWith('.ppk')
+      ? await readZipEntryWithLocation(ppkPath, (name) =>
+          BUNDLE_ENTRY_NAMES.includes(name),
+        ).catch(() => null)
+      : null;
+    const bundle = found?.data ?? (await extractBundleFromArchive(ppkPath));
     if (bundle) {
-      meta.bundleHash = sha256Hex(bundle);
+      const bundleHash = sha256Hex(bundle);
+      meta.bundleHash = bundleHash;
       const hbcVersion = getHbcVersion(bundle) ?? base?.bytecodeVersion;
       if (hbcVersion != null) meta.bytecodeVersion = hbcVersion;
-      await cachePut(bundle).catch(() => {});
-      // where the bundle's compressed bytes live inside the ppk, so the next
-      // build can fetch just them with one HTTP Range request
-      const location = await locateZipEntry(ppkPath, (name) =>
-        BUNDLE_ENTRY_NAMES.includes(name),
-      ).catch(() => null);
-      if (
-        location &&
-        location.compressedSize > 0 &&
-        (location.compressionMethod === ZIP_STORED ||
-          location.compressionMethod === ZIP_DEFLATED)
-      ) {
-        meta.bundleOffset = location.dataOffset;
-        meta.bundleCompressedSize = location.compressedSize;
-        meta.bundleCompression = location.compressionMethod;
-      }
+      await cachePut(bundle, undefined, bundleHash).catch(() => {});
+      Object.assign(meta, bundleLocationFields(found?.location));
     }
   } catch {
     // best effort: metadata never blocks a publish

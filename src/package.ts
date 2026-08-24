@@ -16,9 +16,10 @@ import {
 import { AabParser } from './utils/app-info-parser/aab';
 import { depVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import { cachePut } from './utils/hermes-base';
+import { bundleEntryMatcher, cachePut } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getStringListOption } from './utils/options';
+import { bundleLocationFields, locateZipEntry } from './utils/zip-range';
 
 type PackageCommandOptions = Record<string, unknown> & {
   appId?: string;
@@ -153,6 +154,19 @@ async function uploadNativePackage(
   try {
     await createSlimNativePackage(filePath, slimPackagePath, config.platform);
     const { hash } = await uploadFile(slimPackagePath, undefined, appId);
+    // where the bundle sits inside the uploaded (slim) archive, so a later
+    // `bundle` that falls back to this package as hermes base fetches only
+    // the bundle with one HTTP Range request. Harmony .app nests a second
+    // zip, so no location is reported for it.
+    const bundleLocation =
+      config.extension === '.app'
+        ? {}
+        : bundleLocationFields(
+            await locateZipEntry(
+              slimPackagePath,
+              bundleEntryMatcher(config.extension.slice(1) as 'apk' | 'ipa'),
+            ).catch(() => null),
+          );
     if (bundleFile) {
       // keep the embedded bundle locally so a later `bundle` can use it as
       // hermes base without downloading it back (see hermes-base.ts)
@@ -171,6 +185,7 @@ async function uploadNativePackage(
       // against the client-reported bundleHash to decide pdiff applicability.
       // Old servers strip unknown fields, so this is forward-compatible.
       ...(bundleHash ? { bundleHash } : {}),
+      ...bundleLocation,
       deps: depVersions,
       commit: await getCommitInfo(),
     });

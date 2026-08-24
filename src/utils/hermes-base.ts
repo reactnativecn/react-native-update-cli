@@ -151,8 +151,68 @@ export function sha256Hex(data: Buffer): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
-/** Compile an empty file to learn which HBC version this hermesc emits. */
+const PROBE_CACHE_FILE = 'hbc-versions.json';
+const PROBE_CACHE_ENTRIES = 16;
+
+/** identity of a hermesc binary for the probe cache: path + size + mtime */
+function probeCacheKey(hermesCommand: string): string | null {
+  try {
+    const stat = fs.statSync(hermesCommand);
+    return `${path.resolve(hermesCommand)}|${stat.size}|${Math.floor(stat.mtimeMs)}`;
+  } catch {
+    return null;
+  }
+}
+
+function readProbeCache(): Record<string, number> {
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(path.join(cacheDir(), PROBE_CACHE_FILE), 'utf8'),
+    );
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeProbeCache(entries: Record<string, number>): void {
+  try {
+    const keys = Object.keys(entries);
+    // keep the most recently inserted entries only
+    const trimmed = Object.fromEntries(
+      keys.slice(-PROBE_CACHE_ENTRIES).map((key) => [key, entries[key]]),
+    );
+    fs.ensureDirSync(cacheDir());
+    fs.writeFileSync(
+      path.join(cacheDir(), PROBE_CACHE_FILE),
+      JSON.stringify(trimmed),
+    );
+  } catch {
+    // the cache is a convenience; probing again next time is fine
+  }
+}
+
+/**
+ * Which HBC version this hermesc emits. The answer is remembered per binary
+ * (path, size, mtime) in the cache dir so only the first run of a given
+ * hermesc pays for the empty-file compile.
+ */
 export function probeHbcVersion(hermesCommand: string): number | null {
+  const key = probeCacheKey(hermesCommand);
+  if (key) {
+    const cached = readProbeCache()[key];
+    if (Number.isInteger(cached) && cached > 0) return cached;
+  }
+  const version = compileProbe(hermesCommand);
+  if (key && version !== null) {
+    const { [key]: _stale, ...others } = readProbeCache();
+    writeProbeCache({ ...others, [key]: version });
+  }
+  return version;
+}
+
+/** Compile an empty file to learn which HBC version this hermesc emits. */
+function compileProbe(hermesCommand: string): number | null {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-hermes-probe-'));
   try {
     const input = path.join(dir, 'probe.js');
@@ -303,8 +363,9 @@ export async function cacheLookup(bundleHash: string): Promise<string | null> {
 export async function cachePut(
   bundle: Buffer,
   maxMb?: number,
+  knownHash?: string,
 ): Promise<{ path: string; bundleHash: string }> {
-  const bundleHash = sha256Hex(bundle);
+  const bundleHash = knownHash ?? sha256Hex(bundle);
   const dir = cacheDir();
   await fs.ensureDir(dir);
   const file = path.join(dir, bundleHash);
@@ -432,6 +493,8 @@ export interface HermesBaseServerRecord {
 
 interface FetchedBaseBundle {
   bundle: Buffer;
+  /** sha256 of `bundle`, computed once here */
+  bundleHash: string;
   /** how the bytes were obtained, for the log line */
   transport: 'range-entry' | 'range-zip' | 'full';
   fetchedBytes?: number;
@@ -464,7 +527,8 @@ async function saveResponse(
 /**
  * Obtain the base bundle with as little traffic as possible, in order:
  *  1. one Range request for the bundle's compressed bytes when the server
- *     knows their location (ppk published by a CLI that reported it);
+ *     knows their location (ppk / apk / ipa published by a CLI that
+ *     reported it);
  *  2. the archive's central directory over Range, then just the bundle
  *     entry (any zip: ppk, apk, ipa — harmony .app nests a second zip and
  *     is skipped);
@@ -481,24 +545,31 @@ export async function fetchBaseBundle(
   log: (message: string) => void = () => {},
 ): Promise<FetchedBaseBundle | null> {
   const matches = bundleEntryMatcher(artifactType);
-  const verified = (bundle: Buffer | null): Buffer | null => {
+  const verified = (
+    bundle: Buffer | null,
+  ): { bundle: Buffer; bundleHash: string } => {
     if (!bundle) throw new Error('bundle entry not found');
-    if (record.bundleHash && sha256Hex(bundle) !== record.bundleHash) {
+    const bundleHash = sha256Hex(bundle);
+    if (record.bundleHash && bundleHash !== record.bundleHash) {
       throw new Error('bundleHash mismatch');
     }
-    return bundle;
+    return { bundle, bundleHash };
   };
   const fromFullResponse = async (
     response: Response,
   ): Promise<FetchedBaseBundle | null> => {
     await saveResponse(response, archive);
     const bundle = await extractBundleFromArchive(archive);
-    return bundle ? { bundle, transport: 'full' } : null;
+    return bundle
+      ? { bundle, bundleHash: sha256Hex(bundle), transport: 'full' }
+      : null;
   };
   const skip = (reason: string) =>
     log(t('hermesBaseRangeFallback', { reason }));
 
-  if (artifactType === 'ppk' && hasBundleLocation(record)) {
+  // harmony .app nests the bundle in a second zip, so a location inside the
+  // outer archive is never reported for it
+  if (artifactType !== 'app' && hasBundleLocation(record)) {
     try {
       const { data, fetchedBytes, totalBytes } = await fetchZipEntryData(
         record.url,
@@ -509,7 +580,7 @@ export async function fetchBaseBundle(
         },
       );
       return {
-        bundle: verified(data) as Buffer,
+        ...verified(data),
         transport: 'range-entry',
         fetchedBytes,
         totalBytes,
@@ -530,9 +601,13 @@ export async function fetchBaseBundle(
         skip('server ignores Range');
         return fromFullResponse(remote.response);
       }
-      const bundle = await readRemoteZipEntry(remote.zipFile, matches);
+      const bundle = await readRemoteZipEntry(
+        remote.zipFile,
+        matches,
+        remote.reader,
+      );
       return {
-        bundle: verified(bundle) as Buffer,
+        ...verified(bundle),
         transport: 'range-zip',
         fetchedBytes: remote.reader.fetchedBytes,
         totalBytes: remote.reader.totalSize,
@@ -548,7 +623,9 @@ export async function fetchBaseBundle(
 
   await downloadToFile(record.url, archive);
   const bundle = await extractBundleFromArchive(archive);
-  return bundle ? { bundle, transport: 'full' } : null;
+  return bundle
+    ? { bundle, bundleHash: sha256Hex(bundle), transport: 'full' }
+    : null;
 }
 
 export interface ResolveHermesBaseParams {
@@ -688,7 +765,7 @@ export async function resolveHermesBase(
       const fetched = await fetchBaseBundle(record, artifactType, archive, log);
       if (!fetched)
         throw new Error('bundle entry not found in downloaded package');
-      const { bundle } = fetched;
+      const { bundle, bundleHash: actualHash } = fetched;
       if (fetched.transport !== 'full') {
         log(
           t('hermesBaseRangeFetched', {
@@ -697,7 +774,6 @@ export async function resolveHermesBase(
           }),
         );
       }
-      const actualHash = sha256Hex(bundle);
       if (record.bundleHash && actualHash !== record.bundleHash) {
         throw new Error(
           `bundleHash mismatch (${actualHash.slice(0, 12)} != ${record.bundleHash.slice(0, 12)})`,
@@ -712,7 +788,7 @@ export async function resolveHermesBase(
         );
         return null;
       }
-      const cached = await cachePut(bundle, params.cacheMaxMb);
+      const cached = await cachePut(bundle, params.cacheMaxMb, actualHash);
       log(
         t('hermesBaseUsing', {
           source:
@@ -780,39 +856,82 @@ export function normalizeDisassemblyLine(
   line: string,
   strings: Map<number, string>,
 ): string | null {
-  if (/^Offset in debug table/.test(line)) return null;
-  let m =
-    /^(\s*New(?:Array|Object)WithBuffer)(?:Long)?(?:AndParent)?\s+(r\d+)(.*)$/.exec(
-      line,
-    );
-  if (m) {
-    const nums = m[3].match(/\d+/g) ?? [];
-    return `${m[1]} ${m[2]} sizes=${nums.slice(0, 1).join(',')}`;
+  // Cheap dispatch on the opcode before touching any regex: dumps run to
+  // millions of lines and only a handful of instructions need rewriting.
+  let indent = 0;
+  while (indent < line.length && isSpace(line.charCodeAt(indent))) indent++;
+  let opEnd = indent;
+  while (opEnd < line.length && isLetter(line.charCodeAt(opEnd))) opEnd++;
+  const opcode = line.slice(indent, opEnd);
+  if (opcode === 'Offset' && line.startsWith('Offset in debug table', indent)) {
+    return null;
   }
-  m = /^(\s*J[A-Za-z]+?)(Long)?\s+(L\d+|\d+)(.*)$/.exec(line);
-  if (m) return `${m[1]} <tgt>${m[4]}`;
-  m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)$/.exec(line);
-  if (m) line = `${m[1]}"${strings.get(Number(m[2])) ?? `?${m[2]}`}"`;
+  let m: RegExpExecArray | null;
+  if (opcode.startsWith('New') && opcode.includes('WithBuffer')) {
+    m =
+      /^(\s*New(?:Array|Object)WithBuffer)(?:Long)?(?:AndParent)?\s+(r\d+)(.*)$/.exec(
+        line,
+      );
+    if (m) {
+      const nums = m[3].match(/\d+/g) ?? [];
+      return `${m[1]} ${m[2]} sizes=${nums.slice(0, 1).join(',')}`;
+    }
+  }
+  if (opcode.charCodeAt(0) === 0x4a /* J */) {
+    m = /^(\s*J[A-Za-z]+?)(Long)?\s+(L\d+|\d+)(.*)$/.exec(line);
+    if (m) return `${m[1]} <tgt>${m[4]}`;
+  }
+  if (opcode.startsWith('DefineOwnById')) {
+    m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)$/.exec(line);
+    if (m) line = `${m[1]}"${strings.get(Number(m[2])) ?? `?${m[2]}`}"`;
+  }
   // Operand-width variants of one instruction (GetByIdShort/GetById/GetByIdLong,
   // LoadConstString/LoadConstStringLongIndex, ...) only differ by how wide a
   // string/function id or offset is encoded — a foreign base hands the new
   // code's hot strings large ids, so the delta build legitimately picks the
   // wider form. Fold the suffix and the column padding that follows it.
-  m = /^(\s*)([A-Za-z]+?)(?:LongIndex|Long|Short)?(\s+.*|)$/.exec(line);
-  if (m) line = `${m[1]}${m[2]}${m[3].replace(/\s+/g, ' ')}`;
-  // Switch jump tables sit after the instructions; their relative offset (and
-  // the table header hermesc prints for them) moves with instruction widths.
-  // The two switch instructions carry that offset in different operands:
-  //   StringSwitchImm rX, <id>, <jtOffset>, <defaultLabel>, <count>
-  //   UIntSwitchImm   rX, <jtOffset>, <defaultLabel>, <min>, <max>
-  // Folding only the first shape let a shifted UIntSwitchImm offset read as a
-  // real difference and drop an otherwise good delta build.
-  m = /^(\s*StringSwitchImm r\d+, \d+, )\d+(, L\d+, \d+)$/.exec(line);
-  if (m) line = `${m[1]}<jt>${m[2]}`;
-  m = /^(\s*UIntSwitchImm r\d+, )\d+(, L\d+, \d+, \d+)$/.exec(line);
-  if (m) line = `${m[1]}<jt>${m[2]}`;
-  if (/^\s*offset \d+$/.test(line)) line = line.replace(/\d+$/, '<jt>');
+  if (
+    opEnd > indent &&
+    (opEnd === line.length || isSpace(line.charCodeAt(opEnd)))
+  ) {
+    const folded = foldWidthSuffix(opcode);
+    line = `${line.slice(0, indent)}${folded}${line.slice(opEnd).replace(/\s+/g, ' ')}`;
+    // Switch jump tables sit after the instructions; their relative offset (and
+    // the table header hermesc prints for them) moves with instruction widths.
+    // The two switch instructions carry that offset in different operands:
+    //   StringSwitchImm rX, <id>, <jtOffset>, <defaultLabel>, <count>
+    //   UIntSwitchImm   rX, <jtOffset>, <defaultLabel>, <min>, <max>
+    // Folding only the first shape let a shifted UIntSwitchImm offset read as a
+    // real difference and drop an otherwise good delta build.
+    if (folded === 'StringSwitchImm') {
+      m = /^(\s*StringSwitchImm r\d+, \d+, )\d+(, L\d+, \d+)$/.exec(line);
+      if (m) line = `${m[1]}<jt>${m[2]}`;
+    } else if (folded === 'UIntSwitchImm') {
+      m = /^(\s*UIntSwitchImm r\d+, )\d+(, L\d+, \d+, \d+)$/.exec(line);
+      if (m) line = `${m[1]}<jt>${m[2]}`;
+    } else if (folded === 'offset' && /^\s*offset \d+$/.test(line)) {
+      line = line.replace(/\d+$/, '<jt>');
+    }
+  }
   return line;
+}
+
+function isSpace(code: number): boolean {
+  return code === 0x20 || code === 0x09 || code === 0x0d;
+}
+
+function isLetter(code: number): boolean {
+  return (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a);
+}
+
+/** strip one operand-width suffix (LongIndex, Long, Short) off an opcode */
+function foldWidthSuffix(opcode: string): string {
+  for (const suffix of ['LongIndex', 'Long', 'Short']) {
+    if (opcode.length > suffix.length && opcode.endsWith(suffix)) {
+      return opcode.slice(0, -suffix.length);
+    }
+  }
+  return opcode;
 }
 
 /** Split a readable stream into lines without readline (Bun's readline async iterator misbehaves when pulled manually). */

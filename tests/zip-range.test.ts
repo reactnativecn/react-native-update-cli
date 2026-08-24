@@ -10,11 +10,15 @@ import {
   sha256Hex,
 } from '../src/utils/hermes-base';
 import {
+  bundleLocationFields,
   fetchZipEntryData,
+  HttpRangeReader,
   locateZipEntry,
   openRemoteZip,
   parseContentRange,
+  parseEndOfCentralDirectory,
   readRemoteZipEntry,
+  readZipEntryWithLocation,
   ZIP_DEFLATED,
   ZIP_STORED,
 } from '../src/utils/zip-range';
@@ -205,7 +209,7 @@ describe('zip-range', () => {
       expect(remote.reader.totalSize).toBe(total);
       // tail + local header chunk (+ data when not covered): far below the archive
       expect(server.log.length).toBeLessThanOrEqual(3);
-      expect(server.log[0]).toBe('bytes=-65536');
+      expect(server.log[0]).toBe('bytes=-65577');
       expect(remote.reader.fetchedBytes).toBeLessThan(total / 2);
 
       const missing = await openRemoteZip(server.url('deflate.ppk'));
@@ -372,5 +376,151 @@ describe('zip-range', () => {
         server.stop();
       }
     });
+  });
+});
+
+describe('zip-range request economy', () => {
+  let dir: string;
+  // larger than the 64 KB header chunk, so the data needs its own bytes
+  const bigBundle = fakeHbc(98, 'bundle '.repeat(40000));
+  beforeEach(async () => {
+    dir = mkTemp('rnu-zip-range-econ-');
+    await writeZip(path.join(dir, 'big.apk'), {
+      'assets/pad.bin': { data: Buffer.alloc(200 * 1024, 3), compress: false },
+      'assets/index.android.bundle': { data: bigBundle, compress: false },
+      'assets/tail.bin': { data: Buffer.alloc(100 * 1024, 4), compress: false },
+    });
+    // thousands of entries push the central directory far before the tail
+    const many: Record<string, { data: Buffer; compress?: boolean }> = {};
+    for (let i = 0; i < 4000; i++) {
+      many[`lib/arm64/file-${i}.txt`] = { data: Buffer.from('x') };
+    }
+    many['assets/index.android.bundle'] = { data: bigBundle };
+    many['assets/zzz.bin'] = {
+      data: Buffer.alloc(150 * 1024, 5),
+      compress: false,
+    };
+    await writeZip(path.join(dir, 'many.apk'), many);
+  });
+  afterEach(() => {
+    fs.removeSync(dir);
+  });
+
+  test('parseEndOfCentralDirectory finds the directory from the tail', () => {
+    const file = fs.readFileSync(path.join(dir, 'big.apk'));
+    const eocd = parseEndOfCentralDirectory(file.subarray(-1024));
+    expect(eocd).not.toBeNull();
+    // the central directory starts with its own signature
+    expect(file.readUInt32LE(eocd!.cdOffset)).toBe(0x02014b50);
+    expect(eocd!.cdOffset + eocd!.cdSize).toBe(file.length - 22);
+    expect(parseEndOfCentralDirectory(Buffer.alloc(10))).toBeNull();
+  });
+
+  test('an entry beyond the header chunk costs one request with the hint, two without', async () => {
+    const server = serveFiles(dir);
+    try {
+      const hinted = await openRemoteZip(server.url('big.apk'));
+      if (hinted.kind !== 'zip') throw new Error('unreachable');
+      const data = await readRemoteZipEntry(
+        hinted.zipFile,
+        bundleEntryMatcher('apk'),
+        hinted.reader,
+      );
+      expect(data?.equals(bigBundle)).toBe(true);
+      // tail + (local header .. data) in one go
+      expect(server.log.length).toBe(2);
+      expect(hinted.reader.requests).toBe(2);
+      expect(hinted.reader.fetchedBytes).toBeLessThan(
+        bigBundle.length + 80 * 1024,
+      );
+
+      server.log.length = 0;
+      const plain = await openRemoteZip(server.url('big.apk'));
+      if (plain.kind !== 'zip') throw new Error('unreachable');
+      const again = await readRemoteZipEntry(
+        plain.zipFile,
+        bundleEntryMatcher('apk'),
+      );
+      expect(again?.equals(bigBundle)).toBe(true);
+      // tail + 64 KB header chunk + the rest of the data (prefix reused)
+      expect(server.log.length).toBe(3);
+      const total = fs.statSync(path.join(dir, 'big.apk')).size;
+      expect(plain.reader.fetchedBytes).toBeLessThan(total);
+      // the third request starts after the cached 64 KB prefix, not at the data offset
+      const location = (await locateZipEntry(
+        path.join(dir, 'big.apk'),
+        bundleEntryMatcher('apk'),
+      ))!;
+      const third = /^bytes=(\d+)-/.exec(server.log[2])!;
+      expect(Number(third[1])).toBeGreaterThan(location.dataOffset);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test('a large central directory is prefetched in one request', async () => {
+    const file = fs.readFileSync(path.join(dir, 'many.apk'));
+    const eocd = parseEndOfCentralDirectory(file.subarray(-65577))!;
+    expect(file.length - eocd.cdOffset).toBeGreaterThan(65577);
+    const server = serveFiles(dir);
+    try {
+      const remote = await openRemoteZip(server.url('many.apk'));
+      if (remote.kind !== 'zip') throw new Error('unreachable');
+      expect(server.log[0]).toBe('bytes=-65577');
+      expect(server.log[1]).toBe(
+        `bytes=${eocd.cdOffset}-${file.length - 65577 - 1}`,
+      );
+      const data = await readRemoteZipEntry(
+        remote.zipFile,
+        bundleEntryMatcher('apk'),
+        remote.reader,
+      );
+      expect(data?.equals(bigBundle)).toBe(true);
+      // tail, directory, entry — never one request per 64 KB of directory
+      expect(server.log.length).toBe(3);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test('HttpRangeReader merges touching chunks', () => {
+    const reader = new HttpRangeReader('http://unused', 100);
+    reader.addChunk(10, Buffer.from('abc'));
+    reader.addChunk(13, Buffer.from('def'));
+    reader.addChunk(0, Buffer.from('0123456789'));
+    reader.addChunk(30, Buffer.from('zz'));
+    // 0..16 became one chunk; 30..32 stays apart
+    expect(
+      (reader as any).chunks.map((c: any) => [c.start, c.data.length]),
+    ).toEqual([
+      [0, 16],
+      [30, 2],
+    ]);
+    expect((reader as any).chunks[0].data.toString()).toBe('0123456789abcdef');
+    // overlapping data: the newest bytes win
+    reader.addChunk(12, Buffer.from('XY'));
+    expect((reader as any).chunks[0].data.toString()).toBe('0123456789abXYef');
+  });
+
+  test('readZipEntryWithLocation returns the entry and where it sits', async () => {
+    const apk = path.join(dir, 'big.apk');
+    const found = await readZipEntryWithLocation(
+      apk,
+      bundleEntryMatcher('apk'),
+    );
+    expect(found?.data.equals(bigBundle)).toBe(true);
+    expect(found?.location).toEqual(
+      (await locateZipEntry(apk, bundleEntryMatcher('apk')))!,
+    );
+    expect(await readZipEntryWithLocation(apk, () => false)).toBeNull();
+    expect(bundleLocationFields(found?.location)).toEqual({
+      bundleOffset: found!.location.dataOffset,
+      bundleCompressedSize: found!.location.compressedSize,
+      bundleCompression: ZIP_STORED,
+    });
+    expect(bundleLocationFields(null)).toEqual({});
+    expect(
+      bundleLocationFields({ ...found!.location, compressionMethod: 12 }),
+    ).toEqual({});
   });
 });
