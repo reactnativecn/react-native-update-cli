@@ -4,7 +4,7 @@ import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import type { Package, Platform, Version } from './types';
-import { isNonInteractive, question } from './utils';
+import { isNonInteractive, loadTtyTable, question } from './utils';
 import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { getHbcVersion } from './utils/hbcTransform';
@@ -234,7 +234,7 @@ function printDepsChangesForPackage({
   );
   console.log(summaryText);
   // tty-table is ~25 ms to load; only pay for it when a table is rendered
-  const Table = require('tty-table') as typeof import('tty-table');
+  const Table = loadTtyTable();
   console.log(Table(header, rows).render());
   console.log(chalk.yellow(t('depsChangeRiskWarning')));
   return true;

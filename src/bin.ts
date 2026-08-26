@@ -90,6 +90,9 @@ async function run() {
     } else if (commandHandlers[argv.command]) {
       const handler = commandHandlers[argv.command];
       await handler(argv);
+      // a check still in flight (cold cache) gets a short grace period; the
+      // registry request itself is unref'd, so exiting never waits on it
+      await versionCheck.settle(500);
       versionCheck.printHints();
     } else {
       throw new Error(t('unknownCommand', { command: argv.command }));

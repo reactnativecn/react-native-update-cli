@@ -20,6 +20,15 @@ function createAppInfoParser(fn: string): AppInfoParserType {
   return new AppInfoParser(fn);
 }
 
+/**
+ * tty-table (~25 ms to load) only when a table is rendered. Bun's require of
+ * a CJS module can hand back a namespace object, so unwrap `default`.
+ */
+export function loadTtyTable(): typeof import('tty-table') {
+  const mod = require('tty-table');
+  return (mod.default ?? mod) as typeof import('tty-table');
+}
+
 type ApkMetaEntry = {
   name?: string;
   value?: string | number | Array<string | number>;
@@ -549,6 +558,8 @@ function latestTag(version: string | undefined) {
 export interface VersionCheck {
   /** settles once the registry check has finished (or failed); never rejects */
   done: Promise<void>;
+  /** wait for the check, but never longer than `graceMs` */
+  settle: (graceMs: number) => Promise<void>;
   /**
    * Print the "newer version available" hints if the check has completed by
    * now; a no-op while it is still pending, when nothing is newer, and after
@@ -635,7 +646,15 @@ export async function printVersionCommand({
     }
   };
 
-  return { done: check, printHints };
+  const settle = (graceMs: number) => {
+    let timer: NodeJS.Timeout | undefined;
+    const grace = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, graceMs);
+    });
+    return Promise.race([check, grace]).then(() => clearTimeout(timer));
+  };
+
+  return { done: check, settle, printHints };
 }
 
 export { checkPlugins };
