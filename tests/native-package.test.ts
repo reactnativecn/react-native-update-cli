@@ -168,3 +168,92 @@ describe('native package baseline extraction', () => {
     expect(fs.existsSync(output)).toBe(false);
   });
 });
+
+describe('raw-copy slim packages', () => {
+  let tempRoot = '';
+  beforeEach(() => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-native-raw-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  type EntryFacts = Record<
+    string,
+    { method: number; crc: number; csize: number; usize: number }
+  >;
+  async function entryFacts(filePath: string): Promise<EntryFacts> {
+    const facts: EntryFacts = {};
+    await enumZipEntries(filePath, async (entry) => {
+      if (!entry.fileName.endsWith('/')) {
+        facts[entry.fileName] = {
+          method: entry.compressionMethod,
+          crc: entry.crc32,
+          csize: entry.compressedSize,
+          usize: entry.uncompressedSize,
+        };
+      }
+    });
+    return facts;
+  }
+
+  async function writeMixedZip(output: string) {
+    await new Promise<void>((resolve, reject) => {
+      const zip = new YazlZipFile();
+      zip.outputStream
+        .pipe(fs.createWriteStream(output))
+        .once('error', reject)
+        .once('close', () => resolve());
+      zip.addBuffer(
+        Buffer.from('bundle '.repeat(5000)),
+        'assets/index.android.bundle',
+      );
+      zip.addBuffer(Buffer.alloc(4096, 7), 'assets/stored.bin', {
+        compress: false,
+      });
+      zip.addBuffer(Buffer.from('图片'.repeat(100)), 'res/drawable/图标.webp');
+      zip.addBuffer(Buffer.from('dex'), 'classes.dex');
+      zip.end();
+    });
+  }
+
+  test('copies entries byte-for-byte: same method, crc and sizes as the source', async () => {
+    const source = path.join(tempRoot, 'source.apk');
+    const output = path.join(tempRoot, 'slim.apk');
+    await writeMixedZip(source);
+    await createSlimNativePackage(source, output, 'android');
+    const [before, after] = await Promise.all([
+      entryFacts(source),
+      entryFacts(output),
+    ]);
+    expect(Object.keys(after).sort()).toEqual([
+      'assets/index.android.bundle',
+      'assets/stored.bin',
+      'res/drawable/图标.webp',
+    ]);
+    for (const name of Object.keys(after)) {
+      expect(after[name]).toEqual(before[name]);
+    }
+    expect(after['assets/stored.bin'].method).toBe(0);
+    expect(after['assets/index.android.bundle'].method).toBe(8);
+    const files = await readZipFiles(output);
+    expect(files['assets/index.android.bundle'].toString()).toBe(
+      'bundle '.repeat(5000),
+    );
+    expect(files['res/drawable/图标.webp'].toString()).toBe('图片'.repeat(100));
+  });
+
+  test('the yazl repack path produces the same content', async () => {
+    const source = path.join(tempRoot, 'source.apk');
+    const output = path.join(tempRoot, 'slim.apk');
+    await writeMixedZip(source);
+    await createSlimNativePackage(source, output, 'android', { repack: true });
+    const files = await readZipFiles(output);
+    expect(Object.keys(files).sort()).toEqual([
+      'assets/index.android.bundle',
+      'assets/stored.bin',
+      'res/drawable/图标.webp',
+    ]);
+    expect(files['assets/stored.bin'].equals(Buffer.alloc(4096, 7))).toBe(true);
+  });
+});

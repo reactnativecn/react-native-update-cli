@@ -1,3 +1,4 @@
+import { compare, compareVersions, satisfies } from 'compare-versions';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { npm, yarn } from 'global-dirs';
 import type {
@@ -10,8 +11,6 @@ import { homedir } from 'os';
 import { dirname, join, parse, resolve as pathResolve } from 'path';
 import registryAuthToken from 'registry-auth-token';
 import getRegistryUrl from 'registry-auth-token/registry-url';
-import gt from 'semver/functions/gt';
-import maxSatisfying from 'semver/ranges/max-satisfying';
 import { URL } from 'url';
 
 interface RegistryVersions {
@@ -401,10 +400,34 @@ const getRegistryVersions = async (
   if (tagOrRange && pkgMetadata?.distTags[tagOrRange]) {
     versions.wanted = pkgMetadata.distTags[tagOrRange];
   } else if (tagOrRange && pkgMetadata?.versions.length) {
-    versions.wanted =
-      maxSatisfying(pkgMetadata.versions, tagOrRange) ?? undefined;
+    versions.wanted = maxSatisfying(pkgMetadata.versions, tagOrRange);
   }
   return versions;
+};
+
+/** the highest of `versions` within `range` (npm range syntax), if any */
+const maxSatisfying = (
+  versions: string[],
+  range: string,
+): string | undefined => {
+  const matching = versions.filter((version) => {
+    try {
+      return satisfies(version, range);
+    } catch {
+      return false;
+    }
+  });
+  if (!matching.length) return undefined;
+  return matching.sort(compareVersions)[matching.length - 1];
+};
+
+/** `a > b` for two versions; invalid input counts as "not newer" */
+const gt = (a: string, b: string): boolean => {
+  try {
+    return compare(a, b, '>');
+  } catch {
+    return false;
+  }
 };
 
 const getInstalledVersion = (
