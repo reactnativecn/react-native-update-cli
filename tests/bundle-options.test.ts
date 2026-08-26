@@ -45,6 +45,16 @@ describe('normalizeBundleOptions', () => {
     );
   });
 
+  test('resetCache defaults on and can be switched off', () => {
+    expect(normalizeBundleOptions({}, 'android').resetCache).toBe(true);
+    expect(
+      normalizeBundleOptions({ resetCache: 'false' }, 'android').resetCache,
+    ).toBe(false);
+    expect(
+      normalizeBundleOptions({ resetCache: false }, 'ios').resetCache,
+    ).toBe(false);
+  });
+
   test('normalizes dev flag to a string', () => {
     expect(normalizeBundleOptions({ dev: true }, 'android').dev).toBe('true');
     expect(normalizeBundleOptions({ dev: false }, 'android').dev).toBe('false');

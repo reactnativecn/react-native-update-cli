@@ -452,6 +452,122 @@ describe('resolveHermesBase over HTTP Range', () => {
       fs.removeSync(dir);
     }
   });
+
+  test('a bundleHash mismatch of the real entry is final: no full download, no retry', async () => {
+    const dir = mkTemp('rnu-hermes-mismatch-');
+    process.env.PUSHY_CACHE_DIR = path.join(dir, 'cache');
+    const ppk = path.join(dir, 'server.ppk');
+    await writeZip(ppk, {
+      'assets/a.bin': Buffer.alloc(200 * 1024, 1),
+      'index.bundlejs': fakeHbc(98, 'replaced'),
+    });
+    const file = fs.readFileSync(ppk);
+    const requests: string[] = [];
+    const server = Bun.serve({
+      port: 0,
+      fetch: async (req) => {
+        const range = req.headers.get('range') ?? 'full';
+        requests.push(range);
+        const match = /^bytes=(?:(\d+)-(\d+)|-(\d+))$/.exec(range);
+        if (!match) return new Response(file);
+        const [start, end] = match[3]
+          ? [Math.max(0, file.length - Number(match[3])), file.length - 1]
+          : [Number(match[1]), Number(match[2])];
+        return new Response(file.subarray(start, end + 1), {
+          status: 206,
+          headers: { 'Content-Range': `bytes ${start}-${end}/${file.length}` },
+        });
+      },
+    });
+    const messages: string[] = [];
+    try {
+      const selection = await resolveHermesBase({
+        option: 'auto',
+        hermesCommand:
+          '/x/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
+        bytecodeVersion: 98,
+        appId: '1',
+        log: (m) => messages.push(m),
+        fetchBase: async () => ({
+          versionId: 9,
+          hash: 'objkey',
+          bundleHash: 'f'.repeat(64),
+          bytecodeVersion: 98,
+          url: `http://127.0.0.1:${server.port}/server.ppk`,
+        }),
+      });
+      expect(selection).toBeNull();
+      expect(requests).not.toContain('full');
+      // one pass over the directory transport, then it stops
+      expect(requests.length).toBeLessThanOrEqual(3);
+      expect(messages.at(-1)).toContain('bundleHash mismatch');
+    } finally {
+      server.stop(true);
+      delete process.env.PUSHY_CACHE_DIR;
+      fs.removeSync(dir);
+    }
+  });
+
+  test('a cache hit for a record of unknown HBC version is checked by header', async () => {
+    const dir = mkTemp('rnu-hermes-cachehit-');
+    process.env.PUSHY_CACHE_DIR = path.join(dir, 'cache');
+    try {
+      const stale = fakeHbc(96, 'native');
+      const { bundleHash } = await cachePut(stale);
+      const messages: string[] = [];
+      const record = {
+        versionId: null,
+        hash: 'nativekey',
+        artifactType: 'apk' as const,
+        bundleHash,
+        bytecodeVersion: null,
+        url: 'http://127.0.0.1:9/unreachable.apk',
+      };
+      const params = {
+        option: 'auto',
+        hermesCommand:
+          '/x/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
+        appId: '1',
+        log: (m: string) => messages.push(m),
+        fetchBase: async () => record,
+      };
+      expect(await resolveHermesBase({ ...params, bytecodeVersion: 98 })).toBe(
+        null,
+      );
+      expect(messages.at(-1)).toContain('cached base is HBC 96, need 98');
+      // the right version is served from the cache as before
+      const hit = await resolveHermesBase({ ...params, bytecodeVersion: 96 });
+      expect(hit?.source).toBe('cache');
+    } finally {
+      delete process.env.PUSHY_CACHE_DIR;
+      fs.removeSync(dir);
+    }
+  });
+});
+
+describe('cache staging leftovers', () => {
+  test('old <hash>.<pid>.tmp files are evicted, fresh ones kept, clean removes all', async () => {
+    const dir = mkTemp('rnu-hermes-tmp-');
+    process.env.PUSHY_CACHE_DIR = dir;
+    try {
+      const hash = 'a'.repeat(64);
+      const old = path.join(dir, `${hash}.111.tmp`);
+      const fresh = path.join(dir, `${hash}.222.tmp`);
+      fs.writeFileSync(old, 'x');
+      fs.writeFileSync(fresh, 'y');
+      const past = new Date(Date.now() - 2 * 3600 * 1000);
+      fs.utimesSync(old, past, past);
+      await enforceCacheLimits();
+      expect(fs.existsSync(old)).toBe(false);
+      expect(fs.existsSync(fresh)).toBe(true);
+      expect((await cacheStats()).files).toBe(0);
+      expect(await cleanCache()).toBe(0);
+      expect(fs.existsSync(fresh)).toBe(false);
+    } finally {
+      delete process.env.PUSHY_CACHE_DIR;
+      fs.removeSync(dir);
+    }
+  });
 });
 
 describe('helpers', () => {

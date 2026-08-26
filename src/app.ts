@@ -1,5 +1,4 @@
 import fs from 'fs';
-import Table from 'tty-table';
 import { doDelete, get, post } from './api';
 import type { Platform } from './types';
 import { question } from './utils';
@@ -70,6 +69,8 @@ export async function listApp(platform: Platform | '' = '') {
     rows.push([app.id, app.name, app.platform]);
   }
 
+  // tty-table is ~25 ms to load; only pay for it when a table is rendered
+  const Table = require('tty-table') as typeof import('tty-table');
   console.log(Table(header, rows).render());
 
   console.log(`\n${t('totalApps', { count: list.length, platform })}`);

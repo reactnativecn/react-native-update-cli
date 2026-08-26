@@ -61,6 +61,8 @@ export interface BundleOptions {
   hermesBase?: string;
   /** run the disassembly equivalence check after a base compile (default true) */
   verifyHermesBase?: boolean;
+  /** pass --reset-cache to Metro (default true); false reuses its transform cache */
+  resetCache?: boolean;
   sentryRelease?: string;
   sentryDist?: string;
 }

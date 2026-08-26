@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 import {
   compileHermesByteCode,
+  hermesBaseErrorLogPath,
   startHermesBaseSelection,
 } from '../src/bundle-runner';
 import { getHbcVersion } from '../src/utils/hbcTransform';
@@ -56,10 +57,11 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     fs.removeSync(dir);
   });
 
+  // anything but the bundle and its hermes map is a leftover
   const leftovers = () =>
     fs
       .readdirSync(outputFolder)
-      .filter((n) => n.endsWith('.bak') || n === '.hermes-plain');
+      .filter((n) => n !== bundleName && n !== `${bundleName}.map`);
 
   test('verified base compile: plain compile runs alongside and is discarded', async () => {
     const result = await compileHermesByteCode({
@@ -122,9 +124,11 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     expect(fs.existsSync(path.join(outputFolder, `${bundleName}.map`))).toBe(
       true,
     );
-    expect(
-      fs.existsSync(path.join(outputFolder, 'hermes-base-error.log')),
-    ).toBe(true);
+    // the full compiler output lands next to the intermediate dir, never in
+    // it: everything inside is packed into the ppk
+    const errorLog = hermesBaseErrorLogPath(outputFolder);
+    expect(errorLog.startsWith(path.resolve(outputFolder))).toBe(false);
+    expect(fs.existsSync(errorLog)).toBe(true);
     expect(leftovers()).toEqual([]);
   });
 

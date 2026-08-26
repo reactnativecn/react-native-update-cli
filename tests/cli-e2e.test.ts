@@ -1,4 +1,11 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+} from 'bun:test';
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import {
@@ -156,6 +163,18 @@ function runCli({
 
 describe('CLI e2e', () => {
   let closeServer: (() => Promise<void>) | undefined;
+  // the CLI caches registry lookups for a day: give every run an empty cache
+  // so the registry requests asserted below are always made, without touching
+  // the developer's real cache
+  let cacheHome: string;
+
+  beforeAll(async () => {
+    cacheHome = await mkdtemp(path.join(tmpdir(), 'rn-update-cli-cache-'));
+  });
+
+  afterAll(async () => {
+    await rm(cacheHome, { force: true, recursive: true });
+  });
 
   afterEach(async () => {
     await closeServer?.();
@@ -200,6 +219,7 @@ describe('CLI e2e', () => {
         NO_INTERACTIVE: 'true',
         PUSHY_REGISTRY: `${origin}/api`,
         npm_config_registry: `${origin}/registry/`,
+        XDG_CACHE_HOME: cacheHome,
       },
     });
 
@@ -240,6 +260,7 @@ describe('CLI e2e', () => {
         NO_INTERACTIVE: 'true',
         PUSHY_REGISTRY: `${origin}/api`,
         npm_config_registry: `${origin}/registry/`,
+        XDG_CACHE_HOME: cacheHome,
       },
     });
 
@@ -302,6 +323,7 @@ describe('CLI e2e', () => {
           NO_INTERACTIVE: 'true',
           PUSHY_REGISTRY: `${origin}/api`,
           npm_config_registry: `${origin}/registry/`,
+          XDG_CACHE_HOME: cacheHome,
         },
       });
 
@@ -380,6 +402,7 @@ describe('CLI e2e', () => {
           NO_INTERACTIVE: 'true',
           PUSHY_REGISTRY: `${origin}/api`,
           npm_config_registry: `${origin}/registry/`,
+          XDG_CACHE_HOME: cacheHome,
         },
       });
 

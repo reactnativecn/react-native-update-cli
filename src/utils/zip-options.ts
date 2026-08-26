@@ -8,6 +8,11 @@ export type ZipEntryOptions = {
 
 export const ZIP_ENTRY_SNIFF_BYTES = 64;
 export const MANIFEST_COMPRESSION_THRESHOLD_BYTES = 256;
+// Deflate level for the bundle/asset payload. Level 9 measured ~4x the CPU
+// of level 6 on Hermes bytecode for ~0.6% smaller output, so 6 is the sweet
+// spot; the manifest is tiny, so it can afford 9.
+export const PAYLOAD_COMPRESSION_LEVEL = 6;
+export const MANIFEST_COMPRESSION_LEVEL = 9;
 
 const alreadyCompressedExtensions = new Set([
   '.7z',
@@ -139,7 +144,7 @@ export function zipOptionsForPatchEntry(): ZipEntryOptions {
 
 export function zipOptionsForManifestEntry(byteLength = 0): ZipEntryOptions {
   if (byteLength >= MANIFEST_COMPRESSION_THRESHOLD_BYTES) {
-    return { compressionLevel: 9 };
+    return { compressionLevel: MANIFEST_COMPRESSION_LEVEL };
   }
   return { compress: false };
 }
@@ -151,7 +156,7 @@ export function zipOptionsForPayloadEntry(
   if (prefix && prefix.length > 0) {
     if (hasHermesBytecodeMagic(prefix)) {
       // Hermes bytecode is binary, but still benefits significantly from zip deflate.
-      return { compress: true, compressionLevel: 9 };
+      return { compress: true, compressionLevel: PAYLOAD_COMPRESSION_LEVEL };
     }
     if (hasAlreadyCompressedMagic(prefix)) {
       return { compress: false };
@@ -162,7 +167,7 @@ export function zipOptionsForPayloadEntry(
   if (alreadyCompressedExtensions.has(extension)) {
     return { compress: false };
   }
-  return { compress: true, compressionLevel: 9 };
+  return { compress: true, compressionLevel: PAYLOAD_COMPRESSION_LEVEL };
 }
 
 export function zipOptionsForPayloadFile(

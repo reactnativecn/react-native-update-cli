@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import {
   compileLayoutToWire,
@@ -8,8 +9,11 @@ import {
   HBC_LAYOUTS,
   HBC_TRANSFORM_VERSION,
   transformHbc,
+  transformHbcFile,
   transformHbcWithLayout,
+  transformHbcWithLayoutInPlace,
   tryTransformPair,
+  tryTransformPairFiles,
 } from '../src/utils/hbcTransform';
 
 const fixture = (name: string) =>
@@ -232,5 +236,134 @@ describe('hbcTransform', () => {
     const restored = transformHbcWithLayout(patched, layout, true);
     expect(restored).not.toBeNull();
     expect(Buffer.compare(restored!, b)).toBe(0);
+  });
+
+  test('in-place transform matches the copying one byte-for-byte', () => {
+    const layout96 = findLayouts(96)[0]!;
+    const cases: [Buffer, ReturnType<typeof findLayouts>[number]][] = [
+      [fixture('v96-a.hbc'), layout96],
+      [fixture('v96-b.hbc'), layout96],
+      [buildSyntheticV98('late'), findLayouts(98)[0]!],
+      [buildSyntheticV98('early'), findLayouts(98)[1]!],
+    ];
+    for (const [buf, layout] of cases) {
+      const expected = transformHbcWithLayout(buf, layout, false)!;
+      const inPlace = Buffer.from(buf);
+      expect(transformHbcWithLayoutInPlace(inPlace, layout, false)).toBe(true);
+      expect(Buffer.compare(inPlace, expected)).toBe(0);
+      // and back again, in place, restores the original
+      expect(transformHbcWithLayoutInPlace(inPlace, layout, true)).toBe(true);
+      expect(Buffer.compare(inPlace, buf)).toBe(0);
+    }
+
+    // structural mismatch: returns false and leaves the buffer untouched
+    const wrongLayout = Buffer.from(fixture('v96-a.hbc'));
+    expect(
+      transformHbcWithLayoutInPlace(wrongLayout, findLayouts(98)[0]!, false),
+    ).toBe(false);
+    expect(Buffer.compare(wrongLayout, fixture('v96-a.hbc'))).toBe(0);
+  });
+
+  test('transformHbcFile output equals transformHbcWithLayout on fixtures', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-hbc-file-'));
+    try {
+      const layout96 = findLayouts(96)[0]!;
+      const inputs: [string, Buffer, ReturnType<typeof findLayouts>[number]][] =
+        [
+          ['v96-a', fixture('v96-a.hbc'), layout96],
+          ['v96-b', fixture('v96-b.hbc'), layout96],
+          ['v98-late', buildSyntheticV98('late'), findLayouts(98)[0]!],
+          ['v98-early', buildSyntheticV98('early'), findLayouts(98)[1]!],
+        ];
+      for (const [name, buf, layout] of inputs) {
+        const src = path.join(tempRoot, `${name}.hbc`);
+        const forward = path.join(tempRoot, `${name}.t`);
+        const back = path.join(tempRoot, `${name}.inv`);
+        fs.writeFileSync(src, buf);
+
+        expect(await transformHbcFile(src, forward, layout, false)).toBe(true);
+        const expectedForward = transformHbcWithLayout(buf, layout, false)!;
+        expect(Buffer.compare(fs.readFileSync(forward), expectedForward)).toBe(
+          0,
+        );
+        // source file is left untouched
+        expect(Buffer.compare(fs.readFileSync(src), buf)).toBe(0);
+
+        expect(await transformHbcFile(forward, back, layout, true)).toBe(true);
+        expect(Buffer.compare(fs.readFileSync(back), buf)).toBe(0);
+        const expectedBack = transformHbcWithLayout(
+          expectedForward,
+          layout,
+          true,
+        )!;
+        expect(Buffer.compare(fs.readFileSync(back), expectedBack)).toBe(0);
+      }
+
+      // non-HBC / structurally mismatched input: false, and no dst created
+      const plain = path.join(tempRoot, 'plain.js');
+      fs.writeFileSync(plain, 'var a = 1;');
+      const plainOut = path.join(tempRoot, 'plain.t');
+      expect(await transformHbcFile(plain, plainOut, layout96, false)).toBe(
+        false,
+      );
+      expect(fs.existsSync(plainOut)).toBe(false);
+      const wrongLayoutOut = path.join(tempRoot, 'wrong.t');
+      expect(
+        await transformHbcFile(
+          path.join(tempRoot, 'v96-a.hbc'),
+          wrongLayoutOut,
+          findLayouts(98)[0]!,
+          false,
+        ),
+      ).toBe(false);
+      expect(fs.existsSync(wrongLayoutOut)).toBe(false);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('tryTransformPairFiles matches tryTransformPair', async () => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-hbc-pair-'));
+    try {
+      const a = fixture('v96-a.hbc');
+      const b = fixture('v96-b.hbc');
+      const oldPath = path.join(tempRoot, 'old.hbc');
+      const newPath = path.join(tempRoot, 'new.hbc');
+      const tOldPath = path.join(tempRoot, 'old.t');
+      const tNewPath = path.join(tempRoot, 'new.t');
+      fs.writeFileSync(oldPath, a);
+      fs.writeFileSync(newPath, b);
+
+      const expected = tryTransformPair(a, b)!;
+      const result = await tryTransformPairFiles(
+        oldPath,
+        newPath,
+        tOldPath,
+        tNewPath,
+      );
+      expect(result).not.toBeNull();
+      expect(result!.layout).toBe(expected.layout);
+      expect(result!.meta).toEqual(expected.meta);
+      expect(Buffer.compare(fs.readFileSync(tOldPath), expected.tOld)).toBe(0);
+      expect(Buffer.compare(fs.readFileSync(tNewPath), expected.tNew)).toBe(0);
+
+      // version mismatch and non-HBC inputs: null, nothing written
+      const v98Path = path.join(tempRoot, 'v98.hbc');
+      fs.writeFileSync(v98Path, buildSyntheticV98());
+      const plainPath = path.join(tempRoot, 'plain.js');
+      fs.writeFileSync(plainPath, 'plain js');
+      const outA = path.join(tempRoot, 'mismatch-old.t');
+      const outB = path.join(tempRoot, 'mismatch-new.t');
+      expect(
+        await tryTransformPairFiles(oldPath, v98Path, outA, outB),
+      ).toBeNull();
+      expect(
+        await tryTransformPairFiles(plainPath, newPath, outA, outB),
+      ).toBeNull();
+      expect(fs.existsSync(outA)).toBe(false);
+      expect(fs.existsSync(outB)).toBe(false);
+    } finally {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });

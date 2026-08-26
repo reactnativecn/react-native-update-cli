@@ -122,20 +122,31 @@ export const testUrls = async (
   });
 };
 
-export const getBaseUrl = (async () => {
+let baseUrlPromise: Promise<string> | undefined;
+
+async function resolveBaseUrl(): Promise<string> {
   const testEndpoint = process.env.PUSHY_REGISTRY || process.env.RNU_API;
   if (testEndpoint) {
     return testEndpoint;
   }
-  return testUrls(defaultEndpoints.map((url) => `${url}/status`)).then(
-    (ret) => {
-      let baseUrl = defaultEndpoints[0];
-      if (ret) {
-        // remove /status
-        baseUrl = ret.replace('/status', '');
-      }
-      // console.log('baseUrl', baseUrl);
-      return baseUrl;
-    },
-  );
-})();
+  const ret = await testUrls(defaultEndpoints.map((url) => `${url}/status`));
+  let baseUrl = defaultEndpoints[0];
+  if (ret) {
+    // remove /status
+    baseUrl = ret.replace('/status', '');
+  }
+  // console.log('baseUrl', baseUrl);
+  return baseUrl;
+}
+
+/**
+ * The API base url: the env override, or the first default endpoint that
+ * answers a HEAD ping. Resolved lazily on the first API call (offline commands
+ * such as `hdiff`/`help` never ping) and memoized for the process lifetime.
+ */
+export const getBaseUrl = (): Promise<string> => {
+  if (!baseUrlPromise) {
+    baseUrlPromise = resolveBaseUrl();
+  }
+  return baseUrlPromise;
+};

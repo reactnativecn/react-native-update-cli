@@ -1,12 +1,11 @@
 import chalk from 'chalk';
 import { compare, satisfies } from 'compare-versions';
-import Table from 'tty-table';
 import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
 import type { Package, Platform, Version } from './types';
 import { isNonInteractive, question } from './utils';
-import { depVersions } from './utils/dep-versions';
+import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { getHbcVersion } from './utils/hbcTransform';
 import {
@@ -234,6 +233,8 @@ function printDepsChangesForPackage({
     ),
   );
   console.log(summaryText);
+  // tty-table is ~25 ms to load; only pay for it when a table is rendered
+  const Table = require('tty-table') as typeof import('tty-table');
   console.log(Table(header, rows).render());
   console.log(chalk.yellow(t('depsChangeRiskWarning')));
   return true;
@@ -532,8 +533,16 @@ export const versionCommands = {
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
 
-    const { hash } = await uploadFile(fn, undefined, appId);
-    const bundleMeta = await describePpkBundle(fn, options.hermesBase);
+    // Hashing/caching the bundle and asking git for the commit are independent
+    // of the upload, so they overlap with it instead of running afterwards.
+    // describePpkBundle never rejects (best effort); a failed upload still
+    // fails the publish exactly as before.
+    const [{ hash }, bundleMeta, commit] = await Promise.all([
+      uploadFile(fn, undefined, appId),
+      describePpkBundle(fn, options.hermesBase),
+      getCommitInfo(),
+    ]);
+    const depVersions = getDepVersions();
 
     const versionName =
       name ||
@@ -549,7 +558,7 @@ export const versionCommands = {
         metaInfo ??
         (nonInteractive ? '' : await question(t('versionMetaInfoQuestion'))),
       deps: depVersions,
-      commit: await getCommitInfo(),
+      commit,
       // Hermes delta-mode chain metadata (old servers drop unknown fields)
       ...bundleMeta,
     });
@@ -729,7 +738,8 @@ export const versionCommands = {
         if (nonInteractive) {
           throw new Error(t('packageIdRequired'));
         }
-        pkgId = String((await choosePackage(String(appId))).id);
+        // the package list was already fetched above: no second round trip
+        pkgId = String((await choosePackage(String(appId), allPkgs)).id);
       }
 
       if (!pkgId) {

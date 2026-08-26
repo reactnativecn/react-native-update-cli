@@ -1,17 +1,24 @@
 import chalk from 'chalk';
-import { satisfies } from 'compare-versions';
+import { compare, satisfies } from 'compare-versions';
 import { createHash } from 'crypto';
 import path from 'path';
 import type { Root as ProtobufRoot } from 'protobufjs';
 import { read } from 'read';
 import { open as openZipFile, type Entry as YauzlEntry } from 'yauzl';
 import pkg from '../../package.json';
-import latestVersion from '../utils/latest-version';
-import AppInfoParser from './app-info-parser';
+import type AppInfoParserType from './app-info-parser';
 import { checkPlugins } from './check-plugin';
 import { IS_CRESC } from './constants';
-import { depVersions } from './dep-versions';
+import { getDepVersions } from './dep-versions';
 import { t } from './i18n';
+
+// app-info-parser (and its zip/plist/protobuf stack) is only needed by the
+// package commands; load it on first use instead of on every CLI start.
+function createAppInfoParser(fn: string): AppInfoParserType {
+  const { default: AppInfoParser } =
+    require('./app-info-parser') as typeof import('./app-info-parser');
+  return new AppInfoParser(fn);
+}
 
 type ApkMetaEntry = {
   name?: string;
@@ -160,7 +167,7 @@ export const ApkBundleFileName = /^assets\/index\.android\.bundle$/;
 const ApkUpdateJsonName = /^res\/raw\/update\.json$/;
 
 export async function getApkInfo(fn: string) {
-  const appInfoParser = new AppInfoParser(fn);
+  const appInfoParser = createAppInfoParser(fn);
   // read both entries in a single scan over the archive
   const entries = await appInfoParser.parser.getEntries([
     ApkBundleFileName,
@@ -208,7 +215,7 @@ export async function getApkInfo(fn: string) {
 }
 
 export async function getAppInfo(fn: string) {
-  const appInfoParser = new AppInfoParser(fn);
+  const appInfoParser = createAppInfoParser(fn);
   // single scan (and single nested .hap extraction) for all three entries
   const [bundleFile, updateJsonFile, metaJsonFile] =
     await appInfoParser.parser.getEntriesFromHarmonyApp([
@@ -259,7 +266,7 @@ const IpaBuildTimeFrameworkName =
   /^payload\/[^/]+\.app\/frameworks\/react_native_update\.framework\/pushy_build_time\.txt$/;
 
 export async function getIpaInfo(fn: string) {
-  const appInfoParser = new AppInfoParser(fn);
+  const appInfoParser = createAppInfoParser(fn);
   // read all four entries in a single scan over the archive
   const entries = await appInfoParser.parser.getEntries([
     IpaBundleFileName,
@@ -490,34 +497,99 @@ async function resolveResource(
   return null;
 }
 
-async function getLatestVersion(pkgNames: string[]) {
-  return latestVersion(pkgNames, {
-    // useCache: true,
+const VERSION_CHECK_PACKAGES = [
+  'react-native-update-cli',
+  'react-native-update',
+];
+
+/**
+ * Latest registry versions of the CLI and the client library, in that order
+ * (`undefined` where unknown). Never rejects.
+ *
+ * `background: true` answers from a 1-day cache when possible and otherwise
+ * refreshes it with an unref'd request, so the process is free to exit before
+ * the registry answers; `background: false` always asks the registry and
+ * waits (refreshing the cache on the way).
+ */
+async function getLatestVersions(
+  background: boolean,
+): Promise<Array<string | undefined>> {
+  // the registry client pulls in global-dirs/registry-auth-token/semver: only
+  // pay for them when actually checking
+  const { default: latestVersion } =
+    require('./latest-version') as typeof import('./latest-version');
+  return latestVersion(VERSION_CHECK_PACKAGES, {
+    useCache: true,
+    ...(background ? { unref: true } : { cacheMaxAge: 0 }),
     requestOptions: {
       timeout: 2000,
     },
   })
     .then((pkgs) => pkgs.map((pkg) => pkg.latest))
-    .catch(() => []);
+    .catch(() => VERSION_CHECK_PACKAGES.map(() => undefined));
 }
 
-export async function printVersionCommand() {
-  let [latestRnuCliVersion, latestRnuVersion] = await getLatestVersion([
-    'react-native-update-cli',
-    'react-native-update',
-  ]);
-  latestRnuCliVersion = latestRnuCliVersion
-    ? ` ${t('latestVersionTag', {
-        version: chalk.green(latestRnuCliVersion),
-      })}`
+function isNewer(latest: string | undefined, current: string | undefined) {
+  if (!latest || !current) {
+    return false;
+  }
+  try {
+    return compare(latest, current, '>');
+  } catch {
+    return false;
+  }
+}
+
+function latestTag(version: string | undefined) {
+  return version
+    ? ` ${t('latestVersionTag', { version: chalk.green(version) })}`
     : '';
-  console.log(`react-native-update-cli: ${pkg.version}${latestRnuCliVersion}`);
-  const rnuVersion = depVersions['react-native-update'];
+}
+
+export interface VersionCheck {
+  /** settles once the registry check has finished (or failed); never rejects */
+  done: Promise<void>;
+  /**
+   * Print the "newer version available" hints if the check has completed by
+   * now; a no-op while it is still pending, when nothing is newer, and after
+   * the first call. Safe to call from a process 'exit' handler.
+   */
+  printHints: () => void;
+}
+
+/**
+ * Print the installed CLI / react-native-update versions (and refuse or warn
+ * about unsupported client versions) immediately, without touching the
+ * network.
+ *
+ * With `wait: true` (the `-v`/`version` command) the registry is queried
+ * first and the latest versions are printed inline. Otherwise the registry
+ * check runs in the background and the returned `printHints` shows what is
+ * newer once the command is done — the command itself is never delayed by it.
+ */
+export async function printVersionCommand({
+  wait = true,
+}: {
+  wait?: boolean;
+} = {}): Promise<VersionCheck> {
+  const rnuVersion = getDepVersions()['react-native-update'];
+
+  let latest: Array<string | undefined> | undefined;
+  const check = getLatestVersions(!wait).then((versions) => {
+    latest = versions;
+  });
+  if (wait) {
+    await check;
+  }
+  const [latestCliVersion, latestRnuVersion] = latest ?? [];
+
+  console.log(
+    `react-native-update-cli: ${pkg.version}${latestTag(latestCliVersion)}`,
+  );
   if (rnuVersion) {
-    latestRnuVersion = latestRnuVersion
-      ? ` ${t('latestVersionTag', { version: chalk.green(latestRnuVersion) })}`
-      : '';
-    console.log(`react-native-update: ${rnuVersion}${latestRnuVersion}`);
+    console.log(
+      `react-native-update: ${rnuVersion}${latestTag(latestRnuVersion)}`,
+    );
     if (IS_CRESC) {
       if (satisfies(rnuVersion, '<10.27.0')) {
         console.error(
@@ -545,6 +617,25 @@ export async function printVersionCommand() {
   } else {
     console.log(t('rnuVersionNotFound'));
   }
+
+  let hinted = wait; // inline tags already shown
+  const printHints = () => {
+    if (hinted || !latest) {
+      return;
+    }
+    hinted = true;
+    const [cliLatest, rnuLatest] = latest;
+    if (isNewer(cliLatest, pkg.version)) {
+      console.log(
+        `react-native-update-cli: ${pkg.version}${latestTag(cliLatest)}`,
+      );
+    }
+    if (rnuVersion && isNewer(rnuLatest, rnuVersion)) {
+      console.log(`react-native-update: ${rnuVersion}${latestTag(rnuLatest)}`);
+    }
+  };
+
+  return { done: check, printHints };
 }
 
 export { checkPlugins };

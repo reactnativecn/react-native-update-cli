@@ -276,6 +276,11 @@
           "hasValue": true,
           "description": "Local bundle cache limit in MB (default 500)"
         },
+        "resetCache": {
+          "default": "true",
+          "hasValue": true,
+          "description": "Pass --reset-cache to Metro (default true). false reuses Metro's transform cache, much faster for repeated bundles"
+        },
         "name": {
           "hasValue": true,
           "description": "Version name for publishing"

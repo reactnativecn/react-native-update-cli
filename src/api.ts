@@ -1,9 +1,8 @@
 import filesizeParser from 'filesize-parser';
-import FormData from 'form-data';
 import fs from 'fs';
 import fetch from 'node-fetch';
 import path from 'path';
-import ProgressBar from 'progress';
+import type ProgressBar from 'progress';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
 import { credentialFile, IS_CRESC, pricingPageUrl } from './utils/constants';
@@ -128,7 +127,7 @@ function isProxyRelatedError(error: unknown): boolean {
 }
 
 async function query(url: string, options: RuntimeRequestInit) {
-  const baseUrl = await getBaseUrl;
+  const baseUrl = await getBaseUrl();
   const fullUrl = `${baseUrl}${url}`;
   let resp: RuntimeResponse;
   try {
@@ -209,6 +208,99 @@ export const post = queryWithBody('POST');
 export const put = queryWithBody('PUT');
 export const doDelete = queryWithBody('DELETE');
 
+// Upload deadline: generous for a slow link (1 s/MB on top of a 30 s base,
+// never below 60 s) but bounded, so a stalled connection cannot hang a CI job
+// forever. The bar keeps ticking while bytes flow; the deadline is absolute.
+const UPLOAD_TIMEOUT_BASE_MS = 30_000;
+const UPLOAD_TIMEOUT_PER_MB_MS = 1_000;
+const UPLOAD_TIMEOUT_MIN_MS = 60_000;
+const UPLOAD_MAX_RETRIES = 1;
+
+export function uploadTimeoutMs(fileSize: number): number {
+  const megabytes = Math.ceil(Math.max(0, fileSize) / 1048576);
+  return Math.max(
+    UPLOAD_TIMEOUT_MIN_MS,
+    UPLOAD_TIMEOUT_BASE_MS + megabytes * UPLOAD_TIMEOUT_PER_MB_MS,
+  );
+}
+
+const TRANSIENT_UPLOAD_ERROR_CODES = ['ECONNRESET', 'ETIMEDOUT', 'EPIPE'];
+
+/**
+ * A network-level failure worth one more attempt: a reset/timed-out/broken
+ * pipe connection, or our own deadline abort. HTTP responses (4xx/5xx) never
+ * get here — they are surfaced as-is.
+ */
+export function isTransientUploadError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const { name, code, type, message } = error as {
+    name?: string;
+    code?: string;
+    type?: string;
+    message?: string;
+  };
+  if (name === 'AbortError' || type === 'aborted' || code === 'ABORT_ERR') {
+    return true;
+  }
+  const text = `${code ?? ''} ${message ?? ''}`;
+  return TRANSIENT_UPLOAD_ERROR_CODES.some((c) => text.includes(c));
+}
+
+class UploadTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Upload timed out after ${Math.round(timeoutMs / 1000)}s`);
+    this.name = 'UploadTimeoutError';
+  }
+}
+
+/**
+ * Send the file with a size-scaled deadline and one retry on a transient
+ * network error. `buildRequest` is invoked per attempt with a fresh file
+ * stream (a consumed stream/form cannot be replayed).
+ */
+async function sendUpload(
+  fn: string,
+  realUrl: string,
+  fileSize: number,
+  bar: ProgressBar,
+  buildRequest: (fileStream: fs.ReadStream) => fetch.RequestInit,
+): Promise<fetch.Response> {
+  const timeoutMs = uploadTimeoutMs(fileSize);
+  for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    const fileStream = fs.createReadStream(fn);
+    fileStream.on('data', (data) => {
+      bar.tick(data.length);
+    });
+    try {
+      return await fetch(realUrl, {
+        ...buildRequest(fileStream),
+        signal: controller.signal,
+      });
+    } catch (rawError) {
+      fileStream.destroy();
+      const error = timedOut ? new UploadTimeoutError(timeoutMs) : rawError;
+      if (attempt < UPLOAD_MAX_RETRIES && isTransientUploadError(error)) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`\nUpload interrupted (${reason}), retrying...`);
+        // restart the bar from zero for the second pass
+        bar.curr = 0;
+        continue;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export async function uploadFile(
   fn: string,
   key?: string,
@@ -249,21 +341,29 @@ export async function uploadFile(
     );
   }
 
-  const bar = new ProgressBar('  Uploading [:bar] :percent :etas', {
+  // progress/form-data are only needed here; keep them off the startup path
+  const ProgressBarImpl = require('progress') as typeof import('progress');
+  const bar = new ProgressBarImpl('  Uploading [:bar] :percent :etas', {
     complete: '=',
     incomplete: ' ',
     total: fileSize,
   });
 
+  const rethrowUploadError = (error: unknown): never => {
+    if (isProxyRelatedError(error)) {
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+      );
+    }
+    throw createRequestError(error, realUrl);
+  };
+
   // 自托管节点的 s3 直传:服务端下发预签名 PUT,字节直达用户的对象存储
   if (resp.method === 'PUT') {
-    const fileStream = fs.createReadStream(fn);
-    fileStream.on('data', (data) => {
-      bar.tick(data.length);
-    });
     let putRes: fetch.Response;
     try {
-      putRes = await fetch(realUrl, {
+      putRes = await sendUpload(fn, realUrl, fileSize, bar, (fileStream) => ({
         method: 'PUT',
         body: fileStream,
         // 预签名 PUT 不接受 chunked 传输,必须显式声明长度
@@ -271,16 +371,9 @@ export async function uploadFile(
           'content-length': String(fileSize),
           ...(resp.headers || {}),
         },
-      });
+      }));
     } catch (error) {
-      if (isProxyRelatedError(error)) {
-        const rawMessage =
-          error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
-        );
-      }
-      throw createRequestError(error, realUrl);
+      return rethrowUploadError(error);
     }
     if (putRes.status > 299) {
       throw createRequestError(
@@ -291,38 +384,25 @@ export async function uploadFile(
     return { hash: resp.key };
   }
 
-  const form = new FormData();
-
-  for (const [k, v] of Object.entries(formData)) {
-    form.append(k, v);
-  }
-  const fileStream = fs.createReadStream(fn);
-  fileStream.on('data', (data) => {
-    bar.tick(data.length);
-  });
-
-  if (key) {
-    form.append('key', key);
-  }
-  form.append('file', fileStream);
-  // form.append('file', fileStream, {
-  //   contentType: 'application/octet-stream',
-  // });
-
+  const FormData = require('form-data') as typeof import('form-data');
   let res: fetch.Response;
   try {
-    res = await fetch(realUrl, {
-      method: 'POST',
-      body: form,
+    res = await sendUpload(fn, realUrl, fileSize, bar, (fileStream) => {
+      const form = new FormData();
+      for (const [k, v] of Object.entries(formData)) {
+        form.append(k, v);
+      }
+      if (key) {
+        form.append('key', key);
+      }
+      form.append('file', fileStream);
+      // form.append('file', fileStream, {
+      //   contentType: 'application/octet-stream',
+      // });
+      return { method: 'POST', body: form };
     });
   } catch (error) {
-    if (isProxyRelatedError(error)) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
-      );
-    }
-    throw createRequestError(error, realUrl);
+    return rethrowUploadError(error);
   }
 
   if (res.status > 299) {

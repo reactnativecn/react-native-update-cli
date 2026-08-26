@@ -27,11 +27,11 @@ describe('zipOptionsForPayloadFile', () => {
     expect(result).toEqual({ compress: false });
   });
 
-  test('returns compress=true with compressionLevel:9 for a JS file', () => {
+  test('returns compress=true with compressionLevel:6 for a JS file', () => {
     const jsFile = path.join(tmpDir, 'bundle.js');
     fs.writeFileSync(jsFile, 'console.log("hello world");\n');
     const result = zipOptionsForPayloadFile(jsFile);
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('returns compress=true for Hermes bytecode magic bytes', () => {
@@ -43,7 +43,7 @@ describe('zipOptionsForPayloadFile', () => {
     ]);
     fs.writeFileSync(hermesFile, hermesMagic);
     const result = zipOptionsForPayloadFile(hermesFile);
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('returns compress=false for a JPEG file (magic bytes)', () => {
@@ -62,7 +62,7 @@ describe('zipOptionsForPayloadFile', () => {
     const txtFile = path.join(tmpDir, 'readme.txt');
     fs.writeFileSync(txtFile, 'This is a plain text file with some content.\n');
     const result = zipOptionsForPayloadFile(txtFile);
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('handles empty file (no magic bytes, unknown extension)', () => {
@@ -70,8 +70,8 @@ describe('zipOptionsForPayloadFile', () => {
     fs.writeFileSync(emptyFile, Buffer.alloc(0));
     const result = zipOptionsForPayloadFile(emptyFile);
     // Empty file: no magic bytes detected, .dat is not in the compressed set,
-    // so it falls through to compress=true with level 9
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    // so it falls through to compress=true with level 6
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('respects custom entryName for extension-based detection', () => {

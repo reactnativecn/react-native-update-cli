@@ -207,9 +207,9 @@ describe('zipOptionsForManifestEntry', () => {
 });
 
 describe('zipOptionsForPayloadEntry', () => {
-  test('compresses regular files with level 9', () => {
+  test('compresses regular files with level 6', () => {
     const result = zipOptionsForPayloadEntry('bundle.js');
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('skips compression for PNG files', () => {
@@ -244,7 +244,7 @@ describe('zipOptionsForPayloadEntry', () => {
     for (const name of textFiles) {
       expect(zipOptionsForPayloadEntry(name)).toEqual({
         compress: true,
-        compressionLevel: 9,
+        compressionLevel: 6,
       });
     }
   });
@@ -255,7 +255,7 @@ describe('zipOptionsForPayloadEntry', () => {
       0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f, 0x00, 0x00,
     ]);
     const result = zipOptionsForPayloadEntry('index.bundlejs', hermesMagic);
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('skips compression for PNG magic bytes', () => {
@@ -369,14 +369,14 @@ describe('zipOptionsForPayloadEntry', () => {
       'index.bundlejs',
       hermesDeltaMagic,
     );
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('falls back to extension check when prefix is empty', () => {
     const emptyPrefix = Buffer.alloc(0);
     expect(zipOptionsForPayloadEntry('bundle.js', emptyPrefix)).toEqual({
       compress: true,
-      compressionLevel: 9,
+      compressionLevel: 6,
     });
     expect(zipOptionsForPayloadEntry('image.png', emptyPrefix)).toEqual({
       compress: false,
@@ -388,7 +388,7 @@ describe('zipOptionsForPayloadEntry', () => {
       0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     ]);
     const result = zipOptionsForPayloadEntry('unknown_file', randomBytes);
-    expect(result).toEqual({ compress: true, compressionLevel: 9 });
+    expect(result).toEqual({ compress: true, compressionLevel: 6 });
   });
 
   test('skips compression for MPEG audio frame sync', () => {

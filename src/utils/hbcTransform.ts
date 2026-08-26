@@ -15,6 +15,8 @@
  * (只要两侧使用同一份描述表)。
  */
 
+import { copyFile, open as openFile, rm, stat } from 'node:fs/promises';
+
 const HBC_MAGIC = Buffer.from([0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f]);
 const HEADER_COUNTS_OFFSET = 32; // magic(8) + version(4) + sourceHash(20)
 const HBC_HEADER_SIZE = 128;
@@ -309,20 +311,38 @@ function resolveSections(
   buf: Buffer,
   layout: HbcLayout,
 ): ResolvedSection[] | null {
+  return resolveSectionsFromHeader(buf, buf.length, layout);
+}
+
+/**
+ * 只依赖头部 128 字节与文件总长即可解析段边界(表偏移全部来自头部计数),
+ * 文件版变换据此无需把整个 bundle 读进内存。
+ */
+function resolveSectionsFromHeader(
+  header: Buffer,
+  fileLength: number,
+  layout: HbcLayout,
+): ResolvedSection[] | null {
   const headerEnd = HEADER_COUNTS_OFFSET + layout.headerFields.length * 4;
-  if (buf.length < HBC_HEADER_SIZE || headerEnd > HBC_HEADER_SIZE) return null;
+  if (
+    header.length < HBC_HEADER_SIZE ||
+    fileLength < HBC_HEADER_SIZE ||
+    headerEnd > HBC_HEADER_SIZE
+  ) {
+    return null;
+  }
 
   const counts: Record<string, number> = {};
   layout.headerFields.forEach((name, i) => {
-    counts[name] = buf.readUInt32LE(HEADER_COUNTS_OFFSET + i * 4);
+    counts[name] = header.readUInt32LE(HEADER_COUNTS_OFFSET + i * 4);
   });
 
-  if (counts.fileLength !== buf.length) return null;
+  if (counts.fileLength !== fileLength) return null;
   const debugInfoOffset = counts.debugInfoOffset;
   if (
     !Number.isInteger(debugInfoOffset) ||
     debugInfoOffset < HBC_HEADER_SIZE ||
-    debugInfoOffset > buf.length
+    debugInfoOffset > fileLength
   ) {
     return null;
   }
@@ -409,10 +429,134 @@ export function transformHbcWithLayout(
   const sections = resolveSections(buf, layout);
   if (!sections) return null;
   const out = Buffer.from(buf);
+  applyDeltaSections(out, sections, inverse);
+  return out;
+}
+
+/**
+ * 原地变换:直接改写 buf,不再分配整块副本。调用方须持有 buf 的所有权
+ * (例如 patch() 刚返回的新 Buffer)。结构不匹配时返回 false 且 buf 不变。
+ */
+export function transformHbcWithLayoutInPlace(
+  buf: Buffer,
+  layout: HbcLayout,
+  inverse: boolean,
+): boolean {
+  const sections = resolveSections(buf, layout);
+  if (!sections) return false;
+  applyDeltaSections(buf, sections, inverse);
+  return true;
+}
+
+function applyDeltaSections(
+  out: Buffer,
+  sections: ResolvedSection[],
+  inverse: boolean,
+): void {
   for (const s of sections) {
     if (s.desc.deltaFields?.length) applyDelta(out, s, inverse);
   }
-  return out;
+}
+
+type HbcFileHeader = { header: Buffer; size: number };
+
+/** 读取文件头 128 字节与总长;文件过短或非 HBC 时返回 null。 */
+async function readHbcFileHeader(
+  filePath: string,
+): Promise<HbcFileHeader | null> {
+  const { size } = await stat(filePath);
+  if (size < HBC_HEADER_SIZE) return null;
+  const header = Buffer.alloc(HBC_HEADER_SIZE);
+  const handle = await openFile(filePath, 'r');
+  try {
+    await readExact(handle, header, 0);
+  } finally {
+    await handle.close();
+  }
+  if (getHbcVersion(header) === null) return null;
+  return { header, size };
+}
+
+type FileHandleLike = Awaited<ReturnType<typeof openFile>>;
+
+async function readExact(
+  handle: FileHandleLike,
+  buffer: Buffer,
+  position: number,
+): Promise<void> {
+  let done = 0;
+  while (done < buffer.length) {
+    const { bytesRead } = await handle.read(
+      buffer,
+      done,
+      buffer.length - done,
+      position + done,
+    );
+    if (bytesRead <= 0) {
+      throw new Error('unexpected end of file while reading HBC section');
+    }
+    done += bytesRead;
+  }
+}
+
+async function writeExact(
+  handle: FileHandleLike,
+  buffer: Buffer,
+  position: number,
+): Promise<void> {
+  let done = 0;
+  while (done < buffer.length) {
+    const { bytesWritten } = await handle.write(
+      buffer,
+      done,
+      buffer.length - done,
+      position + done,
+    );
+    if (bytesWritten <= 0) {
+      throw new Error('short write while rewriting HBC section');
+    }
+    done += bytesWritten;
+  }
+}
+
+/**
+ * 文件版 transformHbcWithLayout:把 src 复制到 dst,再仅对含差分字段的
+ * 段(位于 [128, 最后一段末尾) 区间内)做定位读写改写。任一时刻内存中
+ * 只有一个段的内容,不会持有整个 bundle。输出与内存版逐字节一致。
+ * 结构不匹配时返回 false 并清理 dst。
+ */
+export async function transformHbcFile(
+  src: string,
+  dst: string,
+  layout: HbcLayout,
+  inverse: boolean,
+): Promise<boolean> {
+  const info = await readHbcFileHeader(src);
+  const sections = info
+    ? resolveSectionsFromHeader(info.header, info.size, layout)
+    : null;
+  if (!sections) {
+    return false;
+  }
+  await copyFile(src, dst);
+  try {
+    const handle = await openFile(dst, 'r+');
+    try {
+      for (const s of sections) {
+        if (!s.desc.deltaFields?.length || s.size === 0) continue;
+        const chunk = Buffer.alloc(s.size);
+        await readExact(handle, chunk, s.start);
+        applyDelta(chunk, { start: 0, size: s.size, desc: s.desc }, inverse);
+        await writeExact(handle, chunk, s.start);
+      }
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    await rm(dst, { force: true });
+    throw error;
+  }
+  return true;
 }
 
 export const HBC_TRANSFORM_VERSION = 1;
@@ -448,6 +592,51 @@ export function tryTransformPair(
     return {
       tOld,
       tNew,
+      layout,
+      meta: {
+        v: HBC_TRANSFORM_VERSION,
+        hbcVersion: newVersion,
+        layout: compileLayoutToWire(layout),
+      },
+    };
+  }
+  return null;
+}
+
+/**
+ * tryTransformPair 的文件版:只读两侧头部即可选定布局,变换结果直接写到
+ * tOldPath / tNewPath,全程不把 bundle 读进内存。无可用布局时返回 null
+ * (不产生输出文件)。
+ */
+export async function tryTransformPairFiles(
+  oldPath: string,
+  newPath: string,
+  tOldPath: string,
+  tNewPath: string,
+): Promise<{ layout: HbcLayout; meta: HbcTransformMeta } | null> {
+  const [oldInfo, newInfo] = await Promise.all([
+    readHbcFileHeader(oldPath),
+    readHbcFileHeader(newPath),
+  ]);
+  if (!oldInfo || !newInfo) return null;
+  const oldVersion = getHbcVersion(oldInfo.header);
+  const newVersion = getHbcVersion(newInfo.header);
+  if (oldVersion === null || newVersion === null || oldVersion !== newVersion) {
+    return null;
+  }
+  for (const layout of findLayouts(newVersion)) {
+    if (
+      !resolveSectionsFromHeader(oldInfo.header, oldInfo.size, layout) ||
+      !resolveSectionsFromHeader(newInfo.header, newInfo.size, layout)
+    ) {
+      continue;
+    }
+    const [tOld, tNew] = await Promise.all([
+      transformHbcFile(oldPath, tOldPath, layout, false),
+      transformHbcFile(newPath, tNewPath, layout, false),
+    ]);
+    if (!tOld || !tNew) continue;
+    return {
       layout,
       meta: {
         v: HBC_TRANSFORM_VERSION,

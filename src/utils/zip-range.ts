@@ -179,6 +179,32 @@ export function bundleLocationFields(
 // HTTP Range
 // ---------------------------------------------------------------------------
 
+/** Deadlines for the Range requests; every field has a default. */
+export interface RangeOptions {
+  /** reads of at most CHUNK_BYTES (tail, headers, directory pages), default 20 s */
+  headerTimeoutMs?: number;
+  /** base deadline for larger reads (entry data, a prefetched directory), default 30 s */
+  dataTimeoutMs?: number;
+  /** added to `dataTimeoutMs` per MB requested, default 1 s */
+  dataTimeoutPerMbMs?: number;
+}
+
+const DEFAULT_HEADER_TIMEOUT_MS = 20_000;
+const DEFAULT_DATA_TIMEOUT_MS = 30_000;
+const DEFAULT_DATA_TIMEOUT_PER_MB_MS = 1_000;
+
+/** deadline for a request of `bytes`: flat for header-sized reads, scaled otherwise */
+function timeoutFor(bytes: number, options: RangeOptions): number {
+  if (bytes <= CHUNK_BYTES) {
+    return options.headerTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS;
+  }
+  return (
+    (options.dataTimeoutMs ?? DEFAULT_DATA_TIMEOUT_MS) +
+    ((options.dataTimeoutPerMbMs ?? DEFAULT_DATA_TIMEOUT_PER_MB_MS) * bytes) /
+      (1024 * 1024)
+  );
+}
+
 /** The server answered a Range request with the whole body (HTTP 200). */
 export class RangeUnsupportedError extends Error {
   constructor(readonly response: Response) {
@@ -201,28 +227,74 @@ export function parseContentRange(header: string | null): ContentRange | null {
   return { start, end, total };
 }
 
+/**
+ * The validator to send as `If-Range` on later requests for the same object,
+ * so a replaced archive answers 200 (handled like a server without Range)
+ * instead of mixing bytes of two versions. Weak ETags are not allowed there.
+ */
+export function rangeValidator(headers: Headers): string | undefined {
+  const etag = headers.get('etag')?.trim();
+  if (etag && !/^W\//i.test(etag)) return etag;
+  return headers.get('last-modified')?.trim() || undefined;
+}
+
+/** An aborted fetch as a plain Error (never mistaken for a 200 answer). */
+function describeAbort(error: unknown, what: string, timeoutMs: number): Error {
+  const name = (error as { name?: string } | null)?.name;
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return new Error(`timed out after ${timeoutMs} ms fetching ${what}`);
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+interface RequestOptions {
+  timeoutMs: number;
+  ifRange?: string;
+  /** archive size seen by the first request; a different one is an error */
+  expectTotal?: number;
+}
+
 /** One Range request; `end` is exclusive. Resolves with a 206 response. */
 async function fetchRange(
   url: string,
   start: number,
   end: number,
+  options: RequestOptions,
 ): Promise<Response & { range: ContentRange }> {
-  const response = await fetch(url, {
-    headers: {
-      Range: `bytes=${start}-${end - 1}`,
-      'Accept-Encoding': 'identity',
-    },
-  });
+  const what = `bytes=${start}-${end - 1}`;
+  const headers: Record<string, string> = {
+    Range: what,
+    'Accept-Encoding': 'identity',
+  };
+  if (options.ifRange) headers['If-Range'] = options.ifRange;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(options.timeoutMs),
+    });
+  } catch (error) {
+    throw describeAbort(error, what, options.timeoutMs);
+  }
   if (response.status === 200) throw new RangeUnsupportedError(response);
   if (response.status !== 206 || !response.body) {
     await response.body?.cancel().catch(() => {});
-    throw new Error(`HTTP ${response.status} for bytes=${start}-${end - 1}`);
+    throw new Error(`HTTP ${response.status} for ${what}`);
   }
   const range = parseContentRange(response.headers.get('content-range'));
   if (!range || range.start !== start || range.end !== end - 1) {
     await response.body.cancel().catch(() => {});
     throw new Error(
       `unexpected Content-Range ${response.headers.get('content-range')}`,
+    );
+  }
+  if (
+    options.expectTotal !== undefined &&
+    range.total !== options.expectTotal
+  ) {
+    await response.body.cancel().catch(() => {});
+    throw new Error(
+      `archive size changed: ${range.total} bytes, expected ${options.expectTotal}`,
     );
   }
   return Object.assign(response, { range });
@@ -232,9 +304,16 @@ async function fetchRangeBuffer(
   url: string,
   start: number,
   end: number,
+  options: RequestOptions,
 ): Promise<{ data: Buffer; total: number }> {
-  const response = await fetchRange(url, start, end);
-  const data = Buffer.from(await response.arrayBuffer());
+  const response = await fetchRange(url, start, end, options);
+  let data: Buffer;
+  try {
+    // Buffer.from(ArrayBuffer) is a view: the body is held exactly once
+    data = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    throw describeAbort(error, `bytes=${start}-${end - 1}`, options.timeoutMs);
+  }
   if (data.length !== end - start) {
     throw new Error(
       `range returned ${data.length} bytes, expected ${end - start}`,
@@ -253,6 +332,7 @@ export async function fetchZipEntryData(
     ZipEntryLocation,
     'dataOffset' | 'compressedSize' | 'compressionMethod'
   >,
+  options: RangeOptions = {},
 ): Promise<{ data: Buffer; fetchedBytes: number; totalBytes: number }> {
   const { dataOffset, compressedSize, compressionMethod } = location;
   if (compressionMethod !== ZIP_STORED && compressionMethod !== ZIP_DEFLATED) {
@@ -270,6 +350,7 @@ export async function fetchZipEntryData(
     url,
     dataOffset,
     dataOffset + compressedSize,
+    { timeoutMs: timeoutFor(compressedSize, options) },
   );
   return {
     data: compressionMethod === ZIP_DEFLATED ? inflateRawSync(data) : data,
@@ -278,15 +359,28 @@ export async function fetchZipEntryData(
   };
 }
 
+export interface HttpRangeReaderOptions extends RangeOptions {
+  /** validator of the archive (see `rangeValidator`), sent as If-Range */
+  ifRange?: string;
+}
+
+interface Chunk {
+  start: number;
+  data: Buffer;
+}
+
 /**
  * yauzl reader over HTTP Range. Header reads (EOCD, central directory, local
- * file headers) are widened to CHUNK_BYTES and cached — adjacent or
- * overlapping chunks are merged so a read never re-fetches bytes it already
- * has — and entry data reuses whatever prefix the cache holds (typically the
- * bytes following the local file header) before requesting the rest.
+ * file headers) are widened to CHUNK_BYTES and cached. Chunks are kept as
+ * fetched — only overlapping ones are merged, touching ones are read across —
+ * so an entry's bytes are held once, and a read reuses whatever prefix the
+ * cache holds (typically the bytes following the local file header) before
+ * requesting the rest. Every request after the first carries If-Range and
+ * must report the same archive size.
  */
 export class HttpRangeReader extends RandomAccessReader {
-  private chunks: { start: number; data: Buffer }[] = [];
+  /** sorted by `start`, never overlapping */
+  private chunks: Chunk[] = [];
   /** span a header read inside it should widen to (see `hintEntry`) */
   private hint: { start: number; end: number } | null = null;
   requests = 0;
@@ -295,7 +389,8 @@ export class HttpRangeReader extends RandomAccessReader {
   constructor(
     private readonly url: string,
     readonly totalSize: number,
-    tail?: { start: number; data: Buffer },
+    tail?: Chunk,
+    private readonly options: HttpRangeReaderOptions = {},
   ) {
     super();
     if (tail) this.addChunk(tail.start, tail.data);
@@ -319,16 +414,16 @@ export class HttpRangeReader extends RandomAccessReader {
     this.hint = { start, end: Math.min(end, this.totalSize) };
   }
 
-  /** Cache `data` at `start`, merging with any chunk it touches. */
+  /** Cache `data` at `start`, merging with any chunk it overlaps. */
   addChunk(start: number, data: Buffer): void {
     if (data.length === 0) return;
     let lo = start;
     let hi = start + data.length;
-    const pieces: { start: number; data: Buffer }[] = [{ start, data }];
-    const rest: { start: number; data: Buffer }[] = [];
+    const pieces: Chunk[] = [{ start, data }];
+    const rest: Chunk[] = [];
     for (const chunk of this.chunks) {
       const chunkEnd = chunk.start + chunk.data.length;
-      if (chunk.start <= hi && chunkEnd >= lo) {
+      if (chunk.start < hi && chunkEnd > lo) {
         pieces.push(chunk);
         lo = Math.min(lo, chunk.start);
         hi = Math.max(hi, chunkEnd);
@@ -350,47 +445,90 @@ export class HttpRangeReader extends RandomAccessReader {
     this.chunks = rest;
   }
 
-  /** cached bytes starting exactly at `start`, up to `end` (may be shorter) */
-  private cachedPrefix(start: number, end: number): Buffer | null {
+  /** Fetch `[start, end)` into the cache in one request. */
+  async prefetch(start: number, end: number): Promise<void> {
+    this.addChunk(start, await this.fetchBuffer(start, end));
+  }
+
+  private requestOptions(bytes: number): RequestOptions {
+    return {
+      timeoutMs: timeoutFor(bytes, this.options),
+      ifRange: this.options.ifRange,
+      expectTotal: this.totalSize,
+    };
+  }
+
+  private async fetchBuffer(start: number, end: number): Promise<Buffer> {
+    this.requests++;
+    const { data } = await fetchRangeBuffer(
+      this.url,
+      start,
+      end,
+      this.requestOptions(end - start),
+    );
+    this.fetchedBytes += data.length;
+    return data;
+  }
+
+  /**
+   * Contiguous cached pieces starting exactly at `start`, up to `end`: views
+   * into one chunk or into a run of touching chunks, possibly ending short.
+   */
+  private cachedPieces(start: number, end: number): Buffer[] {
+    const pieces: Buffer[] = [];
+    let at = start;
     for (const chunk of this.chunks) {
       const chunkEnd = chunk.start + chunk.data.length;
-      if (start >= chunk.start && start < chunkEnd) {
-        return chunk.data.subarray(
-          start - chunk.start,
-          Math.min(end, chunkEnd) - chunk.start,
-        );
-      }
+      if (chunkEnd <= at) continue;
+      if (chunk.start > at) break;
+      const stop = Math.min(end, chunkEnd);
+      pieces.push(chunk.data.subarray(at - chunk.start, stop - chunk.start));
+      at = stop;
+      if (at >= end) break;
     }
-    return null;
+    return pieces;
   }
 
-  private cached(start: number, end: number): Buffer | null {
-    const prefix = this.cachedPrefix(start, end);
-    return prefix && prefix.length === end - start ? prefix : null;
-  }
-
-  /** start of the cached chunk holding byte `end - 1`, when there is one */
+  /** start of the cached run (touching chunks) holding byte `end - 1` */
   private cachedSuffixStart(end: number): number | null {
-    for (const chunk of this.chunks) {
-      if (end - 1 >= chunk.start && end - 1 < chunk.start + chunk.data.length) {
-        return chunk.start;
-      }
+    let i = this.chunks.findIndex(
+      (c) => end - 1 >= c.start && end - 1 < c.start + c.data.length,
+    );
+    if (i < 0) return null;
+    while (
+      i > 0 &&
+      this.chunks[i - 1].start + this.chunks[i - 1].data.length ===
+        this.chunks[i].start
+    ) {
+      i--;
     }
-    return null;
+    return this.chunks[i].start;
+  }
+
+  /** start of the first cached chunk at or after `position` */
+  private nextCachedStart(position: number): number | null {
+    const chunk = this.chunks.find((c) => c.start >= position);
+    return chunk ? chunk.start : null;
   }
 
   _readStreamForRange(start: number, end: number): Readable {
-    const prefix = this.cachedPrefix(start, end);
-    if (prefix && prefix.length === end - start) return Readable.from([prefix]);
+    const pieces = this.cachedPieces(start, end);
+    const have = pieces.reduce((sum, piece) => sum + piece.length, 0);
+    if (have === end - start) return Readable.from(pieces);
     const out = new PassThrough();
-    if (prefix) out.write(prefix);
-    const from = start + (prefix?.length ?? 0);
+    for (const piece of pieces) out.write(piece);
+    const from = start + have;
+    const options = this.requestOptions(end - from);
     this.requests++;
-    fetchRange(this.url, from, end)
+    fetchRange(this.url, from, end, options)
       .then((response) => {
         this.fetchedBytes += end - from;
         const body = Readable.fromWeb(response.body as any);
-        body.on('error', (error) => out.destroy(error));
+        body.on('error', (error) =>
+          out.destroy(
+            describeAbort(error, `bytes=${from}-${end - 1}`, options.timeoutMs),
+          ),
+        );
         body.pipe(out);
       })
       .catch((error) => out.destroy(error));
@@ -404,43 +542,50 @@ export class HttpRangeReader extends RandomAccessReader {
     position: number,
     callback: (err: Error | null, bytesRead?: number) => void,
   ): void {
-    const hit = this.cached(position, position + length);
-    if (hit) {
-      hit.copy(buffer, offset);
+    const requestEnd = position + length;
+    const copyOut = (pieces: Buffer[]): boolean => {
+      let at = offset;
+      for (const piece of pieces) {
+        piece.copy(buffer, at);
+        at += piece.length;
+      }
+      return at - offset === length;
+    };
+    const cached = this.cachedPieces(position, requestEnd);
+    if (copyOut(cached)) {
       setImmediate(() => callback(null, length));
       return;
     }
-    // fetch only what the cache lacks: skip a cached prefix, stop at a cached
-    // suffix (yauzl's EOCD read may just exceed the tail), and otherwise widen
-    // so the next header read is free
-    const requestEnd = position + length;
+    // fetch only what the cache lacks: skip the cached prefix, stop at a
+    // cached suffix (yauzl's EOCD read may just exceed the tail), and
+    // otherwise widen so the next header read is free — to exactly the hinted
+    // entry when the hint covers this read, else by CHUNK_BYTES — but never
+    // into bytes already cached beyond the request
     const from =
-      position + (this.cachedPrefix(position, requestEnd)?.length ?? 0);
+      position + cached.reduce((sum, piece) => sum + piece.length, 0);
     const suffixStart = this.cachedSuffixStart(requestEnd);
     let end: number;
     if (suffixStart !== null && suffixStart > from) {
       end = suffixStart;
     } else {
-      end = Math.min(this.totalSize, Math.max(requestEnd, from + CHUNK_BYTES));
-      if (
-        this.hint &&
+      const hinted =
+        this.hint !== null &&
         position >= this.hint.start &&
-        position < this.hint.end
-      ) {
-        end = Math.max(end, this.hint.end);
-      }
+        requestEnd <= this.hint.end;
+      end = hinted
+        ? (this.hint as { end: number }).end
+        : Math.max(requestEnd, from + CHUNK_BYTES);
+      end = Math.min(end, this.totalSize);
+      const next = this.nextCachedStart(requestEnd);
+      if (next !== null && next < end) end = next;
     }
-    this.requests++;
-    fetchRangeBuffer(this.url, from, end).then(
-      ({ data }) => {
-        this.fetchedBytes += data.length;
+    this.fetchBuffer(from, end).then(
+      (data) => {
         this.addChunk(from, data);
-        const full = this.cached(position, position + length);
-        if (!full) {
+        if (!copyOut(this.cachedPieces(position, requestEnd))) {
           callback(new Error('range read did not cover the requested bytes'));
           return;
         }
-        full.copy(buffer, offset);
         callback(null, length);
       },
       (error) => callback(error),
@@ -451,8 +596,6 @@ export class HttpRangeReader extends RandomAccessReader {
 /** End-of-central-directory record: where the central directory lives. */
 const EOCD_SIGNATURE = 0x06054b50;
 const EOCD_SIZE = 22;
-/** central directories larger than this are left to yauzl's paged reads */
-const MAX_PREFETCH_BYTES = 8 * 1024 * 1024;
 
 export function parseEndOfCentralDirectory(
   tail: Buffer,
@@ -479,10 +622,20 @@ export type RemoteZip =
  * Open a remote zip by fetching its tail (EOCD + central directory for
  * typical archives) and letting yauzl read the rest on demand.
  */
-export async function openRemoteZip(url: string): Promise<RemoteZip> {
-  const response = await fetch(url, {
-    headers: { Range: `bytes=-${TAIL_BYTES}`, 'Accept-Encoding': 'identity' },
-  });
+export async function openRemoteZip(
+  url: string,
+  options: RangeOptions = {},
+): Promise<RemoteZip> {
+  const timeoutMs = timeoutFor(TAIL_BYTES, options);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { Range: `bytes=-${TAIL_BYTES}`, 'Accept-Encoding': 'identity' },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw describeAbort(error, `bytes=-${TAIL_BYTES}`, timeoutMs);
+  }
   if (!response.ok || !response.body) {
     await response.body?.cancel().catch(() => {});
     throw new Error(`HTTP ${response.status}`);
@@ -495,35 +648,38 @@ export async function openRemoteZip(url: string): Promise<RemoteZip> {
       `unexpected Content-Range ${response.headers.get('content-range')}`,
     );
   }
-  const data = Buffer.from(await response.arrayBuffer());
+  let data: Buffer;
+  try {
+    data = Buffer.from(await response.arrayBuffer());
+  } catch (error) {
+    throw describeAbort(error, `bytes=-${TAIL_BYTES}`, timeoutMs);
+  }
   if (data.length !== range.end - range.start + 1) {
     throw new Error(
       `tail returned ${data.length} bytes, expected ${range.end - range.start + 1}`,
     );
   }
-  const reader = new HttpRangeReader(url, range.total, {
-    start: range.start,
-    data,
-  });
+  const reader = new HttpRangeReader(
+    url,
+    range.total,
+    { start: range.start, data },
+    { ...options, ifRange: rangeValidator(response.headers) },
+  );
   reader.requests = 1;
   reader.fetchedBytes = data.length;
   // Large archives (apk / ipa with thousands of files) keep their central
   // directory well before the tail; yauzl would otherwise page it in with one
-  // sequential request per CHUNK_BYTES. Fetch the missing part at once.
+  // sequential request per CHUNK_BYTES. Fetch the missing part at once — one
+  // buffer of exactly its size — as long as the EOCD describes a directory
+  // that ends inside the tail (a corrupt record could claim the whole file).
   const eocd = parseEndOfCentralDirectory(data);
   if (
     eocd &&
     eocd.cdOffset < range.start &&
-    range.start - eocd.cdOffset <= MAX_PREFETCH_BYTES
+    eocd.cdOffset + eocd.cdSize >= range.start &&
+    eocd.cdOffset + eocd.cdSize <= range.total - EOCD_SIZE
   ) {
-    const { data: directory } = await fetchRangeBuffer(
-      url,
-      eocd.cdOffset,
-      range.start,
-    );
-    reader.requests++;
-    reader.fetchedBytes += directory.length;
-    reader.addChunk(eocd.cdOffset, directory);
+    await reader.prefetch(eocd.cdOffset, range.start);
   }
   const zipFile = await new Promise<ZipFile>((resolve, reject) => {
     fromRandomAccessReader(

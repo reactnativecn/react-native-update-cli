@@ -13,6 +13,7 @@ import { createHash } from 'crypto';
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
+import { PassThrough, Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { tempDir } from './constants';
 import { getHbcVersion } from './hbcTransform';
@@ -28,6 +29,27 @@ import {
 } from './zip-range';
 
 export type HermesBaseOption = 'auto' | 'none' | string;
+
+/**
+ * The base cannot be obtained whatever the transport or how often it is
+ * retried (wrong content on the server, no bundle in the package, ...).
+ */
+export class PermanentBaseError extends Error {}
+/** The fetched bundle's sha256 differs from what the server recorded. */
+export class BundleHashMismatchError extends PermanentBaseError {
+  constructor(actual: string, expected: string) {
+    super(
+      `bundleHash mismatch (${actual.slice(0, 12)} != ${expected.slice(0, 12)})`,
+    );
+  }
+}
+
+/** time allowed for a response to start (headers) */
+const FETCH_HEADERS_TIMEOUT_MS = 30_000;
+/** a download that receives nothing for this long is abandoned */
+const STREAM_IDLE_TIMEOUT_MS = 60_000;
+/** cachePut leftovers (`<hash>.<pid>.tmp`) older than this are evicted */
+const STALE_CACHE_TMP_MS = 60 * 60 * 1000;
 
 export interface HermesBaseSelection {
   /** path of the bundle (HBC) handed to hermesc as -base-bytecode */
@@ -149,6 +171,27 @@ export function classifyHermesCommand(hermesCommand: string): {
 
 export function sha256Hex(data: Buffer): string {
   return createHash('sha256').update(data).digest('hex');
+}
+
+/** sha256 of a file, streamed (a cached base can be tens of MB) */
+export async function sha256File(file: string): Promise<string> {
+  const hash = createHash('sha256');
+  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+  return hash.digest('hex');
+}
+
+/** HBC version from the first bytes of a file, without reading the rest */
+export async function readFileHbcVersion(file: string): Promise<number | null> {
+  const header = Buffer.alloc(128);
+  const fd = await fs.open(file, 'r');
+  try {
+    const { bytesRead } = await fs.read(fd, header, 0, 128, 0);
+    return getHbcVersion(header.subarray(0, bytesRead));
+  } catch {
+    return null;
+  } finally {
+    await fs.close(fd);
+  }
 }
 
 const PROBE_CACHE_FILE = 'hbc-versions.json';
@@ -348,8 +391,7 @@ export async function cacheLookup(bundleHash: string): Promise<string | null> {
   if (!/^[0-9a-f]{64}$/.test(bundleHash)) return null;
   const file = path.join(cacheDir(), bundleHash);
   if (!(await fs.pathExists(file))) return null;
-  const data = await fs.readFile(file);
-  if (sha256Hex(data) !== bundleHash) {
+  if ((await sha256File(file).catch(() => '')) !== bundleHash) {
     // corrupt entry: never trust cache content
     await fs.remove(file).catch(() => {});
     return null;
@@ -389,11 +431,19 @@ export async function enforceCacheLimits(
   if (!(await fs.pathExists(dir))) return;
   const { maxBytes, maxFiles } = cacheLimits(maxMb);
   const entries: { name: string; size: number; mtime: number }[] = [];
+  const staleTmpCutoff = Date.now() - STALE_CACHE_TMP_MS;
   for (const name of await fs.readdir(dir)) {
-    if (!/^[0-9a-f]{64}$/.test(name)) continue;
+    const isTmp = isCacheTmpName(name);
+    if (!isTmp && !/^[0-9a-f]{64}$/.test(name)) continue;
     const stat = await fs.stat(path.join(dir, name)).catch(() => null);
-    if (stat?.isFile())
-      entries.push({ name, size: stat.size, mtime: stat.mtimeMs });
+    if (!stat?.isFile()) continue;
+    if (isTmp) {
+      // an interrupted cachePut; nothing will ever rename it into place
+      if (stat.mtimeMs < staleTmpCutoff)
+        await fs.remove(path.join(dir, name)).catch(() => {});
+      continue;
+    }
+    entries.push({ name, size: stat.size, mtime: stat.mtimeMs });
   }
   entries.sort((a, b) => b.mtime - a.mtime); // newest first
   let total = 0;
@@ -407,12 +457,23 @@ export async function enforceCacheLimits(
   }
 }
 
+/** `<sha256>.<pid>.tmp`, the staging name cachePut writes before renaming */
+function isCacheTmpName(name: string): boolean {
+  return /^[0-9a-f]{64}\.\d+\.tmp$/.test(name);
+}
+
+/** Remove every cached bundle (and staging leftovers); returns the bundle count. */
 export async function cleanCache(): Promise<number> {
   const dir = cacheDir();
   if (!(await fs.pathExists(dir))) return 0;
-  const names = (await fs.readdir(dir)).filter((n) => /^[0-9a-f]{64}$/.test(n));
-  for (const name of names) await fs.remove(path.join(dir, name));
-  return names.length;
+  let bundles = 0;
+  for (const name of await fs.readdir(dir)) {
+    const isBundle = /^[0-9a-f]{64}$/.test(name);
+    if (!isBundle && !isCacheTmpName(name)) continue;
+    await fs.remove(path.join(dir, name));
+    if (isBundle) bundles += 1;
+  }
+  return bundles;
 }
 
 export async function cacheStats(): Promise<{
@@ -458,16 +519,21 @@ export async function downloadToFile(
   url: string,
   destination: string,
 ): Promise<void> {
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const headersTimer = setTimeout(
+    () => controller.abort(new Error('timeout waiting for response')),
+    FETCH_HEADERS_TIMEOUT_MS,
+  );
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(headersTimer);
+  }
   if (!response.ok || !response.body) {
     throw new Error(`download failed: HTTP ${response.status} ${url}`);
   }
-  await fs.ensureDir(path.dirname(destination));
-  const { Readable } = await import('stream');
-  await pipeline(
-    Readable.fromWeb(response.body as any),
-    fs.createWriteStream(destination),
-  );
+  await saveResponse(response, destination, controller);
 }
 
 // ---------------------------------------------------------------------------
@@ -511,17 +577,40 @@ function hasBundleLocation(record: HermesBaseServerRecord): boolean {
   );
 }
 
+/**
+ * Stream a response body to disk, giving up when no bytes arrive for
+ * STREAM_IDLE_TIMEOUT_MS. `controller` is the one the request was made with
+ * (aborting it also tears down the socket); a foreign response gets its own.
+ */
 async function saveResponse(
   response: Response,
   destination: string,
+  controller = new AbortController(),
 ): Promise<void> {
   if (!response.body) throw new Error('empty response body');
   await fs.ensureDir(path.dirname(destination));
-  const { Readable } = await import('stream');
-  await pipeline(
-    Readable.fromWeb(response.body as any),
-    fs.createWriteStream(destination),
-  );
+  const abort = () =>
+    controller.abort(
+      new Error(`download stalled for ${STREAM_IDLE_TIMEOUT_MS / 1000}s`),
+    );
+  let idle = setTimeout(abort, STREAM_IDLE_TIMEOUT_MS);
+  const watchdog = new PassThrough({
+    transform(chunk, _encoding, callback) {
+      clearTimeout(idle);
+      idle = setTimeout(abort, STREAM_IDLE_TIMEOUT_MS);
+      callback(null, chunk);
+    },
+  });
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body as any),
+      watchdog,
+      fs.createWriteStream(destination),
+      { signal: controller.signal },
+    );
+  } finally {
+    clearTimeout(idle);
+  }
 }
 
 /**
@@ -534,35 +623,37 @@ async function saveResponse(
  *     is skipped);
  *  3. the whole archive, as before.
  * A server that ignores Range (HTTP 200) streams the full archive into
- * `archive` without a second request. Range results are verified against
- * `record.bundleHash` here; a mismatch (e.g. re-packaged object) falls
- * through to the next transport instead of failing the resolution.
+ * `archive` without a second request. Every result is verified against
+ * `record.bundleHash`. A mismatch of the located bytes (1) may only mean the
+ * recorded location is stale, so the directory transport (2) still runs; a
+ * mismatch of the entry itself (2, 3) is final — the same bytes would come
+ * back however they are fetched — and raises BundleHashMismatchError.
  */
 export async function fetchBaseBundle(
   record: HermesBaseServerRecord,
   artifactType: BaseArtifactType,
   archive: string,
   log: (message: string) => void = () => {},
-): Promise<FetchedBaseBundle | null> {
+): Promise<FetchedBaseBundle> {
   const matches = bundleEntryMatcher(artifactType);
   const verified = (
     bundle: Buffer | null,
   ): { bundle: Buffer; bundleHash: string } => {
-    if (!bundle) throw new Error('bundle entry not found');
+    if (!bundle) throw new PermanentBaseError('bundle entry not found');
     const bundleHash = sha256Hex(bundle);
     if (record.bundleHash && bundleHash !== record.bundleHash) {
-      throw new Error('bundleHash mismatch');
+      throw new BundleHashMismatchError(bundleHash, record.bundleHash);
     }
     return { bundle, bundleHash };
   };
   const fromFullResponse = async (
     response: Response,
-  ): Promise<FetchedBaseBundle | null> => {
+  ): Promise<FetchedBaseBundle> => {
     await saveResponse(response, archive);
-    const bundle = await extractBundleFromArchive(archive);
-    return bundle
-      ? { bundle, bundleHash: sha256Hex(bundle), transport: 'full' }
-      : null;
+    return {
+      ...verified(await extractBundleFromArchive(archive)),
+      transport: 'full',
+    };
   };
   const skip = (reason: string) =>
     log(t('hermesBaseRangeFallback', { reason }));
@@ -617,15 +708,17 @@ export async function fetchBaseBundle(
         skip('server ignores Range');
         return fromFullResponse(error.response);
       }
+      // the real entry was read and is not the recorded one: final
+      if (error instanceof PermanentBaseError) throw error;
       skip(`zip range: ${error?.message ?? error}`);
     }
   }
 
   await downloadToFile(record.url, archive);
-  const bundle = await extractBundleFromArchive(archive);
-  return bundle
-    ? { bundle, bundleHash: sha256Hex(bundle), transport: 'full' }
-    : null;
+  return {
+    ...verified(await extractBundleFromArchive(archive)),
+    transport: 'full',
+  };
 }
 
 export interface ResolveHermesBaseParams {
@@ -694,7 +787,9 @@ export async function resolveHermesBase(
   }
   let record: HermesBaseServerRecord | null = null;
   try {
-    record = await params.fetchBase(params.appId, bytecodeVersion);
+    record = await retryOnce(() =>
+      params.fetchBase(params.appId as string, bytecodeVersion),
+    );
   } catch (error: any) {
     log(
       t('hermesBaseNone', {
@@ -727,6 +822,19 @@ export async function resolveHermesBase(
   // 1. cache by bundleHash
   if (record.bundleHash) {
     const hit = await cacheLookup(record.bundleHash);
+    if (hit && record.bytecodeVersion == null) {
+      // the server does not know the HBC version (legacy version, native
+      // package): the download path checks it, the cache path must too
+      const version = await readFileHbcVersion(hit);
+      if (version !== bytecodeVersion) {
+        log(
+          t('hermesBaseNone', {
+            reason: `cached base is HBC ${version ?? 'n/a'}, need ${bytecodeVersion}`,
+          }),
+        );
+        return null;
+      }
+    }
     if (hit) {
       log(
         t('hermesBaseUsing', {
@@ -744,7 +852,7 @@ export async function resolveHermesBase(
       };
     }
   }
-  // 2. download, extract, verify, cache — up to two attempts
+  // 2. download, extract, verify, cache — transport errors get a second try
   for (let attempt = 1; attempt <= 2; attempt++) {
     const dir = tmpDir();
     await fs.ensureDir(dir);
@@ -763,8 +871,6 @@ export async function resolveHermesBase(
     try {
       log(t('hermesBaseDownloading', { url: record.url }));
       const fetched = await fetchBaseBundle(record, artifactType, archive, log);
-      if (!fetched)
-        throw new Error('bundle entry not found in downloaded package');
       const { bundle, bundleHash: actualHash } = fetched;
       if (fetched.transport !== 'full') {
         log(
@@ -772,11 +878,6 @@ export async function resolveHermesBase(
             fetchedKb: Math.ceil((fetched.fetchedBytes ?? 0) / 1024),
             totalKb: Math.ceil((fetched.totalBytes ?? 0) / 1024),
           }),
-        );
-      }
-      if (record.bundleHash && actualHash !== record.bundleHash) {
-        throw new Error(
-          `bundleHash mismatch (${actualHash.slice(0, 12)} != ${record.bundleHash.slice(0, 12)})`,
         );
       }
       const version = getHbcVersion(bundle);
@@ -807,7 +908,7 @@ export async function resolveHermesBase(
         source,
       };
     } catch (error: any) {
-      if (attempt === 2) {
+      if (attempt === 2 || error instanceof PermanentBaseError) {
         log(
           t('hermesBaseNone', {
             reason: `download/verify failed: ${error?.message ?? error}`,
@@ -820,6 +921,16 @@ export async function resolveHermesBase(
     }
   }
   return null;
+}
+
+/** one retry after a short pause, for transient network failures */
+async function retryOnce<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return action();
+  }
 }
 
 export function hermescArgsWithBase(

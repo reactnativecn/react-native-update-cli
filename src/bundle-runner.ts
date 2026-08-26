@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import { satisfies } from 'compare-versions';
 import * as fs from 'fs-extra';
 import os from 'os';
@@ -40,6 +40,8 @@ export interface RunBundleCommandOptions {
   forceHermes?: boolean;
   /** Hermes -base-bytecode settings; omitted → compile without a base */
   hermesBase?: HermesBaseRequest;
+  /** pass --reset-cache to Metro (default true); false reuses its transform cache */
+  resetCache?: boolean;
   cli: BundleCliOptions;
   isSentry: boolean;
 }
@@ -64,6 +66,8 @@ export interface HermesBaseSelectionResult {
   bytecodeVersion: number | null;
   /** messages to print when the compile phase starts (kept out of Metro's output) */
   logs: string[];
+  /** the hermesc the selection was made with (the compile reuses it) */
+  hermesCommand?: string;
   /** hermesc could not be resolved; the compile phase will report it */
   commandUnavailable?: boolean;
 }
@@ -207,6 +211,7 @@ export async function runReactNativeBundleCommand({
   config,
   forceHermes,
   hermesBase,
+  resetCache = true,
   cli,
   isSentry,
 }: RunBundleCommandOptions): Promise<HermesCompileResult | null> {
@@ -312,7 +317,8 @@ export async function runReactNativeBundleCommand({
   );
 
   if (platform !== 'harmony') {
-    reactNativeBundleArgs.push('--platform', platform, '--reset-cache');
+    reactNativeBundleArgs.push('--platform', platform);
+    if (resetCache) reactNativeBundleArgs.push('--reset-cache');
   }
 
   if (cli.taro) {
@@ -336,16 +342,18 @@ export async function runReactNativeBundleCommand({
     forceHermes,
     gradleConfig,
   );
-  const pendingBase =
-    hermesEnabled && hermesBase
-      ? startHermesBaseSelection(hermesBase)
-      : undefined;
 
   const jsRuntime = getJavaScriptRuntime();
   const reactNativeBundleProcess = spawnJavaScript(reactNativeBundleArgs);
   console.log(
     `Running bundle command: ${jsRuntime} ${reactNativeBundleArgs.join(' ')}`,
   );
+  // Metro is running; the synchronous head of the selection (hermesc lookup,
+  // HBC version probe) now overlaps it instead of delaying its start.
+  const pendingBase =
+    hermesEnabled && hermesBase
+      ? startHermesBaseSelection(hermesBase)
+      : undefined;
 
   let hermesResult: HermesCompileResult | null = null;
   await new Promise<void>((resolve, reject) => {
@@ -606,12 +614,16 @@ export function summarizeHermescStderr(stderr: string): string {
   return (notWarnings.length > 0 ? notWarnings : kept).slice(-3).join(' ');
 }
 
-export function buildHermescArgs(bundlePath: string): string[] {
+/** hermesc arguments writing `bundlePath` from `input` (in place by default) */
+export function buildHermescArgs(
+  bundlePath: string,
+  input: string = bundlePath,
+): string[] {
   return [
     '-emit-binary',
     '-out',
     bundlePath,
-    bundlePath,
+    input,
     '-O',
     '-output-source-map',
   ];
@@ -624,6 +636,9 @@ interface ProcessOutcome {
   error?: Error;
 }
 
+/** captured stderr is bounded to this much head and this much tail */
+const STDERR_KEEP_BYTES = 512 * 1024;
+
 /** spawn without blocking the event loop, so two hermesc runs can overlap */
 function runProcess(
   command: string,
@@ -634,8 +649,26 @@ function runProcess(
     const child = spawn(command, args, {
       stdio: ['ignore', 'ignore', captureStderr ? 'pipe' : 'ignore'],
     });
-    const chunks: Buffer[] = [];
-    child.stderr?.on('data', (chunk: Buffer) => chunks.push(chunk));
+    // hermesc echoes whole (minified) source lines per diagnostic: keep the
+    // head and the tail, never an unbounded transcript
+    const head: Buffer[] = [];
+    const tail: Buffer[] = [];
+    let headBytes = 0;
+    let tailBytes = 0;
+    let dropped = false;
+    child.stderr?.on('data', (chunk: Buffer) => {
+      if (headBytes < STDERR_KEEP_BYTES) {
+        head.push(chunk);
+        headBytes += chunk.length;
+        return;
+      }
+      tail.push(chunk);
+      tailBytes += chunk.length;
+      while (tail.length > 1 && tailBytes > STDERR_KEEP_BYTES) {
+        tailBytes -= (tail.shift() as Buffer).length;
+        dropped = true;
+      }
+    });
     let settled = false;
     const finish = (outcome: ProcessOutcome) => {
       if (settled) return;
@@ -646,7 +679,14 @@ function runProcess(
       finish({ status: null, signal: null, stderr: '', error }),
     );
     child.once('close', (status, signal) =>
-      finish({ status, signal, stderr: Buffer.concat(chunks).toString() }),
+      finish({
+        status,
+        signal,
+        stderr:
+          Buffer.concat(head).toString() +
+          (dropped ? '\n[... output truncated ...]\n' : '') +
+          Buffer.concat(tail).toString(),
+      }),
     );
   });
 }
@@ -657,10 +697,94 @@ export interface CompileHermesOptions {
   sourcemapOutput: string;
   shouldCleanSourcemap: boolean;
   baseRequest?: HermesBaseRequest;
-  /** base selection started before Metro (see startHermesBaseSelection) */
+  /** base selection started alongside Metro (see startHermesBaseSelection) */
   pendingBase?: Promise<HermesBaseSelectionResult>;
-  /** defaults to the project's hermesc */
+  /** defaults to the hermesc the selection used, else the project's */
   hermesCommand?: string;
+}
+
+/** how long the compile phase waits for a base that is still being fetched */
+const HERMES_BASE_WAIT_MS = 60_000;
+
+/**
+ * The selection runs while Metro bundles; when Metro is done first, wait a
+ * bounded time for it — a stalled download must never hold up the compile.
+ */
+async function awaitPendingBase(
+  pending: Promise<HermesBaseSelectionResult>,
+): Promise<HermesBaseSelectionResult> {
+  const waitMs =
+    Number(process.env.PUSHY_HERMES_BASE_WAIT_MS) || HERMES_BASE_WAIT_MS;
+  let timer: NodeJS.Timeout | undefined;
+  const gaveUp = new Promise<HermesBaseSelectionResult>((resolve) => {
+    timer = setTimeout(
+      () =>
+        resolve({
+          base: null,
+          bytecodeVersion: null,
+          logs: [
+            t('hermesBaseNone', {
+              reason: `base not ready after ${Math.round(waitMs / 1000)}s`,
+            }),
+          ],
+        }),
+      waitMs,
+    );
+  });
+  try {
+    return await Promise.race([pending, gaveUp]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** plain compile of `input` into `out`; throws when hermesc fails */
+async function compilePlain(
+  hermesCommand: string,
+  out: string,
+  input: string = out,
+): Promise<void> {
+  const args = buildHermescArgs(out, input);
+  console.log(
+    t('runningHermesc', { command: hermesCommand, args: args.join(' ') }),
+  );
+  assertSuccessfulSyncProcess(
+    await runProcess(hermesCommand, args, false),
+    hermesCommand,
+  );
+}
+
+/**
+ * Merge the packager map with the hermes map into `sourcemapOutput` (which is
+ * normally the hermes map's own path). Resolves false when React Native's
+ * composer cannot be found; throws when it fails.
+ */
+async function composeSourceMaps(
+  packagerMap: string,
+  hermesMap: string,
+  sourcemapOutput: string,
+): Promise<boolean> {
+  let composerPath: string;
+  try {
+    // resolve through the project so hoisted node_modules (monorepos) work
+    composerPath = require.resolve(
+      'react-native/scripts/compose-source-maps.js',
+      { paths: [process.cwd()] },
+    );
+  } catch {
+    console.warn(t('composeSourceMapsNotFound'));
+    return false;
+  }
+  console.log(t('composingSourceMap'));
+  assertSuccessfulSyncProcess(
+    await runProcess(
+      getJavaScriptRuntime(),
+      [composerPath, packagerMap, hermesMap, '-o', sourcemapOutput],
+      false,
+    ),
+    composerPath,
+  );
+  return true;
 }
 
 export async function compileHermesByteCode({
@@ -675,19 +799,25 @@ export async function compileHermesByteCode({
   console.log(t('hermesEnabledCompiling'));
 
   const bundlePath = path.join(outputFolder, bundleName);
-  const plainArgs = buildHermescArgs(bundlePath);
+  const hermesMap = `${bundlePath}.map`;
+  const packagerMap = path.join(outputFolder, `${bundleName}.txt.map`);
   if (sourcemapOutput) {
-    fs.copyFileSync(
-      sourcemapOutput,
-      path.join(outputFolder, `${bundleName}.txt.map`),
-    );
+    // hermesc is about to write its own map at `<bundle>.map`, which is where
+    // the packager map normally sits: move it aside (copy only when elsewhere)
+    if (path.resolve(sourcemapOutput) === path.resolve(hermesMap)) {
+      fs.renameSync(sourcemapOutput, packagerMap);
+    } else {
+      fs.copyFileSync(sourcemapOutput, packagerMap);
+    }
   } else {
-    console.log(t('hermesSourcemapKept', { file: `${bundlePath}.map` }));
+    console.log(t('hermesSourcemapKept', { file: hermesMap }));
   }
 
-  let selection = pendingBase ? await pendingBase : null;
+  let selection = pendingBase ? await awaitPendingBase(pendingBase) : null;
+  const command =
+    hermesCommand ?? selection?.hermesCommand ?? resolveHermesCommand();
   if (!selection || selection.commandUnavailable) {
-    selection = await selectHermesBase(hermesCommand, baseRequest);
+    selection = await selectHermesBase(command, baseRequest);
   }
   for (const line of selection.logs) console.log(line);
   const result: HermesCompileResult = {
@@ -695,31 +825,33 @@ export async function compileHermesByteCode({
     base: null,
   };
   const base = selection.base;
+  // the packager + hermes maps merged into sourcemapOutput
+  let composed = false;
 
-  if (base) {
-    // hermesc reads its input in full before writing, so compiling in place is
-    // safe; keep the JS bundle aside while a base compile may still fail or be
-    // rejected by the equivalence check. With verification on, the plain
-    // compile the check needs runs concurrently in a sibling directory (same
-    // file name, so its sourcemap looks identical) and simply becomes the
-    // result when the base is rejected — no third compile.
-    const jsBackup = `${bundlePath}.js.bak`;
-    fs.copyFileSync(bundlePath, jsBackup);
-    const plainDir = path.join(outputFolder, '.hermes-plain');
-    const plainPath = path.join(plainDir, bundleName);
+  if (!base) {
+    await compilePlain(command, bundlePath);
+  } else {
+    // The JS bundle moves into a work dir and both hermesc runs read it there
+    // (no copies); the base compile writes the real output, and with
+    // verification on the plain compile the check needs runs concurrently
+    // into `plain/` — it simply becomes the result when the base is rejected,
+    // so a rejected base never costs a third compile.
+    const workDir = path.join(outputFolder, '.hermes-base');
+    const jsSource = path.join(workDir, bundleName);
+    const plainPath = path.join(workDir, 'plain', bundleName);
     const wantPlain = Boolean(baseRequest?.verify);
-    if (wantPlain) {
-      fs.ensureDirSync(plainDir);
-      fs.copyFileSync(bundlePath, plainPath);
-    }
-    const args = hermescArgsWithBase(plainArgs, base.path);
-    console.log(
-      t('runningHermesc', { command: hermesCommand, args: args.join(' ') }),
+    fs.ensureDirSync(path.dirname(plainPath));
+    fs.renameSync(bundlePath, jsSource);
+    const args = hermescArgsWithBase(
+      buildHermescArgs(bundlePath, jsSource),
+      base.path,
     );
+    console.log(t('runningHermesc', { command, args: args.join(' ') }));
     const [attempt, plain] = await Promise.all([
-      runProcess(hermesCommand, args, true),
+      // -w: warnings only bloat the captured stderr, errors still print
+      runProcess(command, [...args, '-w'], true),
       wantPlain
-        ? runProcess(hermesCommand, buildHermescArgs(plainPath), false)
+        ? runProcess(command, buildHermescArgs(plainPath, jsSource), false)
         : Promise.resolve<ProcessOutcome | null>(null),
     ]);
     let usedBase = attempt.status === 0 && !attempt.error;
@@ -734,8 +866,9 @@ export async function compileHermesByteCode({
         }),
       );
       if (fullStderr.trim()) {
-        // the summary drops warning noise; keep everything for bug reports
-        const logPath = path.join(outputFolder, 'hermes-base-error.log');
+        // the summary drops noise; keep everything for bug reports — next to
+        // the intermediate dir, never inside it (its content is packed)
+        const logPath = hermesBaseErrorLogPath(outputFolder);
         try {
           fs.writeFileSync(logPath, fullStderr);
           console.warn(t('hermesBaseCompileFailedLog', { file: logPath }));
@@ -743,100 +876,77 @@ export async function compileHermesByteCode({
       }
     }
     const plainOk = plain !== null && plain.status === 0 && !plain.error;
+    // compose the base output's map while the disassembly compare runs; it is
+    // redone from the plain map in the rare case the base is rejected
+    const speculativeCompose =
+      usedBase && sourcemapOutput
+        ? composeSourceMaps(packagerMap, hermesMap, sourcemapOutput)
+        : null;
     if (usedBase && wantPlain) {
-      // compare disassembly, keep whichever is right
-      let ok = plainOk;
-      if (ok) {
+      if (!plainOk) {
+        // the check could not run; that is not a verification failure
+        console.warn(
+          t('hermesBasePlainCompileFailed', {
+            reason:
+              (plain?.error && String(plain.error.message ?? plain.error)) ||
+              `exit ${plain?.status}`,
+          }),
+        );
+      } else {
+        let ok: boolean;
         try {
           ok = await verifyHermesBaseEquivalence(
-            hermesCommand,
+            command,
             bundlePath,
             plainPath,
           );
         } catch {
           ok = false;
         }
+        result.verified = ok;
+        if (ok) {
+          console.log(t('hermesBaseVerified'));
+        } else {
+          console.warn(t('hermesBaseVerifyFailed'));
+          usedBase = false;
+        }
       }
-      result.verified = ok;
-      if (ok) {
-        console.log(t('hermesBaseVerified'));
-      } else {
-        console.warn(t('hermesBaseVerifyFailed'));
-        usedBase = false;
-      }
+    }
+    if (speculativeCompose) {
+      const done = await speculativeCompose.catch((error) => {
+        if (usedBase) throw error;
+        return false;
+      });
+      composed = usedBase && done;
     }
     if (!usedBase) {
       if (plainOk) {
         fs.moveSync(plainPath, bundlePath, { overwrite: true });
         if (fs.existsSync(`${plainPath}.map`)) {
-          fs.moveSync(`${plainPath}.map`, `${bundlePath}.map`, {
-            overwrite: true,
-          });
+          fs.moveSync(`${plainPath}.map`, hermesMap, { overwrite: true });
         }
       } else {
-        fs.copyFileSync(jsBackup, bundlePath);
-        console.log(
-          t('runningHermesc', {
-            command: hermesCommand,
-            args: plainArgs.join(' '),
-          }),
-        );
-        assertSuccessfulSyncProcess(
-          spawnSync(hermesCommand, plainArgs, { stdio: 'ignore' }),
-          hermesCommand,
-        );
+        await compilePlain(command, bundlePath, jsSource);
       }
     }
-    fs.removeSync(jsBackup);
-    fs.removeSync(plainDir);
+    fs.removeSync(workDir);
     result.base = usedBase ? base : null;
-  } else {
-    console.log(
-      t('runningHermesc', {
-        command: hermesCommand,
-        args: plainArgs.join(' '),
-      }),
-    );
-    assertSuccessfulSyncProcess(
-      spawnSync(hermesCommand, plainArgs, {
-        stdio: 'ignore',
-      }),
-      hermesCommand,
-    );
   }
-  if (sourcemapOutput) {
-    let composerPath: string;
-    try {
-      // resolve through the project so hoisted node_modules (monorepos) work
-      composerPath = require.resolve(
-        'react-native/scripts/compose-source-maps.js',
-        { paths: [process.cwd()] },
-      );
-    } catch {
-      console.warn(t('composeSourceMapsNotFound'));
-      return result;
-    }
-    console.log(t('composingSourceMap'));
-    assertSuccessfulSyncProcess(
-      spawnJavaScriptSync(
-        [
-          composerPath,
-          path.join(outputFolder, `${bundleName}.txt.map`),
-          path.join(outputFolder, `${bundleName}.map`),
-          '-o',
-          sourcemapOutput,
-        ],
-        {
-          stdio: 'ignore',
-        },
-      ),
-      composerPath,
-    );
+  if (sourcemapOutput && !composed) {
+    await composeSourceMaps(packagerMap, hermesMap, sourcemapOutput);
   }
   if (shouldCleanSourcemap) {
-    fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+    fs.removeSync(packagerMap);
   }
   return result;
+}
+
+/** where a failed base attempt's full hermesc output goes (never packed) */
+export function hermesBaseErrorLogPath(outputFolder: string): string {
+  return path.join(
+    path.dirname(path.resolve(outputFolder)),
+    'hermes-base-error.log',
+  );
 }
 
 /**
@@ -867,6 +977,7 @@ export function startHermesBaseSelection(
         logs: [
           t('hermesBaseNone', { reason: error?.message ?? String(error) }),
         ],
+        hermesCommand,
       };
     }
   })();
@@ -881,6 +992,7 @@ async function selectHermesBase(
     base: null,
     bytecodeVersion,
     logs,
+    hermesCommand,
   });
   if (!request || request.option === 'none') {
     if (request) {
@@ -910,7 +1022,7 @@ async function selectHermesBase(
       fetchBase: getHermesBase,
       log: (message) => logs.push(message),
     });
-    return { base, bytecodeVersion, logs };
+    return { base, bytecodeVersion, logs, hermesCommand };
   } catch (error: any) {
     logs.push(t('hermesBaseNone', { reason: error?.message ?? String(error) }));
     return none(bytecodeVersion);

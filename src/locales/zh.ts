@@ -208,6 +208,8 @@ export default {
   hermesBaseCompileFailed:
     'Hermes base 编译失败（{{- reason}}），改为不带 -base-bytecode 重编',
   hermesBaseCompileFailedLog: 'Hermes base：完整编译错误已写入 {{- file}}',
+  hermesBasePlainCompileFailed:
+    'Hermes base：用于校验的普通编译失败（{{- reason}}），保留 base 编译结果但未校验',
   hermesBaseVerified: 'Hermes base：字节码与普通编译等价，校验通过',
   hermesBaseVerifyFailed:
     'Hermes base：字节码与普通编译不等价，放弃 base 重新编译',

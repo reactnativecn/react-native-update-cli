@@ -11,8 +11,10 @@ import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
 import {
   type HbcTransformMeta,
-  transformHbcWithLayout,
+  transformHbcFile,
+  transformHbcWithLayoutInPlace,
   tryTransformPair,
+  tryTransformPairFiles,
 } from './utils/hbcTransform';
 import { t } from './utils/i18n';
 import {
@@ -71,8 +73,10 @@ type BundlePatchResult = {
   patch: BundlePatch;
   hbcTransform?: HbcTransformMeta;
 };
-type EntryMap = Record<string, { crc32: number; fileName: string }>;
-type CrcMap = Record<number, string>;
+type EntryMap = Record<string, ZipEntryContent & { fileName: string }>;
+/** 内容键(见 zipEntryContentKey)→ 原包路径 */
+type ContentMap = Record<string, string>;
+type ZipEntryContent = Pick<Entry, 'crc32' | 'uncompressedSize'>;
 type CopyMap = Record<string, string>;
 type DiffTarget =
   | { kind: 'ppk' }
@@ -86,6 +90,25 @@ type DiffCommandConfig = {
 };
 
 export { enumZipEntries, readEntry };
+
+/**
+ * 判定两个 zip entry 内容相同的键:crc32 单独并不足以证明内容一致(32 位
+ * 校验和碰撞并不罕见,尤其是长度不同的文件),必须同时要求解压后长度相等。
+ * 仅用于生成端匹配,manifest 里的 copies / copiesCrc 格式不变。
+ */
+export function zipEntryContentKey(entry: ZipEntryContent): string {
+  return `${entry.crc32}:${entry.uncompressedSize}`;
+}
+
+export function zipEntriesHaveSameContent(
+  left: ZipEntryContent,
+  right: ZipEntryContent,
+): boolean {
+  return (
+    left.crc32 === right.crc32 &&
+    left.uncompressedSize === right.uncompressedSize
+  );
+}
 
 const loadModule = <T>(pkgName: string): T | undefined => {
   const nodePathDirs = (process.env.NODE_PATH || '')
@@ -111,16 +134,51 @@ function basename(fn: string): string | undefined {
 function createOutputZip(output: string) {
   fs.ensureDirSync(path.dirname(output));
   const zipfile = new YazlZipFile();
+  const writeStream = fs.createWriteStream(output);
   const writePromise = new Promise<void>((resolve, reject) => {
     zipfile.outputStream.on('error', reject);
-    const writeStream = fs.createWriteStream(output);
     // without this, a full disk / read-only target left the promise pending
     writeStream.on('error', reject);
     zipfile.outputStream.pipe(writeStream).on('close', () => {
       resolve(void 0);
     });
   });
-  return { zipfile, writePromise };
+  // 失败时释放输出 fd 并删掉半成品,避免残留一个截断的 patch 包
+  const abort = async () => {
+    writePromise.catch(() => {});
+    zipfile.outputStream.unpipe(writeStream);
+    // yazl 的 outputStream 类型声明缺 destroy,运行时是 PassThrough
+    (zipfile.outputStream as unknown as { destroy(): void }).destroy();
+    if (!writeStream.closed) {
+      // 等 fd 真正关闭再删文件,避免 Windows 上删除被占用文件失败
+      await new Promise<void>((resolve) => {
+        writeStream.once('close', () => resolve());
+        if (!writeStream.destroyed) {
+          writeStream.destroy();
+        }
+      });
+    }
+    await fs.rm(output, { force: true });
+  };
+  return { zipfile, writePromise, abort };
+}
+
+/**
+ * 打开输出包,执行 build 填充条目并返回 manifest,最后写入 __diff.json
+ * 收尾。build 或收尾任何一步失败都会关闭输出流、删除半成品并重新抛出。
+ */
+async function writeDiffZip(
+  output: string,
+  build: (zipfile: YazlZipFile) => Promise<Record<string, unknown>>,
+) {
+  const { zipfile, writePromise, abort } = createOutputZip(output);
+  try {
+    const manifest = await build(zipfile);
+    await finishDiffZip(zipfile, writePromise, manifest);
+  } catch (error) {
+    await abort();
+    throw error;
+  }
 }
 
 // baseline patch 小于该值时跳过变换尝试:节省一次 diff 的 CPU,
@@ -207,10 +265,10 @@ async function filesEqual(leftPath: string, rightPath: string) {
 }
 
 /**
- * 大 bundle 流式路径:普通 bundle 直接从 ZIP entry 落盘后传入 native,
- * 避免 old/new/restored 的整块 Buffer 副本。HBC 变换仍需 Buffer,因为
- * T/T⁻¹ 当前是内存算法。native 已自校验的普通产物不再重复 patch;
- * 自定义/变换路径仍保留 round-trip 校验。
+ * 大 bundle 流式路径:bundle 直接从 ZIP entry 落盘后传入 native,
+ * 避免 old/new/restored 的整块 Buffer 副本。HBC 变换 T/T⁻¹ 也在文件上
+ * 按段定位改写(transformHbcFile),全程不持有整个 bundle。native 已
+ * 自校验的普通产物不再重复 patch;自定义/变换路径仍保留 round-trip 校验。
  */
 async function buildStreamBundlePatch(
   originSource: BundleSource,
@@ -241,25 +299,17 @@ async function buildStreamBundlePatch(
     newSource,
     path.join(tempRoot, 'new.bin'),
   );
-  const originBuffer = options.hbcTransform
-    ? await bundleSourceBuffer(originSource)
-    : null;
-  const newBuffer = options.hbcTransform
-    ? await bundleSourceBuffer(newSource)
-    : null;
-  const pair =
-    originBuffer && newBuffer
-      ? tryTransformPair(originBuffer, newBuffer)
-      : null;
+  // 变换走文件版 T:只读头部选布局、按段定位改写,不把 bundle 读进内存
   const transformedOldFile = path.join(tempRoot, 'old-transformed.bin');
   const transformedNewFile = path.join(tempRoot, 'new-transformed.bin');
-
-  if (pair) {
-    await Promise.all([
-      fs.writeFile(transformedOldFile, pair.tOld),
-      fs.writeFile(transformedNewFile, pair.tNew),
-    ]);
-  }
+  const pair = options.hbcTransform
+    ? await tryTransformPairFiles(
+        rawOldFile,
+        rawNewFile,
+        transformedOldFile,
+        transformedNewFile,
+      )
+    : null;
   reportDiffPhase(options, {
     phase: 'materialize',
     durationMs: extractionDurationMs + performance.now() - phaseStartedAt,
@@ -307,17 +357,15 @@ async function buildStreamBundlePatch(
       restoredFile,
     );
     if (chosenPair) {
-      const restoredRaw = await fs.readFile(restoredFile);
-      const restored = transformHbcWithLayout(
-        restoredRaw,
+      // T⁻¹ 同样在文件上按段改写,再以流式哈希比对,内存与 bundle 大小无关
+      const restoredRawFile = path.join(tempRoot, 'restored-raw.bin');
+      const inverted = await transformHbcFile(
+        restoredFile,
+        restoredRawFile,
         chosenPair.layout,
         true,
       );
-      if (
-        !restored ||
-        !newBuffer ||
-        Buffer.compare(restored, newBuffer) !== 0
-      ) {
+      if (!inverted || !(await filesEqual(restoredRawFile, rawNewFile))) {
         throw new Error('stream diff round-trip verification failed');
       }
     } else if (!(await filesEqual(restoredFile, rawNewFile))) {
@@ -395,9 +443,12 @@ async function buildBundlePatch(
       return { patch: { kind: 'buffer', data: baseline } };
     }
 
+    // patched 是 patchFn 新返回的 Buffer,原地做 T⁻¹ 省去一次整块拷贝
     const patched = options.patchFn(pair.tOld, candidate);
-    const restored = transformHbcWithLayout(patched, pair.layout, true);
-    if (!restored || Buffer.compare(restored, newBuffer) !== 0) {
+    if (
+      !transformHbcWithLayoutInPlace(patched, pair.layout, true) ||
+      Buffer.compare(patched, newBuffer) !== 0
+    ) {
       console.warn(t('hbcTransformRoundTripFailed'));
       return { patch: { kind: 'buffer', data: baseline } };
     }
@@ -535,7 +586,7 @@ async function diffFromPPK(
   workRoot: string,
 ) {
   const originEntries: EntryMap = {};
-  const originMap: CrcMap = {};
+  const originMap: ContentMap = {};
 
   let originSource: BundleSource | undefined;
 
@@ -543,7 +594,7 @@ async function diffFromPPK(
     originEntries[entry.fileName] = entry;
     if (!/\/$/.test(entry.fileName)) {
       // isFile
-      originMap[entry.crc32] = entry.fileName;
+      originMap[zipEntryContentKey(entry)] = entry.fileName;
 
       if (isPPKBundleFileName(entry.fileName)) {
         // This is source.
@@ -562,90 +613,91 @@ async function diffFromPPK(
   }
 
   const copies: CopyMap = {};
+  const bundleSource = originSource;
 
-  const { zipfile, writePromise } = createOutputZip(output);
+  await writeDiffZip(output, async (zipfile) => {
+    const addedEntry: Record<string, true> = {};
 
-  const addedEntry: Record<string, true> = {};
-
-  function addEntry(fn: string) {
-    //console.log(fn);
-    if (!fn || addedEntry[fn]) {
-      return;
-    }
-    addedEntry[fn] = true;
-    const base = basename(fn);
-    if (base) {
-      addEntry(base);
-    }
-    zipfile.addEmptyDirectory(fn);
-  }
-
-  const newEntries: EntryMap = {};
-  const hbcTransformMetas: Record<string, HbcTransformMeta> = {};
-
-  await enumZipEntries(next, async (entry, nextZipfile) => {
-    newEntries[entry.fileName] = entry;
-
-    if (/\/$/.test(entry.fileName)) {
-      // Directory
-      if (!originEntries[entry.fileName]) {
-        addEntry(entry.fileName);
-      }
-    } else if (isPPKBundleFileName(entry.fileName)) {
-      await addBundlePatch(
-        zipfile,
-        entry,
-        nextZipfile,
-        diffFn,
-        originSource,
-        bundleOptions,
-        hbcTransformMetas,
-        workRoot,
-      );
-    } else {
-      // If same file.
-      const originEntry = originEntries[entry.fileName];
-      if (originEntry && originEntry.crc32 === entry.crc32) {
-        // ignore
+    function addEntry(fn: string) {
+      //console.log(fn);
+      if (!fn || addedEntry[fn]) {
         return;
       }
+      addedEntry[fn] = true;
+      const base = basename(fn);
+      if (base) {
+        addEntry(base);
+      }
+      zipfile.addEmptyDirectory(fn);
+    }
 
-      // If moved from other place
-      const movedFrom = originMap[entry.crc32];
-      if (movedFrom) {
-        const base = basename(entry.fileName);
-        if (base && !originEntries[base]) {
-          addEntry(base);
+    const newEntries: EntryMap = {};
+    const hbcTransformMetas: Record<string, HbcTransformMeta> = {};
+
+    await enumZipEntries(next, async (entry, nextZipfile) => {
+      newEntries[entry.fileName] = entry;
+
+      if (/\/$/.test(entry.fileName)) {
+        // Directory
+        if (!originEntries[entry.fileName]) {
+          addEntry(entry.fileName);
         }
-        copies[entry.fileName] = movedFrom;
-        return;
+      } else if (isPPKBundleFileName(entry.fileName)) {
+        await addBundlePatch(
+          zipfile,
+          entry,
+          nextZipfile,
+          diffFn,
+          bundleSource,
+          bundleOptions,
+          hbcTransformMetas,
+          workRoot,
+        );
+      } else {
+        // If same file.
+        const originEntry = originEntries[entry.fileName];
+        if (originEntry && zipEntriesHaveSameContent(originEntry, entry)) {
+          // ignore
+          return;
+        }
+
+        // If moved from other place
+        const movedFrom = originMap[zipEntryContentKey(entry)];
+        if (movedFrom) {
+          const base = basename(entry.fileName);
+          if (base && !originEntries[base]) {
+            addEntry(base);
+          }
+          copies[entry.fileName] = movedFrom;
+          return;
+        }
+
+        // New file.
+        const basePath = basename(entry.fileName);
+        if (basePath) {
+          addEntry(basePath);
+        }
+
+        await addFileFromZipEntry(zipfile, entry, nextZipfile);
       }
+    });
 
-      // New file.
-      const basePath = basename(entry.fileName);
-      if (basePath) {
-        addEntry(basePath);
+    const deletes: Record<string, 1> = {};
+
+    for (const k in originEntries) {
+      if (!newEntries[k]) {
+        console.log(t('deleteFile', { file: k }));
+        deletes[k] = 1;
       }
-
-      await addFileFromZipEntry(zipfile, entry, nextZipfile);
     }
-  });
 
-  const deletes: Record<string, 1> = {};
-
-  for (const k in originEntries) {
-    if (!newEntries[k]) {
-      console.log(t('deleteFile', { file: k }));
-      deletes[k] = 1;
-    }
-  }
-
-  await finishDiffZip(zipfile, writePromise, {
-    copies,
-    deletes,
-    ...(Object.keys(hbcTransformMetas).length
-      ? { hbcTransform: hbcTransformMetas }
-      : {}),
+    return {
+      copies,
+      deletes,
+      ...(Object.keys(hbcTransformMetas).length
+        ? { hbcTransform: hbcTransformMetas }
+        : {}),
+    };
   });
 }
 
@@ -658,8 +710,9 @@ async function diffFromPackage(
   bundleOptions: BundleDiffOptions,
   workRoot: string,
 ) {
-  const originEntries: Record<string, number> = {};
-  const originMap: CrcMap = {};
+  // 路径 → 内容键(crc32 + 解压后长度)
+  const originEntries: Record<string, string> = {};
+  const originMap: ContentMap = {};
 
   let originSource: BundleSource | undefined;
 
@@ -683,8 +736,9 @@ async function diffFromPackage(
 
       //console.log(fn);
       // isFile
-      originEntries[fn] = entry.crc32;
-      originMap[entry.crc32] = fn;
+      const contentKey = zipEntryContentKey(entry);
+      originEntries[fn] = contentKey;
+      originMap[contentKey] = fn;
 
       if (resolvedEntry.kind === 'bundle') {
         // This is source.
@@ -703,50 +757,53 @@ async function diffFromPackage(
   }
 
   const copies: CopyMap = {};
+  const bundleSource = originSource;
 
-  const { zipfile, writePromise } = createOutputZip(output);
-  const hbcTransformMetas: Record<string, HbcTransformMeta> = {};
+  await writeDiffZip(output, async (zipfile) => {
+    const hbcTransformMetas: Record<string, HbcTransformMeta> = {};
 
-  await enumZipEntries(next, async (entry, nextZipfile) => {
-    if (/\/$/.test(entry.fileName)) {
-      // Directory
-      zipfile.addEmptyDirectory(entry.fileName);
-    } else if (isPPKBundleFileName(entry.fileName)) {
-      await addBundlePatch(
-        zipfile,
-        entry,
-        nextZipfile,
-        diffFn,
-        originSource,
-        bundleOptions,
-        hbcTransformMetas,
-        workRoot,
-      );
-    } else {
-      // If same file.
-      if (originEntries[entry.fileName] === entry.crc32) {
-        copies[entry.fileName] = '';
-        copiesCrc[entry.fileName] = entry.crc32;
-        return;
+    await enumZipEntries(next, async (entry, nextZipfile) => {
+      if (/\/$/.test(entry.fileName)) {
+        // Directory
+        zipfile.addEmptyDirectory(entry.fileName);
+      } else if (isPPKBundleFileName(entry.fileName)) {
+        await addBundlePatch(
+          zipfile,
+          entry,
+          nextZipfile,
+          diffFn,
+          bundleSource,
+          bundleOptions,
+          hbcTransformMetas,
+          workRoot,
+        );
+      } else {
+        // If same file.
+        const contentKey = zipEntryContentKey(entry);
+        if (originEntries[entry.fileName] === contentKey) {
+          copies[entry.fileName] = '';
+          copiesCrc[entry.fileName] = entry.crc32;
+          return;
+        }
+        // If moved from other place
+        const movedFrom = originMap[contentKey];
+        if (movedFrom) {
+          copies[entry.fileName] = movedFrom;
+          copiesCrc[entry.fileName] = entry.crc32;
+          return;
+        }
+
+        await addFileFromZipEntry(zipfile, entry, nextZipfile);
       }
-      // If moved from other place
-      const movedFrom = originMap[entry.crc32];
-      if (movedFrom) {
-        copies[entry.fileName] = movedFrom;
-        copiesCrc[entry.fileName] = entry.crc32;
-        return;
-      }
+    });
 
-      await addFileFromZipEntry(zipfile, entry, nextZipfile);
-    }
-  });
-
-  await finishDiffZip(zipfile, writePromise, {
-    copies,
-    copiesCrc,
-    ...(Object.keys(hbcTransformMetas).length
-      ? { hbcTransform: hbcTransformMetas }
-      : {}),
+    return {
+      copies,
+      copiesCrc,
+      ...(Object.keys(hbcTransformMetas).length
+        ? { hbcTransform: hbcTransformMetas }
+        : {}),
+    };
   });
 }
 

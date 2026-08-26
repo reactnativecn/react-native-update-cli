@@ -7,7 +7,6 @@ import {
   open as openZipFile,
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
-import { t } from './i18n';
 
 export function readEntry(
   entry: Entry,
@@ -26,7 +25,8 @@ export function readEntry(
         buffers.push(chunk);
       });
       stream.on('end', () => {
-        resolve(Buffer.concat(buffers));
+        // a single chunk (a cached Range read) is handed back as-is, not copied
+        resolve(buffers.length === 1 ? buffers[0] : Buffer.concat(buffers));
       });
       stream.on('error', (err) => {
         reject(err);
@@ -169,21 +169,22 @@ export async function enumZipEntries(
                 path.join(os.tmpdir(), 'nested_zip_'),
               );
               const tempZipPath = path.join(tempDir, 'temp.zip');
-
-              await new Promise((res, rej) => {
-                zipfile.openReadStream(entry, async (err, readStream) => {
-                  if (err) return rej(err);
-                  const writeStream = fs.createWriteStream(tempZipPath);
-                  readStream.on('error', rej);
-                  readStream.pipe(writeStream);
-                  writeStream.on('finish', () => res(void 0));
-                  writeStream.on('error', rej);
+              try {
+                await new Promise((res, rej) => {
+                  zipfile.openReadStream(entry, async (err, readStream) => {
+                    if (err) return rej(err);
+                    const writeStream = fs.createWriteStream(tempZipPath);
+                    readStream.on('error', rej);
+                    readStream.pipe(writeStream);
+                    writeStream.on('finish', () => res(void 0));
+                    writeStream.on('error', rej);
+                  });
                 });
-              });
 
-              await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
-
-              await fs.remove(tempDir);
+                await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
+              } finally {
+                await fs.remove(tempDir);
+              }
             }
 
             const result = callback(entry, zipfile, fullPath);
@@ -191,7 +192,8 @@ export async function enumZipEntries(
               await result;
             }
           } catch (error) {
-            console.error(t('processingError', { error }));
+            // the rejection carries the error; logging it here too would make
+            // callers report it twice
             zipfile.close();
             reject(error);
             return;

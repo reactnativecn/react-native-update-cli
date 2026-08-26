@@ -82,10 +82,10 @@ interface LatestVersionOptions {
    * Awaiting the api to return might take time, depending on the network, and might impact your package loading performance.
    * You can use the cache mechanism to improve load performance and reduce unnecessary network requests.
    * If `useCache` is not supplied, the api will always check for updates and wait for every requests to return before returning itself.
-   * If `useCache` is used, the api will always returned immediately, with either (for each provided packages):
-   * 1) a latest/next version available if a cache was found
-   * 2) no latest/next version available if no cache was found - in such case updates will be fetched in the background and a cache will
-   * be created for each provided packages and made available for the next call to the api.
+   * If `useCache` is used (for each provided package):
+   * 1) a fresh cache (younger than `cacheMaxAge`, from the same registry) answers without any network request
+   * 2) otherwise the registry is queried and the cache refreshed; when that query fails, a stale cache (if any) is used instead.
+   * Combine with `unref` so a slow refresh never keeps the process alive.
    * @default false
    */
   readonly useCache?: boolean;
@@ -93,13 +93,17 @@ interface LatestVersionOptions {
   /**
    * How long the cache for the provided packages should be used before being refreshed (in milliseconds).
    * If `useCache` is not supplied, this option has no effect.
-   * If `0` is used, this will force the cache to refresh immediately:
-   * 1) The api will returned immediately (without any latest nor next version available for the provided packages)
-   * 2) New updates will be fetched in the background
-   * 3) The cache for each provided packages will be refreshed and made available for the next call to the api
+   * If `0` is used, the cache is always refreshed (a stale cache still serves as a fallback when the refresh fails).
    * @default ONE_DAY
    */
   readonly cacheMaxAge?: number;
+
+  /**
+   * Do not let the registry request keep the process alive: its socket is `unref`'d, so the process may exit before the
+   * request completes (the returned promise then simply never settles). Use for opportunistic background checks.
+   * @default false
+   */
+  readonly unref?: boolean;
 
   /**
    * A JavaScript package registry url that implements the CommonJS Package Registry specification.
@@ -190,6 +194,8 @@ interface PackageMetadata {
   lastUpdateDate: number;
   versions: string[];
   distTags: Record<string, string>;
+  /** registry the metadata came from; a cache from another registry is not reused */
+  registryUrl?: string;
 }
 
 export const ONE_DAY = 1000 * 60 * 60 * 24; // eslint-disable-line @typescript-eslint/naming-convention
@@ -202,14 +208,21 @@ const isPackageJson = (obj: any): obj is PackageJson => {
   );
 };
 
+const resolveRegistryUrl = (
+  pkgName: string,
+  options?: LatestVersionOptions,
+): string => {
+  const i = pkgName.indexOf('/');
+  const pkgScope = i !== -1 ? pkgName.slice(0, i) : '';
+  return options?.registryUrl ?? getRegistryUrl(pkgScope);
+};
+
 const downloadMetadata = (
   pkgName: string,
   options?: LatestVersionOptions,
 ): Promise<PackageMetadata> => {
   return new Promise((resolve, reject) => {
-    const i = pkgName.indexOf('/');
-    const pkgScope = i !== -1 ? pkgName.slice(0, i) : '';
-    const registryUrl = options?.registryUrl ?? getRegistryUrl(pkgScope);
+    const registryUrl = resolveRegistryUrl(pkgName, options);
     const pkgUrl = new URL(
       encodeURIComponent(pkgName).replace(/^%40/, '@'),
       registryUrl,
@@ -252,6 +265,7 @@ const downloadMetadata = (
               lastUpdateDate: Date.now(),
               versions: Object.keys(pkgMetadata.versions as string[]),
               distTags: pkgMetadata['dist-tags'],
+              registryUrl,
             });
             return;
           } catch (err) {
@@ -279,11 +293,23 @@ const downloadMetadata = (
     request.on('close', () => {
       request.removeAllListeners();
     });
+    if (options?.unref) {
+      // A background check must never delay the process exit: drop the
+      // socket's ref (also for a pooled keep-alive socket, which the agent
+      // ref's again right before handing it out).
+      request.once('socket', (socket: { unref?: () => void }) => {
+        socket.unref?.();
+      });
+    }
   });
 };
 
 const getCacheDir = (name = '@badisi/latest-version'): string => {
   const homeDir = homedir();
+  if (process.env.XDG_CACHE_HOME) {
+    // an explicit override wins on every platform (also lets tests isolate)
+    return join(process.env.XDG_CACHE_HOME, name);
+  }
   switch (process.platform) {
     case 'darwin':
       return join(homeDir, 'Library', 'Caches', name);
@@ -299,30 +325,48 @@ const getCacheDir = (name = '@badisi/latest-version'): string => {
 };
 
 const saveMetadataToCache = (pkg: PackageMetadata): void => {
-  const filePath = join(getCacheDir(), `${pkg.name}.json`);
-  if (!existsSync(dirname(filePath))) {
-    mkdirSync(dirname(filePath), { recursive: true });
+  try {
+    const filePath = join(getCacheDir(), `${pkg.name}.json`);
+    if (!existsSync(dirname(filePath))) {
+      mkdirSync(dirname(filePath), { recursive: true });
+    }
+    writeFileSync(filePath, JSON.stringify(pkg));
+  } catch {
+    // a read-only or missing cache dir must not turn into an error
   }
-  writeFileSync(filePath, JSON.stringify(pkg));
 };
 
+/**
+ * The cached metadata of a package (from the same registry), and whether it is
+ * still younger than `cacheMaxAge`. A stale entry is returned as well so it can
+ * serve as a fallback when the registry is unreachable.
+ */
 const getMetadataFromCache = (
   pkgName: string,
   options?: LatestVersionOptions,
-): PackageMetadata | undefined => {
+): { metadata: PackageMetadata; fresh: boolean } | undefined => {
   const maxAge = options?.cacheMaxAge ?? ONE_DAY;
-  if (maxAge !== 0) {
+  try {
     const pkgCacheFilePath = join(getCacheDir(), `${pkgName}.json`);
-    if (existsSync(pkgCacheFilePath)) {
-      const pkg = JSON.parse(
-        readFileSync(pkgCacheFilePath).toString(),
-      ) as PackageMetadata;
-      if (Date.now() - pkg.lastUpdateDate < maxAge) {
-        return pkg;
-      }
+    if (!existsSync(pkgCacheFilePath)) {
+      return undefined;
     }
+    const metadata = JSON.parse(
+      readFileSync(pkgCacheFilePath).toString(),
+    ) as PackageMetadata;
+    if (
+      !metadata ||
+      typeof metadata.lastUpdateDate !== 'number' ||
+      !metadata.distTags ||
+      metadata.registryUrl !== resolveRegistryUrl(pkgName, options)
+    ) {
+      return undefined;
+    }
+    const age = Date.now() - metadata.lastUpdateDate;
+    return { metadata, fresh: maxAge !== 0 && age >= 0 && age < maxAge };
+  } catch {
+    return undefined; // unreadable / corrupt cache is the same as no cache
   }
-  return undefined; // invalidates cache
 };
 
 const getRegistryVersions = async (
@@ -332,10 +376,19 @@ const getRegistryVersions = async (
 ): Promise<RegistryVersions> => {
   let pkgMetadata: PackageMetadata | undefined;
   if (pkgName.length && options?.useCache) {
-    pkgMetadata = getMetadataFromCache(pkgName, options);
-    if (!pkgMetadata) {
-      pkgMetadata = await downloadMetadata(pkgName, options);
-      saveMetadataToCache(pkgMetadata);
+    const cached = getMetadataFromCache(pkgName, options);
+    if (cached?.fresh) {
+      pkgMetadata = cached.metadata;
+    } else {
+      try {
+        pkgMetadata = await downloadMetadata(pkgName, options);
+        saveMetadataToCache(pkgMetadata);
+      } catch (err) {
+        if (!cached) {
+          throw err;
+        }
+        pkgMetadata = cached.metadata; // stale beats nothing
+      }
     }
   } else if (pkgName.length) {
     pkgMetadata = await downloadMetadata(pkgName, options);

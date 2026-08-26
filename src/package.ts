@@ -1,11 +1,10 @@
 import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import Table from 'tty-table';
 import { doDelete, getAllPackages, post, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import { createSlimNativePackage } from './native-package';
-import type { Platform } from './types';
+import type { Package, Platform } from './types';
 import {
   getAabInfo,
   getApkInfo,
@@ -13,8 +12,7 @@ import {
   getIpaInfo,
   question,
 } from './utils';
-import { AabParser } from './utils/app-info-parser/aab';
-import { depVersions } from './utils/dep-versions';
+import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { bundleEntryMatcher, cachePut } from './utils/hermes-base';
 import { t } from './utils/i18n';
@@ -60,6 +58,13 @@ type NativeUploadConfig = {
     buildTime: NativePackageInfo['buildTime'],
   ) => string | number | undefined;
 };
+
+// the AAB parser drags in protobufjs; load it only for the aab commands
+function createAabParser(source: string) {
+  const { AabParser } =
+    require('./utils/app-info-parser/aab') as typeof import('./utils/app-info-parser/aab');
+  return new AabParser(source);
+}
 
 export function normalizeUploadBuildTime(value: unknown): string {
   return String(value);
@@ -169,8 +174,9 @@ async function uploadNativePackage(
           );
     if (bundleFile) {
       // keep the embedded bundle locally so a later `bundle` can use it as
-      // hermes base without downloading it back (see hermes-base.ts)
-      await cachePut(bundleFile).catch(() => {});
+      // hermes base without downloading it back (see hermes-base.ts); getInfo
+      // already hashed the bundle, so pass that hash instead of hashing twice
+      await cachePut(bundleFile, undefined, bundleHash).catch(() => {});
     }
     const normalizedBuildTime = config.normalizeBuildTime
       ? config.normalizeBuildTime(buildTime)
@@ -186,7 +192,7 @@ async function uploadNativePackage(
       // Old servers strip unknown fields, so this is forward-compatible.
       ...(bundleHash ? { bundleHash } : {}),
       ...bundleLocation,
-      deps: depVersions,
+      deps: getDepVersions(),
       commit: await getCommitInfo(),
     });
     console.log(
@@ -201,8 +207,12 @@ async function uploadNativePackage(
   }
 }
 
-export async function listPackage(appId: string) {
-  const allPkgs = (await getAllPackages(appId)) || [];
+/**
+ * Print the app's native packages. Pass `packages` when the caller already
+ * fetched them (every page of the list), to skip fetching them again.
+ */
+export async function listPackage(appId: string, packages?: Package[]) {
+  const allPkgs = packages ?? (await getAllPackages(appId)) ?? [];
 
   const header = [
     { value: t('nativePackageId') },
@@ -230,13 +240,15 @@ export async function listPackage(appId: string) {
     rows.push([pkg.id, output]);
   }
 
+  // tty-table is ~25 ms to load; only pay for it when a table is rendered
+  const Table = require('tty-table') as typeof import('tty-table');
   console.log(Table(header, rows).render());
   console.log(t('totalPackages', { count: allPkgs.length }));
   return allPkgs;
 }
 
-export async function choosePackage(appId: string) {
-  const list = await listPackage(appId);
+export async function choosePackage(appId: string, packages?: Package[]) {
+  const list = await listPackage(appId, packages);
   const packageMap = new Map(list?.map((v) => [v.id.toString(), v]));
 
   while (true) {
@@ -302,7 +314,7 @@ export const packageCommands = {
     const includeAllSplits = parseBooleanOption(options.includeAllSplits);
     const splits = parseCsvOption(options.splits);
 
-    const parser = new AabParser(source);
+    const parser = createAabParser(source);
     try {
       await parser.extractApk(output, {
         includeAllSplits,
@@ -381,7 +393,7 @@ export const packageCommands = {
     const includeAllSplits = parseBooleanOption(options.includeAllSplits);
     const splits = parseCsvOption(options.splits);
 
-    const parser = new AabParser(source);
+    const parser = createAabParser(source);
     await parser.extractApk(output, {
       includeAllSplits,
       splits,

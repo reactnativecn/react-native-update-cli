@@ -57,10 +57,21 @@ const commandHandlers: Record<string, CliCommandHandler> = {
 };
 
 async function run() {
-  await printVersionCommand();
-  if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
+  const versionOnly =
+    process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version';
+  // The registry check for newer versions runs alongside the command (from a
+  // 1-day cache when possible) and only ever delays `-v`/`version` itself; its
+  // hint is printed once the command is done, or at exit for commands that
+  // exit on their own.
+  const versionCheck = await printVersionCommand({ wait: versionOnly });
+  if (versionOnly) {
     process.exit();
   }
+  process.on('exit', (code) => {
+    if (code === 0) {
+      versionCheck.printHints();
+    }
+  });
 
   const argv: CliArgv = require('cli-arguments').parse(require('../cli.json'));
   global.NO_INTERACTIVE =
@@ -79,6 +90,7 @@ async function run() {
     } else if (commandHandlers[argv.command]) {
       const handler = commandHandlers[argv.command];
       await handler(argv);
+      versionCheck.printHints();
     } else {
       throw new Error(t('unknownCommand', { command: argv.command }));
     }

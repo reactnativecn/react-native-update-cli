@@ -37,8 +37,41 @@ describe('depVersions utility', () => {
     );
     const moduleUrl = `${modulePath}?t=${Date.now()}_${testCount}`;
     const module = await import(moduleUrl);
-    return module.depVersions;
+    return module.getDepVersions();
   };
+
+  test('resolves lazily, once, and exposes the same data through depVersions', async () => {
+    fs.writeFileSync(
+      path.join(testDir, 'package.json'),
+      JSON.stringify({ dependencies: { lazy: '^1.0.0' } }),
+    );
+    const lazyDir = path.join(testDir, 'node_modules', 'lazy');
+    fs.mkdirSync(lazyDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(lazyDir, 'package.json'),
+      JSON.stringify({ version: '1.2.3' }),
+    );
+
+    const modulePath = path.join(
+      originalCwd,
+      'src',
+      'utils',
+      'dep-versions.ts',
+    );
+    const module = await import(`${modulePath}?lazy=${Date.now()}`);
+    // importing must not read anything: cwd is only consulted on first use
+    expect(cwdSpy).not.toHaveBeenCalled();
+
+    expect(module.getDepVersions()).toEqual({ lazy: '1.2.3' });
+    expect(module.depVersions.lazy).toBe('1.2.3');
+    expect(Object.keys(module.depVersions)).toEqual(['lazy']);
+    expect({ ...module.depVersions }).toEqual({ lazy: '1.2.3' });
+
+    // memoized: a later cwd change does not re-resolve
+    const callsAfterFirst = cwdSpy.mock.calls.length;
+    expect(module.getDepVersions()).toBe(module.getDepVersions());
+    expect(cwdSpy.mock.calls.length).toBe(callsAfterFirst);
+  });
 
   test('should return an empty object if no package.json is found', async () => {
     // testDir has no package.json

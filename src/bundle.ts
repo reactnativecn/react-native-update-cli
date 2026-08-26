@@ -39,6 +39,7 @@ type NormalizedBundleOptions = {
   hermes: boolean;
   hermesBase: string;
   verifyHermesBase: boolean;
+  resetCache: boolean;
   cacheMaxMb?: number;
   name?: string;
   description?: string;
@@ -118,6 +119,7 @@ export function normalizeBundleOptions(
       'verifyHermesBase',
       true,
     ),
+    resetCache: getBooleanOption(translatedOptions, 'resetCache', true),
     cacheMaxMb: parseCacheMaxMb(translatedOptions.cacheMaxMb),
     name: getOptionalStringOption(translatedOptions, 'name'),
     description: getOptionalStringOption(translatedOptions, 'description'),
@@ -262,6 +264,7 @@ export const bundleCommands = {
               verify: normalized.verifyHermesBase,
               cacheMaxMb: normalized.cacheMaxMb,
             },
+      resetCache: normalized.resetCache,
       cli: {
         taro: normalized.taro,
         expo: normalized.expo,
