@@ -61,6 +61,7 @@ type NormalizedBundleOptions = {
   sentryDist?: string;
 };
 
+/** Parse a positive cache-size option expressed in megabytes. */
 function parseCacheMaxMb(value: unknown): number | undefined {
   const parsed = typeof value === 'string' ? Number(value) : (value as number);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
@@ -82,6 +83,7 @@ export type PublishBundlePayload = {
   hermesBase?: HermesBaseMeta;
 };
 
+/** Read either spelling of an aliased optional CLI string option. */
 function getAliasedOptionalStringOption(
   options: Record<string, unknown>,
   key: string,
@@ -93,6 +95,7 @@ function getAliasedOptionalStringOption(
   );
 }
 
+/** Normalize translated CLI values into the bundle command's typed options. */
 export function normalizeBundleOptions(
   translatedOptions: Record<string, unknown>,
   platform: string,
@@ -166,6 +169,7 @@ export function normalizeBundleOptions(
   };
 }
 
+/** Upload generated Sentry artifacts when the detected plugin requires them. */
 async function uploadSentryArtifactsIfNeeded(
   shouldUpload: boolean,
   bundleName: string,
@@ -188,6 +192,7 @@ async function uploadSentryArtifactsIfNeeded(
   );
 }
 
+/** Build the version publish request while preserving its resolved app target. */
 export function createPublishBundleRequest(
   outputPath: string,
   platform: Platform,
@@ -205,6 +210,7 @@ export function createPublishBundleRequest(
   };
 }
 
+/** Publish a packed bundle through the version command implementation. */
 async function publishBundleVersion(
   outputPath: string,
   platform: Platform,
@@ -216,6 +222,7 @@ async function publishBundleVersion(
 }
 
 export const bundleCommands = {
+  /** Build a bundle and optionally publish it to one operation-scoped app. */
   bundle: async ({
     options,
   }: {
