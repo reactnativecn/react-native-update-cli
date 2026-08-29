@@ -41,6 +41,8 @@ type NormalizedBundleOptions = {
   verifyHermesBase: boolean;
   resetCache: boolean;
   cacheMaxMb?: number;
+  appId?: string;
+  config?: string;
   name?: string;
   description?: string;
   metaInfo?: string;
@@ -60,7 +62,9 @@ function parseCacheMaxMb(value: unknown): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-type PublishBundlePayload = {
+export type PublishBundlePayload = {
+  appId?: string;
+  config?: string;
   name?: string;
   description?: string;
   metaInfo?: string;
@@ -121,6 +125,8 @@ export function normalizeBundleOptions(
     ),
     resetCache: getBooleanOption(translatedOptions, 'resetCache', true),
     cacheMaxMb: parseCacheMaxMb(translatedOptions.cacheMaxMb),
+    appId: getOptionalStringOption(translatedOptions, 'appId'),
+    config: getOptionalStringOption(translatedOptions, 'config'),
     name: getOptionalStringOption(translatedOptions, 'name'),
     description: getOptionalStringOption(translatedOptions, 'description'),
     metaInfo: getOptionalStringOption(translatedOptions, 'metaInfo'),
@@ -178,18 +184,31 @@ async function uploadSentryArtifactsIfNeeded(
   );
 }
 
-async function publishBundleVersion(
+export function createPublishBundleRequest(
   outputPath: string,
   platform: Platform,
   payload: PublishBundlePayload,
-): Promise<string> {
-  return versionCommands.publish({
+): {
+  args: string[];
+  options: PublishBundlePayload & { platform: Platform };
+} {
+  return {
     args: [outputPath],
     options: {
       platform,
       ...payload,
     },
-  });
+  };
+}
+
+async function publishBundleVersion(
+  outputPath: string,
+  platform: Platform,
+  payload: PublishBundlePayload,
+): Promise<string> {
+  return versionCommands.publish(
+    createPublishBundleRequest(outputPath, platform, payload),
+  );
 }
 
 export const bundleCommands = {
@@ -231,15 +250,12 @@ export const bundleCommands = {
 
     await cleanStaleTmp().catch(() => {});
     // the hermes base lookup needs the app; resolve it up front but never
-    // fail the bundle over it (publishing resolves it again and reports)
-    let appIdForBase: string | undefined =
-      typeof options.appId === 'string' && options.appId
-        ? options.appId
-        : undefined;
+    // fail the bundle over it (publishing reports target errors later)
+    let appIdForBase = normalized.appId;
     if (!appIdForBase && normalized.hermesBase === 'auto') {
       try {
         appIdForBase = (
-          await getSelectedApp(platform, options.config as string | undefined)
+          await getSelectedApp(platform, normalized.config)
         ).appId;
       } catch {
         appIdForBase = undefined;
@@ -284,6 +300,8 @@ export const bundleCommands = {
 
     if (normalized.name) {
       await publishBundleVersion(realOutput, platform, {
+        appId: normalized.appId,
+        config: normalized.config,
         name: normalized.name,
         description: normalized.description,
         metaInfo: normalized.metaInfo,
@@ -314,6 +332,8 @@ export const bundleCommands = {
       const v = await question(t('uploadBundlePrompt'));
       if (v.toLowerCase() === 'y') {
         await publishBundleVersion(realOutput, platform, {
+          appId: normalized.appId,
+          config: normalized.config,
           hermesBase: baseMeta,
         });
         await uploadSentryArtifactsIfNeeded(
