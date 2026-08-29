@@ -161,9 +161,42 @@ describe('versionCommands.publish', () => {
       options: {
         versionId: '200',
         platform: 'android',
+        appId: '100',
         versionDeps: expect.any(Object),
         warnDepsChanges: true,
       },
+    });
+  });
+
+  test('keeps an explicit appId through version creation and binding', async () => {
+    await versionCommands.publish({
+      args: ['bundle.ppk'],
+      options: {
+        platform: 'android',
+        appId: '777',
+        name: 'v1',
+        packageVersion: '1.0.0',
+        'no-interactive': true,
+      },
+    });
+
+    expect(getSelectedAppSpy).not.toHaveBeenCalled();
+    expect(uploadFileSpy).toHaveBeenCalledWith(
+      'bundle.ppk',
+      undefined,
+      '777',
+    );
+    expect(postSpy).toHaveBeenCalledWith(
+      '/app/777/version/create',
+      expect.any(Object),
+    );
+    expect(updateSpy).toHaveBeenCalledWith({
+      options: expect.objectContaining({
+        versionId: '200',
+        platform: 'android',
+        appId: '777',
+        packageVersion: '1.0.0',
+      }),
     });
   });
 
