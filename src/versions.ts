@@ -585,6 +585,7 @@ export const versionCommands = {
         options: {
           versionId: id,
           platform,
+          appId: String(appId),
           packageId,
           packageVersion,
           packageVersionRange,
@@ -603,6 +604,7 @@ export const versionCommands = {
           options: {
             versionId: id,
             platform,
+            appId: String(appId),
             versionDeps: depVersions,
             warnDepsChanges: true,
           },
