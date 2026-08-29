@@ -1,5 +1,9 @@
 import path from 'path';
-import { getPlatform, getSelectedApp } from './app';
+import {
+  createAppTargetResolver,
+  getPlatform,
+  type ResolvedAppTarget,
+} from './app';
 import { packBundle } from './bundle-pack';
 import {
   copyDebugidForSentry,
@@ -246,21 +250,30 @@ export const bundleCommands = {
       throw new Error(t('platformRequired'));
     }
 
-    console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
+    const resolveTarget = createAppTargetResolver(platform, {
+      appId: normalized.appId,
+      config: normalized.config,
+    });
+    let resolvedTarget: ResolvedAppTarget | undefined;
+    const shouldResolveTargetBeforeBundle =
+      Boolean(normalized.name) ||
+      (normalized.dev !== 'true' && normalized.hermesBase === 'auto');
 
-    await cleanStaleTmp().catch(() => {});
-    // the hermes base lookup needs the app; resolve it up front but never
-    // fail the bundle over it (publishing reports target errors later)
-    let appIdForBase = normalized.appId;
-    if (!appIdForBase && normalized.hermesBase === 'auto') {
+    if (shouldResolveTargetBeforeBundle) {
       try {
-        appIdForBase = (await getSelectedApp(platform, normalized.config))
-          .appId;
-      } catch {
-        appIdForBase = undefined;
+        resolvedTarget = await resolveTarget();
+      } catch (error) {
+        // A bundle-only command may still fall back when no remote Hermes base
+        // is available. Named publishing must fail before doing expensive work.
+        if (normalized.name) {
+          throw error;
+        }
       }
     }
 
+    console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
+
+    await cleanStaleTmp().catch(() => {});
     const hermesResult = await runReactNativeBundleCommand({
       bundleName: normalized.bundleName,
       dev: normalized.dev,
@@ -275,7 +288,7 @@ export const bundleCommands = {
           ? undefined
           : {
               option: normalized.hermesBase,
-              appId: appIdForBase,
+              appId: resolvedTarget?.appId,
               verify: normalized.verifyHermesBase,
               cacheMaxMb: normalized.cacheMaxMb,
             },
@@ -298,9 +311,10 @@ export const bundleCommands = {
       : undefined;
 
     if (normalized.name) {
+      const target = resolvedTarget ?? (await resolveTarget());
       await publishBundleVersion(realOutput, platform, {
-        appId: normalized.appId,
-        config: normalized.config,
+        appId: target.appId,
+        config: target.configPath,
         name: normalized.name,
         description: normalized.description,
         metaInfo: normalized.metaInfo,
@@ -330,9 +344,10 @@ export const bundleCommands = {
     if (!getBooleanOption(options, 'no-interactive', false)) {
       const v = await question(t('uploadBundlePrompt'));
       if (v.toLowerCase() === 'y') {
+        const target = resolvedTarget ?? (await resolveTarget());
         await publishBundleVersion(realOutput, platform, {
-          appId: normalized.appId,
-          config: normalized.config,
+          appId: target.appId,
+          config: target.configPath,
           hermesBase: baseMeta,
         });
         await uploadSentryArtifactsIfNeeded(
