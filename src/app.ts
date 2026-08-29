@@ -11,6 +11,18 @@ interface AppSummary {
   platform: Platform;
 }
 
+export interface AppTargetOptions {
+  appId?: string;
+  config?: string;
+}
+
+export interface ResolvedAppTarget {
+  appId: string;
+  appKey?: string;
+  platform: Platform;
+  configPath: string;
+}
+
 export async function getPlatform(platform?: string) {
   return assertPlatform(
     platform || (await question(t('platformQuestion'))),
@@ -51,6 +63,44 @@ export async function getSelectedApp(
     appId: String(info.appId),
     appKey: info.appKey,
     platform,
+  };
+}
+
+/** Resolve an explicit or selected app into a stable operation target. */
+export async function resolveAppTarget(
+  platform: Platform,
+  options: AppTargetOptions = {},
+): Promise<ResolvedAppTarget> {
+  const configPath = options.config || updateJson;
+  if (options.appId) {
+    return {
+      appId: String(options.appId),
+      platform,
+      configPath,
+    };
+  }
+
+  return {
+    ...(await getSelectedApp(platform, configPath)),
+    configPath,
+  };
+}
+
+/** Cache app selection for one operation and retry after a failed lookup. */
+export function createAppTargetResolver(
+  platform: Platform,
+  options: AppTargetOptions = {},
+): () => Promise<ResolvedAppTarget> {
+  let pending: Promise<ResolvedAppTarget> | undefined;
+
+  return () => {
+    if (!pending) {
+      pending = resolveAppTarget(platform, options).catch((error) => {
+        pending = undefined;
+        throw error;
+      });
+    }
+    return pending;
   };
 }
 
