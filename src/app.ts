@@ -107,9 +107,7 @@ async function selectApp({
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
     {};
   try {
-    updateInfo = JSON.parse(
-      await fs.promises.readFile(configPath, 'utf8'),
-    );
+    updateInfo = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
       console.error(t('failedToParseUpdateJson'));
