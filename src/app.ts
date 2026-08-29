@@ -2,6 +2,7 @@ import fs from 'fs';
 import { doDelete, get, post } from './api';
 import type { Platform } from './types';
 import { loadTtyTable, question } from './utils';
+import { updateJson } from './utils/constants';
 import { t } from './utils/i18n';
 
 interface AppSummary {
@@ -29,11 +30,12 @@ export async function getSelectedApp(
 ): Promise<{ appId: string; appKey: string; platform: Platform }> {
   assertPlatform(platform);
 
+  const resolvedConfigPath = configPath || updateJson;
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
     {};
   try {
     updateInfo = JSON.parse(
-      await fs.promises.readFile(configPath || 'update.json', 'utf8'),
+      await fs.promises.readFile(resolvedConfigPath, 'utf8'),
     );
   } catch (e: any) {
     if (e.code === 'ENOENT') {
@@ -94,19 +96,19 @@ async function selectApp({
   options,
 }: {
   args: string[];
-  options: { platform?: Platform | '' };
+  options: { platform?: Platform | ''; config?: string };
 }) {
   const platform = await getPlatform(options.platform);
   const id = args[0]
     ? Number.parseInt(args[0], 10)
     : (await chooseApp(platform)).id;
 
-  const configPath = (options as any).config as string | undefined;
+  const configPath = options.config || updateJson;
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
     {};
   try {
     updateInfo = JSON.parse(
-      await fs.promises.readFile(configPath || 'update.json', 'utf8'),
+      await fs.promises.readFile(configPath, 'utf8'),
     );
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
@@ -120,7 +122,7 @@ async function selectApp({
     appKey,
   };
   await fs.promises.writeFile(
-    configPath || 'update.json',
+    configPath,
     JSON.stringify(updateInfo, null, 4),
     'utf8',
   );
@@ -131,7 +133,12 @@ export function getAppCommands() {
     createApp: async ({
       options,
     }: {
-      options: { name: string; downloadUrl: string; platform?: Platform | '' };
+      options: {
+        name: string;
+        downloadUrl: string;
+        platform?: Platform | '';
+        config?: string;
+      };
     }) => {
       const name = options.name || (await question(t('appNameQuestion')));
       const { downloadUrl } = options;
@@ -140,7 +147,7 @@ export function getAppCommands() {
       console.log(t('createAppSuccess', { id }));
       await selectApp({
         args: [String(id)],
-        options: { platform },
+        options: { platform, config: options.config },
       });
     },
     deleteApp: async ({
