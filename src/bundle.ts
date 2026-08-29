@@ -254,9 +254,8 @@ export const bundleCommands = {
     let appIdForBase = normalized.appId;
     if (!appIdForBase && normalized.hermesBase === 'auto') {
       try {
-        appIdForBase = (
-          await getSelectedApp(platform, normalized.config)
-        ).appId;
+        appIdForBase = (await getSelectedApp(platform, normalized.config))
+          .appId;
       } catch {
         appIdForBase = undefined;
       }
