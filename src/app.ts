@@ -23,12 +23,14 @@ export interface ResolvedAppTarget {
   configPath: string;
 }
 
+/** Resolve an explicit platform or prompt for one interactively. */
 export async function getPlatform(platform?: string) {
   return assertPlatform(
     platform || (await question(t('platformQuestion'))),
   ) as Platform;
 }
 
+/** Validate that a string names a platform supported by the update service. */
 export function assertPlatform(platform: string): Platform {
   if (platform !== 'ios' && platform !== 'android' && platform !== 'harmony') {
     throw new Error(t('unsupportedPlatform', { platform }));
@@ -36,6 +38,7 @@ export function assertPlatform(platform: string): Platform {
   return platform as Platform;
 }
 
+/** Read the selected app for a platform from the requested config file. */
 export async function getSelectedApp(
   platform: Platform,
   configPath?: string,
@@ -104,6 +107,7 @@ export function createAppTargetResolver(
   };
 }
 
+/** List apps, optionally filtering them to one platform. */
 export async function listApp(platform: Platform | '' = '') {
   const { data } = await get('/app/list');
   const allApps = data as AppSummary[];
@@ -129,6 +133,7 @@ export async function listApp(platform: Platform | '' = '') {
   return list;
 }
 
+/** Prompt until the user chooses an app belonging to the target platform. */
 export async function chooseApp(platform: Platform) {
   const list = await listApp(platform);
 
@@ -141,6 +146,7 @@ export async function chooseApp(platform: Platform) {
   }
 }
 
+/** Persist an app selection in the requested brand-aware config file. */
 async function selectApp({
   args,
   options,
@@ -176,8 +182,10 @@ async function selectApp({
   );
 }
 
+/** Build the application-management command handlers used by the CLI. */
 export function getAppCommands() {
   return {
+    /** Create an app and select it in the same configuration file. */
     createApp: async ({
       options,
     }: {
@@ -198,6 +206,7 @@ export function getAppCommands() {
         options: { platform, config: options.config },
       });
     },
+    /** Delete the specified app, or prompt for one when no ID is supplied. */
     deleteApp: async ({
       args,
       options,
@@ -214,6 +223,7 @@ export function getAppCommands() {
       await doDelete(`/app/${id}`);
       console.log(t('operationSuccess'));
     },
+    /** List apps through the command interface. */
     apps: async ({ options }: { options: { platform?: Platform | '' } }) => {
       const { platform = '' } = options;
       return listApp(platform);
