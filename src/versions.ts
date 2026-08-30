@@ -553,15 +553,36 @@ export const versionCommands = {
     // of the upload, so they overlap with it instead of running afterwards.
     // describePpkBundle never rejects (best effort); a failed upload still
     // fails the publish exactly as before.
+    // A server that predates source-map archiving (self-hosted, or a SaaS
+    // region not yet rolled) rejects the .map upload with 400; that must not
+    // fail the publish, only lose the archive.
+    let sourceMapUploadError: unknown;
     const [{ hash }, bundleMeta, commit, sourceMapUpload] = await Promise.all([
       uploadFile(fn, undefined, appId),
       describePpkBundle(fn, options.hermesBase),
       getCommitInfo(),
       sourcemapPath
-        ? uploadFile(sourcemapPath, undefined, appId)
+        ? uploadFile(sourcemapPath, undefined, appId).catch(
+            (error: unknown) => {
+              sourceMapUploadError = error;
+              return undefined;
+            },
+          )
         : Promise.resolve(undefined),
     ]);
     const sourceMapKey = sourceMapUpload?.hash;
+    if (sourcemapPath && !sourceMapKey) {
+      console.log(
+        chalk.yellow(
+          t('sourceMapUploadFailedWarning', {
+            error:
+              sourceMapUploadError instanceof Error
+                ? sourceMapUploadError.message
+                : String(sourceMapUploadError),
+          }),
+        ),
+      );
+    }
     const depVersions = getDepVersions();
 
     const versionName =

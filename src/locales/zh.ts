@@ -122,6 +122,8 @@ export default {
   sourceMapMissingWarning:
     '本版本没有归档 source map，之后的崩溃堆栈将无法还原。请用默认的 --sourcemap 打包，或在 publish 时传 --sourcemap <文件>。',
   sourceMapArchived: 'source map 已随版本 {{id}} 归档',
+  sourceMapUploadFailedWarning:
+    'source map 上传失败（{{error}}），本次发布不归档 map。升级更新服务端后可归档 source map。',
   symbolicateUsage:
     '用法：pushy symbolicate <堆栈文件 | -> --hash <热更 hash> [--platform ios|android|harmony] [--output <文件>]',
   symbolicateVersionNotFound: '当前应用下找不到 hash 为 {{hash}} 的已发布版本',

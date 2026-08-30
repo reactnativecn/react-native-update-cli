@@ -134,6 +134,8 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   sourceMapMissingWarning:
     'No source map was archived with this version: crashes cannot be symbolicated later. Bundle with the default --sourcemap, or pass --sourcemap <file> to publish.',
   sourceMapArchived: 'Source map archived with version {{id}}',
+  sourceMapUploadFailedWarning:
+    'Source map upload failed ({{error}}); publishing without an archived map. Upgrade the update server to archive source maps.',
   symbolicateUsage:
     'Usage: pushy symbolicate <stack file | -> --hash <updateHash> [--platform ios|android|harmony] [--output <file>]',
   symbolicateVersionNotFound:
