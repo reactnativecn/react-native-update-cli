@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest  # npm --provenance requires a GitHub-hosted runner
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
