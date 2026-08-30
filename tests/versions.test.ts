@@ -117,10 +117,15 @@ describe('versionCommands.publish', () => {
   let questionSpy: ReturnType<typeof spyOn>;
   let getCommitInfoSpy: ReturnType<typeof spyOn>;
   let updateSpy: ReturnType<typeof spyOn>;
+  let appGetSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
     getPlatformSpy = spyOn(app, 'getPlatform').mockResolvedValue('android');
+    appGetSpy = spyOn(api, 'get').mockResolvedValue({
+      id: 777,
+      platform: 'android',
+    });
     getSelectedAppSpy = spyOn(app, 'getSelectedApp').mockResolvedValue({
       appId: '100',
       appKey: 'key',
@@ -147,6 +152,7 @@ describe('versionCommands.publish', () => {
     questionSpy.mockRestore();
     getCommitInfoSpy.mockRestore();
     updateSpy.mockRestore();
+    appGetSpy.mockRestore();
   });
 
   test('can bind after publish when called without object receiver', async () => {
@@ -181,6 +187,7 @@ describe('versionCommands.publish', () => {
     });
 
     expect(getSelectedAppSpy).not.toHaveBeenCalled();
+    expect(appGetSpy).toHaveBeenCalledWith('/app/777');
     expect(uploadFileSpy).toHaveBeenCalledWith('bundle.ppk', undefined, '777');
     expect(postSpy).toHaveBeenCalledWith(
       '/app/777/version/create',

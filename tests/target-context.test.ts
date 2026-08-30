@@ -59,17 +59,70 @@ describe('resolveAppId', () => {
     readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(
       new Error('config should not be read'),
     );
+    const getSpy = spyOn(api, 'get').mockRejectedValue(
+      new Error('no platform given, so no lookup'),
+    );
 
-    await expect(
-      resolveAppId({ appId: '777', config: 'configs/prod.json' }),
-    ).resolves.toBe('777');
-    expect(readFileSpy).not.toHaveBeenCalled();
+    try {
+      await expect(
+        resolveAppId({ appId: '777', config: 'configs/prod.json' }),
+      ).resolves.toBe('777');
+      expect(readFileSpy).not.toHaveBeenCalled();
+      expect(getSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 
   test('still validates the platform next to an explicit appId', async () => {
     await expect(
       resolveAppId({ appId: '777', platform: 'windows' as any }),
     ).rejects.toThrow();
+  });
+
+  test('an explicit appId of the requested platform is accepted', async () => {
+    const getSpy = spyOn(api, 'get').mockResolvedValue({
+      id: 777,
+      platform: 'ios',
+    });
+
+    try {
+      await expect(
+        resolveAppId({ appId: '777', platform: 'ios' }),
+      ).resolves.toBe('777');
+      expect(getSpy).toHaveBeenCalledWith('/app/777');
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
+
+  test('an explicit appId of another platform is rejected', async () => {
+    const getSpy = spyOn(api, 'get').mockResolvedValue({
+      id: 42,
+      platform: 'android',
+    });
+
+    try {
+      await expect(
+        resolveAppId({ appId: '42', platform: 'ios' }),
+      ).rejects.toThrow(/42.*android.*ios/);
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
+
+  test('a foreign or missing explicit appId fails before any work', async () => {
+    const getSpy = spyOn(api, 'get').mockRejectedValue(
+      new Error('403 Forbidden'),
+    );
+
+    try {
+      await expect(
+        resolveAppId({ appId: '42', platform: 'ios' }),
+      ).rejects.toThrow('403');
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 
   test('a missing config is reported as app-not-selected', async () => {
@@ -193,6 +246,9 @@ describe('bundle target context', () => {
 
   test('an explicit appId skips the config and reaches publish', async () => {
     readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(enoent());
+    restore.push(
+      spyOn(api, 'get').mockResolvedValue({ id: 777, platform: 'ios' }),
+    );
 
     await bundleCommands.bundle({
       options: { platform: 'ios', appId: '777', name: 'v1' },
@@ -207,6 +263,22 @@ describe('bundle target context', () => {
     expect(publishSpy.mock.calls[0][0].options).toMatchObject({
       appId: '777',
     });
+  });
+
+  test('a named bundle for an app of another platform fails before any work', async () => {
+    restore.push(
+      spyOn(api, 'get').mockResolvedValue({ id: 42, platform: 'android' }),
+    );
+
+    await expect(
+      bundleCommands.bundle({
+        options: { platform: 'ios', appId: '42', name: 'v3' },
+      }),
+    ).rejects.toThrow(/android/);
+
+    expect(addGitIgnoreSpy).not.toHaveBeenCalled();
+    expect(runBundleSpy).not.toHaveBeenCalled();
+    expect(publishSpy).not.toHaveBeenCalled();
   });
 
   test('a named bundle without a selected app fails before any work', async () => {

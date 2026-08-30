@@ -29,6 +29,8 @@ export default {
     'App Key mismatch! Current IPA: {{appKeyInPkg}}, current {{- source}}: {{appKey}}',
   appName: 'App Name',
   appNameQuestion: 'App Name:',
+  appPlatformMismatch:
+    'App {{appId}} is a {{appPlatform}} app, but this command targets {{platform}}',
   appNotSelected:
     'App not selected. run `cresc selectApp --platform {{platform}}` first!',
   appUploadSuccess:

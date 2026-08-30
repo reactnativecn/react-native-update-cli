@@ -27,6 +27,8 @@ export default {
     'appKey不匹配！当前ipa: {{appKeyInPkg}}, 当前{{- source}}: {{appKey}}',
   appName: '应用名称',
   appNameQuestion: '应用名称:',
+  appPlatformMismatch:
+    '应用 {{appId}} 是 {{appPlatform}} 平台的应用，但当前命令的平台是 {{platform}}',
   appNotSelected:
     '尚未选择应用。请先运行 `pushy selectApp --platform {{platform}}` 来选择应用',
   appUploadSuccess:

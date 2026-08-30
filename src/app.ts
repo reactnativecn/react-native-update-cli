@@ -78,6 +78,22 @@ export async function getSelectedApp(
 }
 
 /**
+ * Fail fast when an explicit `--appId` names an app of another platform.
+ * The server accepts a bundle for any app the account owns and never sees
+ * the platform it was built for, so this is the only place the mistake can
+ * be caught before it reaches devices. A missing or foreign app fails here
+ * too (403/404) instead of after the expensive work.
+ */
+async function assertAppPlatform(appId: string, platform: Platform) {
+  const app = (await get(`/app/${appId}`)) as { platform?: Platform };
+  if (app.platform && app.platform !== platform) {
+    throw new Error(
+      t('appPlatformMismatch', { appId, appPlatform: app.platform, platform }),
+    );
+  }
+}
+
+/**
  * Resolve the app an operation targets: an explicit `--appId` wins, otherwise
  * the app selected for the platform in `--config` (default: update.json).
  * Prompts for the platform only when it is needed and not given.
@@ -89,7 +105,11 @@ export async function resolveAppId(
     assertPlatform(options.platform);
   }
   if (options.appId) {
-    return String(options.appId);
+    const appId = String(options.appId);
+    if (options.platform) {
+      await assertAppPlatform(appId, options.platform);
+    }
+    return appId;
   }
   const platform = await getPlatform(options.platform || undefined);
   return (await getSelectedApp(platform, options.config)).appId;
