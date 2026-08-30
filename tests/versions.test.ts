@@ -117,10 +117,15 @@ describe('versionCommands.publish', () => {
   let questionSpy: ReturnType<typeof spyOn>;
   let getCommitInfoSpy: ReturnType<typeof spyOn>;
   let updateSpy: ReturnType<typeof spyOn>;
+  let appGetSpy: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
     consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
     getPlatformSpy = spyOn(app, 'getPlatform').mockResolvedValue('android');
+    appGetSpy = spyOn(api, 'get').mockResolvedValue({
+      id: 777,
+      platform: 'android',
+    });
     getSelectedAppSpy = spyOn(app, 'getSelectedApp').mockResolvedValue({
       appId: '100',
       appKey: 'key',
@@ -147,6 +152,7 @@ describe('versionCommands.publish', () => {
     questionSpy.mockRestore();
     getCommitInfoSpy.mockRestore();
     updateSpy.mockRestore();
+    appGetSpy.mockRestore();
   });
 
   test('can bind after publish when called without object receiver', async () => {
@@ -161,9 +167,39 @@ describe('versionCommands.publish', () => {
       options: {
         versionId: '200',
         platform: 'android',
+        appId: '100',
         versionDeps: expect.any(Object),
         warnDepsChanges: true,
       },
+    });
+  });
+
+  test('keeps an explicit appId through version creation and binding', async () => {
+    await versionCommands.publish({
+      args: ['bundle.ppk'],
+      options: {
+        platform: 'android',
+        appId: '777',
+        name: 'v1',
+        packageVersion: '1.0.0',
+        'no-interactive': true,
+      },
+    });
+
+    expect(getSelectedAppSpy).not.toHaveBeenCalled();
+    expect(appGetSpy).toHaveBeenCalledWith('/app/777');
+    expect(uploadFileSpy).toHaveBeenCalledWith('bundle.ppk', undefined, '777');
+    expect(postSpy).toHaveBeenCalledWith(
+      '/app/777/version/create',
+      expect.any(Object),
+    );
+    expect(updateSpy).toHaveBeenCalledWith({
+      options: expect.objectContaining({
+        versionId: '200',
+        platform: 'android',
+        appId: '777',
+        packageVersion: '1.0.0',
+      }),
     });
   });
 

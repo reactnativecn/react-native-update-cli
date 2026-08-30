@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { compare, satisfies } from 'compare-versions';
 import fs from 'fs';
 import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
-import { getPlatform, getSelectedApp } from './app';
+import { getPlatform, resolveAppId } from './app';
 import { choosePackage } from './package';
 import type { Package, Platform, Version } from './types';
 import { isNonInteractive, loadTtyTable, question } from './utils';
@@ -525,12 +525,7 @@ export const versionCommands = {
     }
 
     const platform = await getPlatform(options.platform);
-    let appId = options.appId;
-    if (!appId) {
-      appId = (
-        await getSelectedApp(platform, options.config as string | undefined)
-      ).appId;
-    }
+    const appId = await resolveAppId({ ...options, platform });
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
 
@@ -631,6 +626,7 @@ export const versionCommands = {
         options: {
           versionId: id,
           platform,
+          appId,
           packageId,
           packageVersion,
           packageVersionRange,
@@ -649,6 +645,7 @@ export const versionCommands = {
           options: {
             versionId: id,
             platform,
+            appId,
             versionDeps: depVersions,
             warnDepsChanges: true,
           },
@@ -658,38 +655,23 @@ export const versionCommands = {
     return versionName;
   },
   versions: async ({ options }: { options: VersionCommandOptions }) => {
-    let appId = options.appId;
-    if (!appId) {
-      const platform = await getPlatform(options.platform);
-      appId = (
-        await getSelectedApp(platform, options.config as string | undefined)
-      ).appId;
-    }
+    const appId = await resolveAppId(options);
     const interactive = !(
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive()
     );
-    await listVersions(String(appId), interactive);
+    await listVersions(appId, interactive);
   },
   update: async ({ options }: { options: VersionCommandOptions }) => {
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
-    let appId = options.appId;
-    let platform = options.platform;
-    if (!appId) {
-      platform = await getPlatform(platform);
-      appId = (
-        await getSelectedApp(platform, options.config as string | undefined)
-      ).appId;
-    } else if (platform) {
-      platform = await getPlatform(platform);
-    }
+    const appId = await resolveAppId(options);
 
     let versionId: string | null | undefined = options.versionId;
     if (!versionId) {
       if (nonInteractive) {
         throw new Error(t('versionIdRequired'));
       }
-      versionId = String((await chooseVersion(String(appId))).id);
+      versionId = String((await chooseVersion(appId)).id);
     }
     if (versionId === 'null') {
       versionId = null;
@@ -709,7 +691,7 @@ export const versionCommands = {
       }
     }
 
-    const allPkgs = await getAllPackages(String(appId));
+    const allPkgs = await getAllPackages(appId);
 
     if (!allPkgs) {
       throw new Error(t('noPackagesFound', { appId }));
@@ -785,7 +767,7 @@ export const versionCommands = {
           throw new Error(t('packageIdRequired'));
         }
         // the package list was already fetched above: no second round trip
-        pkgId = String((await choosePackage(String(appId), allPkgs)).id);
+        pkgId = String((await choosePackage(appId, allPkgs)).id);
       }
 
       if (!pkgId) {
@@ -801,7 +783,7 @@ export const versionCommands = {
 
     if (options.warnDepsChanges && versionId) {
       await printDepsChangesForPublish({
-        appId: String(appId),
+        appId,
         versionId: String(versionId),
         pkgs: pkgsToBind,
         providedVersionDeps: options.versionDeps,
@@ -809,7 +791,7 @@ export const versionCommands = {
     }
 
     await bindVersionToPackages({
-      appId: String(appId),
+      appId,
       // keep null as-is: `--versionId null` means unbinding the version
       versionId: versionId ?? null,
       pkgs: pkgsToBind,
@@ -824,23 +806,14 @@ export const versionCommands = {
   }) => {
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
-    let appId = options.appId;
-    let platform = options.platform;
-    if (!appId) {
-      platform = await getPlatform(platform);
-      appId = (
-        await getSelectedApp(platform, options.config as string | undefined)
-      ).appId;
-    } else if (platform) {
-      await getPlatform(platform);
-    }
+    const appId = await resolveAppId(options);
 
     let versionId = options.versionId;
     if (!versionId) {
       if (nonInteractive) {
         throw new Error(t('versionIdRequired'));
       }
-      versionId = String((await chooseVersion(String(appId))).id);
+      versionId = String((await chooseVersion(appId)).id);
     }
 
     const updateParams: Record<string, string> = {};
@@ -848,19 +821,13 @@ export const versionCommands = {
     if (options.description) updateParams.description = options.description;
     if (options.metaInfo) updateParams.metaInfo = options.metaInfo;
 
-    await put(`/app/${String(appId)}/version/${versionId}`, updateParams);
+    await put(`/app/${appId}/version/${versionId}`, updateParams);
     console.log(t('operationSuccess'));
   },
   deleteVersion: async ({ options }: { options: VersionCommandOptions }) => {
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
-    let appId = options.appId;
-    if (!appId) {
-      const platform = await getPlatform(options.platform);
-      appId = (
-        await getSelectedApp(platform, options.config as string | undefined)
-      ).appId;
-    }
+    const appId = await resolveAppId(options);
 
     const parsedVersionIds =
       getStringListOption(options, 'versionIds') ??
@@ -870,16 +837,16 @@ export const versionCommands = {
       if (nonInteractive) {
         throw new Error(t('versionIdRequired'));
       }
-      versionIds = [String((await chooseVersion(String(appId))).id)];
+      versionIds = [String((await chooseVersion(appId)).id)];
     }
 
     try {
       if (versionIds.length === 1) {
         const [versionId] = versionIds;
-        await doDelete(`/app/${String(appId)}/version/${versionId}`);
+        await doDelete(`/app/${appId}/version/${versionId}`);
         console.log(t('deleteVersionSuccess', { versionId }));
       } else {
-        await doDelete(`/app/${String(appId)}/version`, {
+        await doDelete(`/app/${appId}/version`, {
           versionIds: toNumericIds(versionIds),
         });
         console.log(

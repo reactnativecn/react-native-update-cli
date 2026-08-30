@@ -12,7 +12,9 @@ export const isPPKBundleFileName = (fileName: string) =>
   ppkBundleFileNames.includes(fileName);
 
 export const credentialFile = IS_CRESC ? '.cresc.token' : '.update';
-export const updateJson = IS_CRESC ? 'cresc.config.json' : 'update.json';
+// Both brands select apps in update.json: the cresc docs and the client SDK
+// (`import _updateConfig from './update.json'`) read that name too.
+export const updateJson = 'update.json';
 export const tempDir = IS_CRESC ? '.cresc.temp' : '.pushy';
 export const pricingPageUrl = IS_CRESC
   ? 'https://cresc.dev/pricing'

@@ -16,19 +16,21 @@ export default {
   aabParseResourcesError: 'Parser resources.arsc error: {{error}}',
   appId: 'App ID',
   appIdMismatchApk:
-    'App ID mismatch! Current APK: {{appIdInPkg}}, current update.json: {{appId}}',
+    'App ID mismatch! Current APK: {{appIdInPkg}}, current {{- source}}: {{appId}}',
   appIdMismatchApp:
-    'App ID mismatch! Current APP: {{appIdInPkg}}, current update.json: {{appId}}',
+    'App ID mismatch! Current APP: {{appIdInPkg}}, current {{- source}}: {{appId}}',
   appIdMismatchIpa:
-    'App ID mismatch! Current IPA: {{appIdInPkg}}, current update.json: {{appId}}',
+    'App ID mismatch! Current IPA: {{appIdInPkg}}, current {{- source}}: {{appId}}',
   appKeyMismatchApk:
-    'App Key mismatch! Current APK: {{appKeyInPkg}}, current update.json: {{appKey}}',
+    'App Key mismatch! Current APK: {{appKeyInPkg}}, current {{- source}}: {{appKey}}',
   appKeyMismatchApp:
-    'App Key mismatch! Current APP: {{appKeyInPkg}}, current update.json: {{appKey}}',
+    'App Key mismatch! Current APP: {{appKeyInPkg}}, current {{- source}}: {{appKey}}',
   appKeyMismatchIpa:
-    'App Key mismatch! Current IPA: {{appKeyInPkg}}, current update.json: {{appKey}}',
+    'App Key mismatch! Current IPA: {{appKeyInPkg}}, current {{- source}}: {{appKey}}',
   appName: 'App Name',
   appNameQuestion: 'App Name:',
+  appPlatformMismatch:
+    'App {{appId}} is a {{appPlatform}} app, but this command targets {{platform}}',
   appNotSelected:
     'App not selected. run `cresc selectApp --platform {{platform}}` first!',
   appUploadSuccess:
@@ -57,7 +59,7 @@ export default {
   expiredStatus: '(Expired)',
   failedToParseIcon: '[Warning] failed to parse icon: {{error}}',
   failedToParseUpdateJson:
-    'Failed to parse file `update.json`. Try to remove it manually.',
+    'Failed to parse file `{{- configPath}}`. Try to remove it manually.',
   fileGenerated: '{{- file}} generated.',
   fileSizeExceeded:
     'This file size is {{fileSize}} , exceeding the current quota {{maxSize}} . You may consider upgrading to a higher plan to increase this quota. Details can be found at: {{- pricingPageUrl}}',

@@ -18,7 +18,7 @@ describe('constants', () => {
     expect(mod.scriptName).toBe('cresc');
     expect(mod.IS_CRESC).toBe(true);
     expect(mod.credentialFile).toBe('.cresc.token');
-    expect(mod.updateJson).toBe('cresc.config.json');
+    expect(mod.updateJson).toBe('update.json');
     expect(mod.tempDir).toBe('.cresc.temp');
     expect(mod.pricingPageUrl).toBe('https://cresc.dev/pricing');
     expect(mod.defaultEndpoints).toEqual([

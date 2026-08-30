@@ -67,6 +67,10 @@ export interface BundleOptions {
   resetCache?: boolean;
   sentryRelease?: string;
   sentryDist?: string;
+  /** publish to this app instead of the one selected in the config file */
+  appId?: string;
+  /** selected-app config file (default: update.json) */
+  config?: string;
 }
 
 export interface PublishOptions {
@@ -131,6 +135,7 @@ export interface CLIProvider {
   listApps: (platform?: Platform) => Promise<CommandResult>;
   getSelectedApp: (
     platform?: Platform,
+    config?: string,
   ) => Promise<{ appId: string; platform: Platform }>;
 
   listVersions: (appId: string) => Promise<CommandResult>;

@@ -1,5 +1,5 @@
 import path from 'path';
-import { getPlatform, getSelectedApp } from './app';
+import { AppNotSelectedError, getPlatform, resolveAppId } from './app';
 import { packBundle } from './bundle-pack';
 import {
   copyDebugidForSentry,
@@ -41,6 +41,8 @@ type NormalizedBundleOptions = {
   verifyHermesBase: boolean;
   resetCache: boolean;
   cacheMaxMb?: number;
+  appId?: string;
+  config?: string;
   name?: string;
   description?: string;
   metaInfo?: string;
@@ -55,12 +57,14 @@ type NormalizedBundleOptions = {
   sentryDist?: string;
 };
 
+/** Parse a positive cache-size option expressed in megabytes. */
 function parseCacheMaxMb(value: unknown): number | undefined {
   const parsed = typeof value === 'string' ? Number(value) : (value as number);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 type PublishBundlePayload = {
+  appId: string;
   name?: string;
   description?: string;
   metaInfo?: string;
@@ -76,6 +80,7 @@ type PublishBundlePayload = {
   sourcemap?: string;
 };
 
+/** Read either spelling of an aliased optional CLI string option. */
 function getAliasedOptionalStringOption(
   options: Record<string, unknown>,
   key: string,
@@ -87,6 +92,7 @@ function getAliasedOptionalStringOption(
   );
 }
 
+/** Normalize translated CLI values into the bundle command's typed options. */
 export function normalizeBundleOptions(
   translatedOptions: Record<string, unknown>,
   platform: string,
@@ -125,6 +131,8 @@ export function normalizeBundleOptions(
     ),
     resetCache: getBooleanOption(translatedOptions, 'resetCache', true),
     cacheMaxMb: parseCacheMaxMb(translatedOptions.cacheMaxMb),
+    appId: getOptionalStringOption(translatedOptions, 'appId'),
+    config: getOptionalStringOption(translatedOptions, 'config'),
     name: getOptionalStringOption(translatedOptions, 'name'),
     description: getOptionalStringOption(translatedOptions, 'description'),
     metaInfo: getOptionalStringOption(translatedOptions, 'metaInfo'),
@@ -160,6 +168,7 @@ export function normalizeBundleOptions(
   };
 }
 
+/** Upload generated Sentry artifacts when the detected plugin requires them. */
 async function uploadSentryArtifactsIfNeeded(
   shouldUpload: boolean,
   bundleName: string,
@@ -182,6 +191,7 @@ async function uploadSentryArtifactsIfNeeded(
   );
 }
 
+/** Publish a packed bundle through the version command implementation. */
 async function publishBundleVersion(
   outputPath: string,
   platform: Platform,
@@ -197,6 +207,7 @@ async function publishBundleVersion(
 }
 
 export const bundleCommands = {
+  /** Build a bundle and optionally publish it to one operation-scoped app. */
   bundle: async ({
     options,
   }: {
@@ -214,10 +225,48 @@ export const bundleCommands = {
     });
     const normalized = normalizeBundleOptions(translatedOptions, platform);
 
+    // One app per operation: the Hermes base lookup and the publish step must
+    // never see different apps, so the target is resolved once and reused.
+    let appId: string | undefined;
+    const getAppId = async () =>
+      (appId ??= await resolveAppId({
+        appId: normalized.appId,
+        config: normalized.config,
+        platform,
+      }));
+    const hermesBase =
+      normalized.dev === 'true'
+        ? undefined
+        : {
+            option: normalized.hermesBase,
+            verify: normalized.verifyHermesBase,
+            cacheMaxMb: normalized.cacheMaxMb,
+          };
+
+    // Resolve before any side effect or expensive work. A named bundle is
+    // published, so a missing app fails right here; a bundle-only run only
+    // needs the app for the remote Hermes base lookup and may go on without
+    // one (it then compiles a full bundle). Any other config error (e.g.
+    // malformed JSON) is reported immediately either way.
+    if (normalized.name) {
+      await getAppId();
+    } else if (hermesBase?.option === 'auto') {
+      try {
+        await getAppId();
+      } catch (error) {
+        if (!(error instanceof AppNotSelectedError)) {
+          throw error;
+        }
+      }
+    }
+
     checkLockFiles();
     addGitIgnore();
 
-    const bundleParams = await checkPlugins();
+    const [bundleParams] = await Promise.all([
+      checkPlugins(),
+      cleanStaleTmp().catch(() => {}),
+    ]);
     const sourcemapOutput = path.join(
       normalized.intermediaDir,
       `${normalized.bundleName}.map`,
@@ -233,23 +282,6 @@ export const bundleCommands = {
 
     console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
 
-    await cleanStaleTmp().catch(() => {});
-    // the hermes base lookup needs the app; resolve it up front but never
-    // fail the bundle over it (publishing resolves it again and reports)
-    let appIdForBase: string | undefined =
-      typeof options.appId === 'string' && options.appId
-        ? options.appId
-        : undefined;
-    if (!appIdForBase && normalized.hermesBase === 'auto') {
-      try {
-        appIdForBase = (
-          await getSelectedApp(platform, options.config as string | undefined)
-        ).appId;
-      } catch {
-        appIdForBase = undefined;
-      }
-    }
-
     const hermesResult = await runReactNativeBundleCommand({
       bundleName: normalized.bundleName,
       dev: normalized.dev,
@@ -259,15 +291,7 @@ export const bundleCommands = {
       sourcemapOutput:
         normalized.sourcemap || bundleParams.sourcemap ? sourcemapOutput : '',
       forceHermes: normalized.hermes,
-      hermesBase:
-        normalized.dev === 'true'
-          ? undefined
-          : {
-              option: normalized.hermesBase,
-              appId: appIdForBase,
-              verify: normalized.verifyHermesBase,
-              cacheMaxMb: normalized.cacheMaxMb,
-            },
+      hermesBase: hermesBase ? { ...hermesBase, appId } : undefined,
       resetCache: normalized.resetCache,
       cli: {
         taro: normalized.taro,
@@ -288,6 +312,7 @@ export const bundleCommands = {
 
     if (normalized.name) {
       await publishBundleVersion(realOutput, platform, {
+        appId: await getAppId(),
         name: normalized.name,
         description: normalized.description,
         metaInfo: normalized.metaInfo,
@@ -322,6 +347,7 @@ export const bundleCommands = {
       const v = await question(t('uploadBundlePrompt'));
       if (v.toLowerCase() === 'y') {
         await publishBundleVersion(realOutput, platform, {
+          appId: await getAppId(),
           hermesBase: baseMeta,
           sourcemap:
             normalized.sourcemap || bundleParams.sourcemap
