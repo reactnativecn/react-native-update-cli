@@ -1,131 +1,282 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type Mock,
+  spyOn,
+  test,
+} from 'bun:test';
 import fs from 'fs';
 import * as api from '../src/api';
 import {
-  createAppTargetResolver,
+  AppNotSelectedError,
   getAppCommands,
   getSelectedApp,
-  resolveAppTarget,
+  resolveAppId,
 } from '../src/app';
-import {
-  createPublishBundleRequest,
-  normalizeBundleOptions,
-} from '../src/bundle';
+import { bundleCommands } from '../src/bundle';
+import * as bundlePack from '../src/bundle-pack';
+import * as bundleRunner from '../src/bundle-runner';
+import * as utils from '../src/utils';
+import * as addGitIgnoreModule from '../src/utils/add-gitignore';
+import * as checkLockfileModule from '../src/utils/check-lockfile';
+import * as hermesBaseModule from '../src/utils/hermes-base';
+import { versionCommands } from '../src/versions';
 
-describe('bundle target context', () => {
-  test('preserves appId and config in the publish request', () => {
-    const normalized = normalizeBundleOptions(
-      {
-        appId: '42',
-        config: 'configs/release.update.json',
-      },
-      'ios',
+const enoent = () => Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+const selection = (platform: string, appId: number) =>
+  JSON.stringify({ [platform]: { appId, appKey: `key-${appId}` } });
+
+describe('resolveAppId', () => {
+  let readFileSpy: Mock<typeof fs.promises.readFile>;
+
+  afterEach(() => {
+    readFileSpy?.mockRestore();
+  });
+
+  test('reads the selected app from update.json by default', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue(
+      selection('ios', 42),
     );
 
-    expect(normalized.appId).toBe('42');
-    expect(normalized.config).toBe('configs/release.update.json');
-    expect(
-      createPublishBundleRequest('dist/ios.ppk', 'ios', {
-        appId: normalized.appId,
-        config: normalized.config,
-        name: 'v1',
-      }),
-    ).toEqual({
-      args: ['dist/ios.ppk'],
+    await expect(resolveAppId({ platform: 'ios' })).resolves.toBe('42');
+    expect(readFileSpy).toHaveBeenCalledWith('update.json', 'utf8');
+  });
+
+  test('reads the selected app from an explicit config path', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue(
+      selection('android', 7),
+    );
+
+    await expect(
+      resolveAppId({ platform: 'android', config: 'configs/prod.json' }),
+    ).resolves.toBe('7');
+    expect(readFileSpy).toHaveBeenCalledWith('configs/prod.json', 'utf8');
+  });
+
+  test('an explicit appId wins and never reads the config', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(
+      new Error('config should not be read'),
+    );
+
+    await expect(
+      resolveAppId({ appId: '777', config: 'configs/prod.json' }),
+    ).resolves.toBe('777');
+    expect(readFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('still validates the platform next to an explicit appId', async () => {
+    await expect(
+      resolveAppId({ appId: '777', platform: 'windows' as any }),
+    ).rejects.toThrow();
+  });
+
+  test('a missing config is reported as app-not-selected', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(enoent());
+
+    await expect(resolveAppId({ platform: 'ios' })).rejects.toBeInstanceOf(
+      AppNotSelectedError,
+    );
+  });
+
+  test('a config without the platform is app-not-selected', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue(
+      selection('android', 7),
+    );
+
+    await expect(resolveAppId({ platform: 'ios' })).rejects.toBeInstanceOf(
+      AppNotSelectedError,
+    );
+  });
+
+  test('a malformed config names the file that failed to parse', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue('{ oops');
+
+    const error = await resolveAppId({
+      platform: 'ios',
+      config: 'configs/prod.json',
+    }).catch((e: Error) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(AppNotSelectedError);
+    expect((error as Error).message).toContain('configs/prod.json');
+  });
+});
+
+describe('bundle target context', () => {
+  let readFileSpy: Mock<typeof fs.promises.readFile>;
+  let runBundleSpy: Mock<typeof bundleRunner.runReactNativeBundleCommand>;
+  let publishSpy: Mock<typeof versionCommands.publish>;
+  let addGitIgnoreSpy: Mock<typeof addGitIgnoreModule.addGitIgnore>;
+  const restore: Array<{ mockRestore: () => void }> = [];
+
+  beforeEach(() => {
+    runBundleSpy = spyOn(
+      bundleRunner,
+      'runReactNativeBundleCommand',
+    ).mockResolvedValue(undefined as any);
+    publishSpy = spyOn(versionCommands, 'publish').mockResolvedValue('v1');
+    addGitIgnoreSpy = spyOn(
+      addGitIgnoreModule,
+      'addGitIgnore',
+    ).mockImplementation(() => {});
+    restore.push(
+      runBundleSpy,
+      publishSpy,
+      addGitIgnoreSpy,
+      spyOn(checkLockfileModule, 'checkLockFiles').mockImplementation(() => {}),
+      spyOn(utils, 'checkPlugins').mockResolvedValue({
+        sentry: false,
+        sourcemap: false,
+      } as any),
+      spyOn(hermesBaseModule, 'cleanStaleTmp').mockResolvedValue(undefined),
+      spyOn(bundlePack, 'packBundle').mockResolvedValue(undefined as any),
+      spyOn(console, 'log').mockImplementation(() => {}),
+    );
+  });
+
+  afterEach(() => {
+    readFileSpy?.mockRestore();
+    for (const spy of restore.splice(0)) {
+      spy.mockRestore();
+    }
+  });
+
+  test('resolves the app once and reuses it for Hermes base and publish', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile')
+      .mockResolvedValueOnce(selection('ios', 42))
+      .mockResolvedValueOnce(selection('ios', 99));
+
+    await bundleCommands.bundle({
       options: {
         platform: 'ios',
-        appId: '42',
-        config: 'configs/release.update.json',
         name: 'v1',
+        config: 'configs/release.update.json',
       },
+    });
+
+    expect(readFileSpy).toHaveBeenCalledTimes(1);
+    expect(readFileSpy).toHaveBeenCalledWith(
+      'configs/release.update.json',
+      'utf8',
+    );
+    expect(runBundleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform: 'ios',
+        hermesBase: expect.objectContaining({ option: 'auto', appId: '42' }),
+      }),
+    );
+    expect(publishSpy).toHaveBeenCalledTimes(1);
+    const [request] = publishSpy.mock.calls[0];
+    expect(request.options).toMatchObject({
+      platform: 'ios',
+      appId: '42',
+      name: 'v1',
+    });
+    expect(request.options).not.toHaveProperty('config');
+  });
+
+  test('uses update.json when no config is given', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue(
+      selection('android', 7),
+    );
+
+    await bundleCommands.bundle({
+      options: { platform: 'android', name: 'v1' },
+    });
+
+    expect(readFileSpy).toHaveBeenCalledWith('update.json', 'utf8');
+    expect(publishSpy.mock.calls[0][0].options).toMatchObject({
+      appId: '7',
     });
   });
 
-  test('reuses one selected app for Hermes lookup and publishing', async () => {
-    const readFileSpy = spyOn(fs.promises, 'readFile')
-      .mockResolvedValueOnce(
-        JSON.stringify({ ios: { appId: 42, appKey: 'key-42' } }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({ ios: { appId: 99, appKey: 'key-99' } }),
-      );
+  test('an explicit appId skips the config and reaches publish', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(enoent());
 
-    try {
-      const resolveTarget = createAppTargetResolver('ios', {
-        config: 'configs/release.update.json',
-      });
-      const hermesTarget = await resolveTarget();
-      const publishTarget = await resolveTarget();
+    await bundleCommands.bundle({
+      options: { platform: 'ios', appId: '777', name: 'v1' },
+    });
 
-      expect(hermesTarget).toEqual(publishTarget);
-      expect(publishTarget.appId).toBe('42');
-      expect(readFileSpy).toHaveBeenCalledTimes(1);
-      expect(
-        createPublishBundleRequest('dist/ios.ppk', 'ios', {
-          appId: publishTarget.appId,
-          config: publishTarget.configPath,
-          name: 'v1',
-        }),
-      ).toEqual({
-        args: ['dist/ios.ppk'],
-        options: {
-          platform: 'ios',
-          appId: '42',
-          config: 'configs/release.update.json',
-          name: 'v1',
-        },
-      });
-    } finally {
-      readFileSpy.mockRestore();
-    }
+    expect(readFileSpy).not.toHaveBeenCalled();
+    expect(runBundleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hermesBase: expect.objectContaining({ appId: '777' }),
+      }),
+    );
+    expect(publishSpy.mock.calls[0][0].options).toMatchObject({
+      appId: '777',
+    });
   });
 
-  test('retries selection after a failed best-effort lookup', async () => {
-    const enoentError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-    const readFileSpy = spyOn(fs.promises, 'readFile')
-      .mockRejectedValueOnce(enoentError)
-      .mockResolvedValueOnce(
-        JSON.stringify({ ios: { appId: 42, appKey: 'key-42' } }),
-      );
+  test('a named bundle without a selected app fails before any work', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(enoent());
 
-    try {
-      const resolveTarget = createAppTargetResolver('ios', {
-        config: 'configs/release.update.json',
-      });
+    await expect(
+      bundleCommands.bundle({ options: { platform: 'ios', name: 'v1' } }),
+    ).rejects.toBeInstanceOf(AppNotSelectedError);
 
-      await expect(resolveTarget()).rejects.toThrow();
-      await expect(resolveTarget()).resolves.toEqual({
-        appId: '42',
-        appKey: 'key-42',
-        platform: 'ios',
-        configPath: 'configs/release.update.json',
-      });
-      expect(readFileSpy).toHaveBeenCalledTimes(2);
-    } finally {
-      readFileSpy.mockRestore();
-    }
+    expect(addGitIgnoreSpy).not.toHaveBeenCalled();
+    expect(runBundleSpy).not.toHaveBeenCalled();
+    expect(publishSpy).not.toHaveBeenCalled();
+  });
+
+  test('a bundle-only run without a selected app still bundles', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(enoent());
+
+    await bundleCommands.bundle({
+      options: { platform: 'ios', 'no-interactive': true },
+    });
+
+    expect(runBundleSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hermesBase: expect.objectContaining({ option: 'auto' }),
+      }),
+    );
+    expect(runBundleSpy.mock.calls[0][0].hermesBase?.appId).toBeUndefined();
+    expect(publishSpy).not.toHaveBeenCalled();
+  });
+
+  test('a bundle-only run reports a malformed config before bundling', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue('{ oops');
+
+    await expect(
+      bundleCommands.bundle({
+        options: { platform: 'ios', 'no-interactive': true },
+      }),
+    ).rejects.toThrow('update.json');
+
+    expect(runBundleSpy).not.toHaveBeenCalled();
+  });
+
+  test('a dev bundle never needs the app', async () => {
+    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(
+      new Error('config should not be read'),
+    );
+
+    await bundleCommands.bundle({
+      options: { platform: 'ios', dev: true, 'no-interactive': true },
+    });
+
+    expect(readFileSpy).not.toHaveBeenCalled();
+    expect(runBundleSpy.mock.calls[0][0].hermesBase).toBeUndefined();
   });
 });
 
 describe('app config target', () => {
-  let postSpy: ReturnType<typeof spyOn>;
-  let getSpy: ReturnType<typeof spyOn>;
-  let readFileSpy: ReturnType<typeof spyOn>;
-  let writeFileSpy: ReturnType<typeof spyOn>;
-  let consoleLogSpy: ReturnType<typeof spyOn>;
+  const restore: Array<{ mockRestore: () => void }> = [];
 
   afterEach(() => {
-    postSpy?.mockRestore();
-    getSpy?.mockRestore();
-    readFileSpy?.mockRestore();
-    writeFileSpy?.mockRestore();
-    consoleLogSpy?.mockRestore();
+    for (const spy of restore.splice(0)) {
+      spy.mockRestore();
+    }
   });
 
   test('getSelectedApp reads the explicit config path', async () => {
-    readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue(
-      JSON.stringify({ ios: { appId: 42, appKey: 'key-42' } }),
+    const readFileSpy = spyOn(fs.promises, 'readFile').mockResolvedValue(
+      selection('ios', 42),
     );
+    restore.push(readFileSpy);
 
     await expect(
       getSelectedApp('ios', 'configs/release.update.json'),
@@ -140,31 +291,18 @@ describe('app config target', () => {
     );
   });
 
-  test('explicit appId does not read the selected-app config', async () => {
-    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(
-      new Error('config should not be read'),
-    );
-
-    await expect(
-      resolveAppTarget('android', {
-        appId: '777',
-        config: 'configs/release.update.json',
-      }),
-    ).resolves.toEqual({
-      appId: '777',
-      platform: 'android',
-      configPath: 'configs/release.update.json',
-    });
-    expect(readFileSpy).not.toHaveBeenCalled();
-  });
-
   test('createApp selects the new app in the explicit config file', async () => {
-    postSpy = spyOn(api, 'post').mockResolvedValue({ id: 10 });
-    getSpy = spyOn(api, 'get').mockResolvedValue({ appKey: 'key-ios-10' });
-    const enoentError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-    readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(enoentError);
-    writeFileSpy = spyOn(fs.promises, 'writeFile').mockResolvedValue();
-    consoleLogSpy = spyOn(console, 'log').mockImplementation(() => {});
+    const readFileSpy = spyOn(fs.promises, 'readFile').mockRejectedValue(
+      enoent(),
+    );
+    const writeFileSpy = spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    restore.push(
+      spyOn(api, 'post').mockResolvedValue({ id: 10 }),
+      spyOn(api, 'get').mockResolvedValue({ appKey: 'key-ios-10' }),
+      readFileSpy,
+      writeFileSpy,
+      spyOn(console, 'log').mockImplementation(() => {}),
+    );
 
     await getAppCommands().createApp({
       options: {
@@ -181,16 +319,7 @@ describe('app config target', () => {
     );
     expect(writeFileSpy).toHaveBeenCalledWith(
       'configs/release.update.json',
-      JSON.stringify(
-        {
-          ios: {
-            appId: 10,
-            appKey: 'key-ios-10',
-          },
-        },
-        null,
-        4,
-      ),
+      JSON.stringify({ ios: { appId: 10, appKey: 'key-ios-10' } }, null, 4),
       'utf8',
     );
   });

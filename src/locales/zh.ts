@@ -14,17 +14,17 @@ export default {
   aabParseResourcesError: '解析 resources.arsc 出错：{{error}}',
   appId: '应用 id',
   appIdMismatchApk:
-    'appId不匹配！当前apk: {{appIdInPkg}}, 当前update.json: {{appId}}',
+    'appId不匹配！当前apk: {{appIdInPkg}}, 当前{{- source}}: {{appId}}',
   appIdMismatchApp:
-    'appId不匹配！当前app: {{appIdInPkg}}, 当前update.json: {{appId}}',
+    'appId不匹配！当前app: {{appIdInPkg}}, 当前{{- source}}: {{appId}}',
   appIdMismatchIpa:
-    'appId不匹配！当前ipa: {{appIdInPkg}}, 当前update.json: {{appId}}',
+    'appId不匹配！当前ipa: {{appIdInPkg}}, 当前{{- source}}: {{appId}}',
   appKeyMismatchApk:
-    'appKey不匹配！当前apk: {{appKeyInPkg}}, 当前update.json: {{appKey}}',
+    'appKey不匹配！当前apk: {{appKeyInPkg}}, 当前{{- source}}: {{appKey}}',
   appKeyMismatchApp:
-    'appKey不匹配！当前app: {{appKeyInPkg}}, 当前update.json: {{appKey}}',
+    'appKey不匹配！当前app: {{appKeyInPkg}}, 当前{{- source}}: {{appKey}}',
   appKeyMismatchIpa:
-    'appKey不匹配！当前ipa: {{appKeyInPkg}}, 当前update.json: {{appKey}}',
+    'appKey不匹配！当前ipa: {{appKeyInPkg}}, 当前{{- source}}: {{appKey}}',
   appName: '应用名称',
   appNameQuestion: '应用名称:',
   appNotSelected:
@@ -53,7 +53,7 @@ export default {
   errorInHarmonyApp: '获取 Harmony 应用入口时出错：{{error}}',
   expiredStatus: '(已过期)',
   failedToParseIcon: '[警告] 解析图标失败：{{error}}',
-  failedToParseUpdateJson: '无法解析文件 `update.json`。请手动删除它。',
+  failedToParseUpdateJson: '无法解析文件 `{{- configPath}}`。请手动删除它。',
   fileGenerated: '已生成 {{- file}}',
   fileSizeExceeded:
     '此文件大小 {{fileSize}} , 超出当前额度 {{maxSize}} 。您可以考虑升级付费业务以提升此额度。详情请访问: {{- pricingPageUrl}}',

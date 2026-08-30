@@ -2,7 +2,7 @@ import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import { doDelete, getAllPackages, post, uploadFile } from './api';
-import { getPlatform, getSelectedApp } from './app';
+import { getSelectedApp, resolveAppId } from './app';
 import { createSlimNativePackage } from './native-package';
 import type { Package, Platform } from './types';
 import {
@@ -13,6 +13,7 @@ import {
   loadTtyTable,
   question,
 } from './utils';
+import { updateJson } from './utils/constants';
 import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
 import { bundleEntryMatcher, cachePut } from './utils/hermes-base';
@@ -23,6 +24,7 @@ import { bundleLocationFields, locateZipEntry } from './utils/zip-range';
 type PackageCommandOptions = Record<string, unknown> & {
   appId?: string;
   appKey?: string;
+  config?: string;
   platform?: Platform;
   version?: string;
   packageId?: string;
@@ -130,18 +132,19 @@ async function uploadNativePackage(
         appId: String(options.appId),
         appKey: typeof options.appKey === 'string' ? options.appKey : undefined,
       }
-    : await getSelectedApp(
-        config.platform,
-        options.config as string | undefined,
-      );
+    : await getSelectedApp(config.platform, options.config);
   const { appId, appKey } = selectedApp;
+  // where the expected app came from, for the mismatch messages
+  const source = options.appId ? '--appId' : options.config || updateJson;
 
   if (appIdInPkg && String(appIdInPkg) !== appId) {
-    throw new Error(t(config.appIdMismatchKey, { appIdInPkg, appId }));
+    throw new Error(t(config.appIdMismatchKey, { appIdInPkg, appId, source }));
   }
 
   if (appKeyInPkg && appKey && appKeyInPkg !== appKey) {
-    throw new Error(t(config.appKeyMismatchKey, { appKeyInPkg, appKey }));
+    throw new Error(
+      t(config.appKeyMismatchKey, { appKeyInPkg, appKey, source }),
+    );
   }
 
   const customVersion =
@@ -407,27 +410,13 @@ export const packageCommands = {
   }: {
     options: { platform: Platform; appId?: string; config?: string };
   }) => {
-    let appId = options.appId;
-    if (!appId) {
-      const platform = await getPlatform(options.platform);
-      appId = (
-        await getSelectedApp(platform, options.config as string | undefined)
-      ).appId;
-    }
-    await listPackage(String(appId));
+    await listPackage(await resolveAppId(options));
   },
   deletePackage: async ({ options }: { options: PackageCommandOptions }) => {
-    let { appId } = options;
+    const appId = await resolveAppId(options);
     let packageIds =
       getStringListOption(options, 'packageIds') ??
       getStringListOption(options, 'packageId');
-
-    if (!appId) {
-      const platform = await getPlatform(options.platform);
-      appId = (
-        await getSelectedApp(platform, options.config as string | undefined)
-      ).appId;
-    }
 
     if (!packageIds) {
       const packageVersions = getStringListOption(options, 'packageVersion');

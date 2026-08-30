@@ -95,6 +95,8 @@ export class CLIProviderImpl implements CLIProvider {
           verifyHermesBase: options.verifyHermesBase ?? true,
           sentryRelease: options.sentryRelease,
           sentryDist: options.sentryDist,
+          appId: options.appId,
+          config: options.config,
         });
 
         const { bundleCommands } = await import('./bundle');
@@ -181,9 +183,10 @@ export class CLIProviderImpl implements CLIProvider {
 
   async getSelectedApp(
     platform?: Platform,
+    config?: string,
   ): Promise<{ appId: string; platform: Platform }> {
     const resolvedPlatform = await this.getPlatform(platform);
-    return getSelectedApp(resolvedPlatform);
+    return getSelectedApp(resolvedPlatform, config);
   }
 
   async listApps(platform?: Platform): Promise<CommandResult> {

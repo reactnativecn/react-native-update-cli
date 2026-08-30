@@ -14,13 +14,16 @@ interface AppSummary {
 export interface AppTargetOptions {
   appId?: string;
   config?: string;
+  platform?: Platform | '';
 }
 
-export interface ResolvedAppTarget {
-  appId: string;
-  appKey?: string;
-  platform: Platform;
-  configPath: string;
+/** The selected-app config file was missing or has no entry for the platform. */
+export class AppNotSelectedError extends Error {
+  readonly code = 'APP_NOT_SELECTED';
+  constructor(platform: Platform) {
+    super(t('appNotSelected', { platform }));
+    this.name = 'AppNotSelectedError';
+  }
 }
 
 /** Resolve an explicit platform or prompt for one interactively. */
@@ -46,21 +49,26 @@ export async function getSelectedApp(
   assertPlatform(platform);
 
   const resolvedConfigPath = configPath || updateJson;
-  let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
-    {};
+  let raw: string;
   try {
-    updateInfo = JSON.parse(
-      await fs.promises.readFile(resolvedConfigPath, 'utf8'),
-    );
+    raw = await fs.promises.readFile(resolvedConfigPath, 'utf8');
   } catch (e: any) {
     if (e.code === 'ENOENT') {
-      throw new Error(t('appNotSelected', { platform }));
+      throw new AppNotSelectedError(platform);
     }
     throw e;
   }
+  let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>>;
+  try {
+    updateInfo = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      t('failedToParseUpdateJson', { configPath: resolvedConfigPath }),
+    );
+  }
   const info = updateInfo[platform];
   if (!info) {
-    throw new Error(t('appNotSelected', { platform }));
+    throw new AppNotSelectedError(platform);
   }
   return {
     appId: String(info.appId),
@@ -69,42 +77,22 @@ export async function getSelectedApp(
   };
 }
 
-/** Resolve an explicit or selected app into a stable operation target. */
-export async function resolveAppTarget(
-  platform: Platform,
+/**
+ * Resolve the app an operation targets: an explicit `--appId` wins, otherwise
+ * the app selected for the platform in `--config` (default: update.json).
+ * Prompts for the platform only when it is needed and not given.
+ */
+export async function resolveAppId(
   options: AppTargetOptions = {},
-): Promise<ResolvedAppTarget> {
-  const configPath = options.config || updateJson;
-  if (options.appId) {
-    return {
-      appId: String(options.appId),
-      platform,
-      configPath,
-    };
+): Promise<string> {
+  if (options.platform) {
+    assertPlatform(options.platform);
   }
-
-  return {
-    ...(await getSelectedApp(platform, configPath)),
-    configPath,
-  };
-}
-
-/** Cache app selection for one operation and retry after a failed lookup. */
-export function createAppTargetResolver(
-  platform: Platform,
-  options: AppTargetOptions = {},
-): () => Promise<ResolvedAppTarget> {
-  let pending: Promise<ResolvedAppTarget> | undefined;
-
-  return () => {
-    if (!pending) {
-      pending = resolveAppTarget(platform, options).catch((error) => {
-        pending = undefined;
-        throw error;
-      });
-    }
-    return pending;
-  };
+  if (options.appId) {
+    return String(options.appId);
+  }
+  const platform = await getPlatform(options.platform || undefined);
+  return (await getSelectedApp(platform, options.config)).appId;
 }
 
 /** List apps, optionally filtering them to one platform. */
@@ -166,7 +154,7 @@ async function selectApp({
     updateInfo = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
-      console.error(t('failedToParseUpdateJson'));
+      console.error(t('failedToParseUpdateJson', { configPath }));
       throw e;
     }
   }
