@@ -10,7 +10,8 @@ describe('normalizeBundleOptions', () => {
     expect(normalized.intermediaDir).toBe(`${tempDir}/intermedia/android`);
     expect(normalized.output).toBe(`${tempDir}/output/android.\${time}.ppk`);
     expect(normalized.dev).toBe('false');
-    expect(normalized.sourcemap).toBe(false);
+    // archived with the published version by default (pushy symbolicate)
+    expect(normalized.sourcemap).toBe(true);
     expect(normalized.dryRun).toBe(false);
   });
 

@@ -139,6 +139,9 @@
         },
         "dryRun": {
           "default": false
+        },
+        "sourcemap": {
+          "hasValue": true
         }
       }
     },
@@ -248,7 +251,7 @@
           "hasValue": true
         },
         "sourcemap": {
-          "default": false
+          "default": true
         },
         "taro": {
           "default": false
@@ -382,6 +385,23 @@
     "cache": {
       "description": "Inspect or clean the local bundle cache: cache [clean]",
       "options": {}
+    },
+    "symbolicate": {
+      "description": "Map a JS stack trace back to source using the source map archived with a published version.",
+      "options": {
+        "hash": {
+          "hasValue": true
+        },
+        "versionId": {
+          "hasValue": true
+        },
+        "platform": {
+          "hasValue": true
+        },
+        "output": {
+          "hasValue": true
+        }
+      }
     }
   },
   "globalOptions": {

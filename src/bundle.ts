@@ -72,6 +72,8 @@ type PublishBundlePayload = {
   rollout?: string;
   dryRun?: boolean;
   hermesBase?: HermesBaseMeta;
+  /** path of the final source map to archive with the version */
+  sourcemap?: string;
 };
 
 function getAliasedOptionalStringOption(
@@ -108,7 +110,9 @@ export function normalizeBundleOptions(
       `${tempDir}/output/${platform}.\${time}.ppk`,
     ),
     dev: getBooleanOption(translatedOptions, 'dev', false) ? 'true' : 'false',
-    sourcemap: getBooleanOption(translatedOptions, 'sourcemap', false),
+    // On by default since 2.23: the map is archived with the published
+    // version (pushy symbolicate). --no-sourcemap / --sourcemap=false opts out.
+    sourcemap: getBooleanOption(translatedOptions, 'sourcemap', true),
     taro: getBooleanOption(translatedOptions, 'taro', false),
     expo: getBooleanOption(translatedOptions, 'expo', false),
     rncli: getBooleanOption(translatedOptions, 'rncli', false),
@@ -295,6 +299,10 @@ export const bundleCommands = {
         rollout: normalized.rollout,
         dryRun: normalized.dryRun,
         hermesBase: baseMeta,
+        sourcemap:
+          normalized.sourcemap || bundleParams.sourcemap
+            ? sourcemapOutput
+            : undefined,
       });
       await uploadSentryArtifactsIfNeeded(
         bundleParams.sentry,
@@ -315,6 +323,10 @@ export const bundleCommands = {
       if (v.toLowerCase() === 'y') {
         await publishBundleVersion(realOutput, platform, {
           hermesBase: baseMeta,
+          sourcemap:
+            normalized.sourcemap || bundleParams.sourcemap
+              ? sourcemapOutput
+              : undefined,
         });
         await uploadSentryArtifactsIfNeeded(
           bundleParams.sentry,

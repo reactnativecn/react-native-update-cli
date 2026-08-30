@@ -68,13 +68,14 @@ const publishResult = await provider.publish({
 - `hdiffFromApp`: Generate hdiff from APP files
 - `hdiffFromIpa`: Generate hdiff from IPA files
 
-Hermes projects: `bundle` always runs hermesc with `-output-source-map`, so the debug info section is stripped from the bytecode (15–40% smaller, same as React Native's own release builds). The Hermes sourcemap stays in the intermediate directory (`.pushy/intermedia/<platform>/<bundle>.map`, never packed into the ppk); with `--sourcemap` it is composed with the packager map as before. Keep it if you want to symbolicate `address at` crash stacks later.
+Hermes projects: `bundle` always runs hermesc with `-output-source-map`, so the debug info section is stripped from the bytecode (15–40% smaller, same as React Native's own release builds). The Hermes sourcemap stays in the intermediate directory (`.pushy/intermedia/<platform>/<bundle>.map`, never packed into the ppk) and is composed with the packager map — `--sourcemap` is on by default since 2.23 (`--sourcemap false` opts out). When `bundle` publishes, that final map is uploaded and archived with the version (`sourceMapKey`), so `pushy symbolicate` can map crash stacks — including Hermes `address at` frames — back to source later. `pushy publish <ppk> --sourcemap <file.map>` archives a map for a ppk built elsewhere; publishing without a map prints a warning.
 
 Hermes delta mode (`-base-bytecode`): by default (`--hermesBase auto`) `bundle` compiles against the previous HBC of the same app, which keeps Hermes string IDs stable and makes hot-update patches 5–30× smaller. The base comes from the server (`GET /app/:id/hermesBase`), verified by sha256 and kept in a local cache (`.pushy/cache/<sha256>`, 500 MB / 20 files, `PUSHY_CACHE_DIR` / `--cacheMaxMb` to tune, `pushy cache [clean]` to inspect or clear). `--hermesBase none` disables it; `--hermesBase <file.hbc|.ppk|.apk|.ipa>` uses a local artifact (for example the store build). `--verifyHermesBase` (default on) additionally compiles without the base (concurrently with the base compile) and compares both disassemblies; on any mismatch or failure the CLI silently falls back to the plain compile, so the feature can never block a release. Only hermesc builds that include the upstream delta-mode fix are used (classic `react-native/sdks/hermesc`, or `hermes-compiler` ≥ 250829098). If a base compile fails, the full hermesc output is written to `hermes-base-error.log` next to the intermediate directory. `--resetCache false` skips Metro's `--reset-cache` and reuses its transform cache, which makes repeated bundles much faster.
 
 ### Version
 
-- `publish`: Publish a new version
+- `publish`: Publish a new version (`--sourcemap <file.map>` archives the source map with it)
+- `symbolicate`: Map a crash stack to source using the archived map: `pushy symbolicate stack.txt --hash <updateHash>` (`-` reads stdin, `--versionId` instead of `--hash`, `--output <file>`); the hash is `getUpdateMetadata().currentVersion` on the device
 - `versions`: List versions
 - `update`: Update version package rules
 - `updateVersionInfo`: Update version metadata

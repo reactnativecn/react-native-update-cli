@@ -28,6 +28,8 @@ export interface Version {
   name: string;
   packages?: Package[];
   deps?: Record<string, string> | string | null;
+  /** storage key of the archived source map (absent when published without one) */
+  sourceMapKey?: string;
 }
 
 export interface CommandContext<
@@ -69,6 +71,8 @@ export interface BundleOptions {
 
 export interface PublishOptions {
   filePath?: string;
+  /** path of the final source map to archive with the version */
+  sourcemap?: string;
   platform?: Platform;
   name?: string;
   description?: string;
@@ -104,9 +108,23 @@ export interface UpdateVersionOptions {
   dryRun?: boolean;
 }
 
+export interface SymbolicateOptions {
+  /** stack trace file ('-' for stdin) */
+  stackFile?: string;
+  /** update hash of the running version (from getUpdateMetadata().currentVersion) */
+  hash?: string;
+  versionId?: string;
+  platform?: Platform;
+  appId?: string;
+  config?: string;
+  /** write the symbolicated stack here instead of stdout */
+  output?: string;
+}
+
 export interface CLIProvider {
   bundle: (options: BundleOptions) => Promise<CommandResult>;
   publish: (options: PublishOptions) => Promise<CommandResult>;
+  symbolicate: (options: SymbolicateOptions) => Promise<CommandResult>;
   upload: (options: UploadOptions) => Promise<CommandResult>;
 
   createApp: (name: string, platform: Platform) => Promise<CommandResult>;

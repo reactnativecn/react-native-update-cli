@@ -130,6 +130,18 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   processingStringPool: 'Processing the string pool ...',
   publishUsage:
     'Usage: pushy publish <ppk file> --platform ios|android|harmony',
+  sourceMapNotFound: 'Source map not found: {{path}}',
+  sourceMapMissingWarning:
+    'No source map was archived with this version: crashes cannot be symbolicated later. Bundle with the default --sourcemap, or pass --sourcemap <file> to publish.',
+  sourceMapArchived: 'Source map archived with version {{id}}',
+  symbolicateUsage:
+    'Usage: pushy symbolicate <stack file | -> --hash <updateHash> [--platform ios|android|harmony] [--output <file>]',
+  symbolicateVersionNotFound:
+    'No published version with hash {{hash}} found for this app',
+  symbolicateNoSourceMap:
+    'Version {{id}} was published without a source map; nothing to symbolicate against',
+  symbolicateDone:
+    'Symbolicated {{count}} frame(s) against version {{id}} ({{hash}})',
   rnuVersionNotFound:
     'react-native-update: Cannot get the version number. Please run the command in the project directory',
   rolloutConfigSet:

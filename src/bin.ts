@@ -7,6 +7,7 @@ import { cacheCommands } from './cache';
 import { diffCommands } from './diff';
 import { installCommands } from './install';
 import { packageCommands } from './package';
+import { symbolicateCommands } from './symbolicate';
 import { userCommands } from './user';
 import { printVersionCommand } from './utils';
 import { t } from './utils/i18n';
@@ -52,6 +53,7 @@ const commandHandlers: Record<string, CliCommandHandler> = {
   ...getAppCommands(),
   ...packageCommands,
   ...versionCommands,
+  ...symbolicateCommands,
   ...installCommands,
   help: printUsage,
 };

@@ -79,6 +79,7 @@
     "protobufjs": "^8.7.2",
     "read": "^4.1.0",
     "registry-auth-token": "^5.1.1",
+    "source-map": "0.6.1",
     "tty-table": "5.0",
     "yauzl": "^3.4.0",
     "yazl": "3.3.1"

@@ -8,6 +8,7 @@ import type {
   Platform,
   PublishOptions,
   Session,
+  SymbolicateOptions,
   UpdateVersionOptions,
   UploadOptions,
 } from './types';
@@ -128,6 +129,7 @@ export class CLIProviderImpl implements CLIProvider {
                 ? undefined
                 : String(options.rollout),
             dryRun: options.dryRun || false,
+            sourcemap: options.sourcemap,
           },
           options.filePath ? [options.filePath] : [],
         );
@@ -137,6 +139,28 @@ export class CLIProviderImpl implements CLIProvider {
       },
       'Unknown error during publishing',
       'Version published successfully',
+    );
+  }
+
+  async symbolicate(options: SymbolicateOptions): Promise<CommandResult> {
+    return this.runMessageCommand(
+      async () => {
+        const context = this.createContext(
+          {
+            hash: options.hash,
+            versionId: options.versionId,
+            platform: options.platform,
+            appId: options.appId,
+            config: options.config,
+            output: options.output,
+          },
+          options.stackFile ? [options.stackFile] : [],
+        );
+        const { symbolicateCommands } = await import('./symbolicate');
+        await symbolicateCommands.symbolicate(context);
+      },
+      'Unknown error during symbolication',
+      'Stack symbolicated',
     );
   }
 

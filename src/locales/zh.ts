@@ -118,6 +118,15 @@ export default {
   processingError: '处理文件时出错：{{error}}',
   processingPackage: '正在处理包 {{count}}...',
   processingStringPool: '正在处理字符串池...',
+  sourceMapNotFound: '找不到 source map：{{path}}',
+  sourceMapMissingWarning:
+    '本版本没有归档 source map，之后的崩溃堆栈将无法还原。请用默认的 --sourcemap 打包，或在 publish 时传 --sourcemap <文件>。',
+  sourceMapArchived: 'source map 已随版本 {{id}} 归档',
+  symbolicateUsage:
+    '用法：pushy symbolicate <堆栈文件 | -> --hash <热更 hash> [--platform ios|android|harmony] [--output <文件>]',
+  symbolicateVersionNotFound: '当前应用下找不到 hash 为 {{hash}} 的已发布版本',
+  symbolicateNoSourceMap: '版本 {{id}} 发布时未归档 source map，无法还原',
+  symbolicateDone: '已按版本 {{id}}（{{hash}}）还原 {{count}} 个堆栈帧',
   publishUsage:
     '使用方法: pushy publish ppk后缀文件 --platform ios|android|harmony',
   rnuVersionNotFound:

@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { compare, satisfies } from 'compare-versions';
+import fs from 'fs';
 import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import { choosePackage } from './package';
@@ -533,15 +534,34 @@ export const versionCommands = {
     const nonInteractive =
       getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
 
+    // The source map is archived with the version so `pushy symbolicate` can
+    // map crashes back to source. An explicit path that does not exist is a
+    // publish error; no path at all is a loud warning (custom pipelines that
+    // never produced a map keep working).
+    const sourcemapPath =
+      typeof options.sourcemap === 'string' && options.sourcemap
+        ? options.sourcemap
+        : undefined;
+    if (sourcemapPath && !fs.existsSync(sourcemapPath)) {
+      throw new Error(t('sourceMapNotFound', { path: sourcemapPath }));
+    }
+    if (!sourcemapPath) {
+      console.log(chalk.yellow(t('sourceMapMissingWarning')));
+    }
+
     // Hashing/caching the bundle and asking git for the commit are independent
     // of the upload, so they overlap with it instead of running afterwards.
     // describePpkBundle never rejects (best effort); a failed upload still
     // fails the publish exactly as before.
-    const [{ hash }, bundleMeta, commit] = await Promise.all([
+    const [{ hash }, bundleMeta, commit, sourceMapUpload] = await Promise.all([
       uploadFile(fn, undefined, appId),
       describePpkBundle(fn, options.hermesBase),
       getCommitInfo(),
+      sourcemapPath
+        ? uploadFile(sourcemapPath, undefined, appId)
+        : Promise.resolve(undefined),
     ]);
+    const sourceMapKey = sourceMapUpload?.hash;
     const depVersions = getDepVersions();
 
     const versionName =
@@ -561,8 +581,13 @@ export const versionCommands = {
       commit,
       // Hermes delta-mode chain metadata (old servers drop unknown fields)
       ...bundleMeta,
+      // archived source map (old servers drop unknown fields)
+      ...(sourceMapKey ? { sourceMapKey } : {}),
     });
     console.log(t('packageUploadSuccess', { id }));
+    if (sourceMapKey) {
+      console.log(t('sourceMapArchived', { id }));
+    }
 
     const {
       packageId,
