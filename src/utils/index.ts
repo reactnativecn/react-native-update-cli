@@ -560,6 +560,8 @@ export interface VersionCheck {
   done: Promise<void>;
   /** wait for the check, but never longer than `graceMs` */
   settle: (graceMs: number) => Promise<void>;
+  /** launch a detached self-update after the foreground command is done */
+  startAutoUpdate: () => void;
   /**
    * Print the "newer version available" hints if the check has completed by
    * now; a no-op while it is still pending, when nothing is newer, and after
@@ -597,6 +599,27 @@ export async function printVersionCommand({
   console.log(
     `react-native-update-cli: ${pkg.version}${latestTag(latestCliVersion)}`,
   );
+  try {
+    const { consumeAutoUpdateNotice } =
+      require('../auto-update') as typeof import('../auto-update');
+    const notice = consumeAutoUpdateNotice(pkg.version);
+    if (notice?.kind === 'updated') {
+      console.log(
+        t('autoUpdateSuccess', {
+          from: notice.currentVersion,
+          to: notice.targetVersion,
+        }),
+      );
+    } else if (notice?.kind === 'permission') {
+      console.warn(
+        t('autoUpdatePermission', {
+          command: notice.command,
+        }),
+      );
+    }
+  } catch {
+    // A corrupt/unwritable updater cache cannot affect normal commands.
+  }
   if (rnuVersion) {
     console.log(
       `react-native-update: ${rnuVersion}${latestTag(latestRnuVersion)}`,
@@ -654,7 +677,22 @@ export async function printVersionCommand({
     return Promise.race([check, grace]).then(() => clearTimeout(timer));
   };
 
-  return { done: check, settle, printHints };
+  let autoUpdateStarted = false;
+  const startAutoUpdate = () => {
+    if (autoUpdateStarted || !isNewer(latest?.[0], pkg.version)) {
+      return;
+    }
+    autoUpdateStarted = true;
+    try {
+      const { launchAutoUpdate } =
+        require('../auto-update') as typeof import('../auto-update');
+      launchAutoUpdate(pkg.version, latest?.[0]);
+    } catch {
+      // Self-update is strictly opportunistic and never affects the command.
+    }
+  };
+
+  return { done: check, settle, startAutoUpdate, printHints };
 }
 
 export { checkPlugins };

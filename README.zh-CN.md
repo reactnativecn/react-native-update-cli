@@ -19,6 +19,14 @@ npm install -g react-native-update-cli
 
 命令行工具始终全局安装，直接调用 `pushy` 或 `cresc`；不要使用项目本地 CLI，也不要给命令添加 `npx` 前缀。
 
+### CLI 后台自动更新
+
+全局安装的 CLI 会在命令成功结束后启动独立后台进程完成自更新，不会让当前命令等待安装。更新会沿用这份全局安装实际所属的包管理器（`npm`、`pnpm`、Yarn Classic 或 Bun），并使用当前 `.npmrc` / 环境中的 registry 配置，因此私有镜像、认证、代理和自定义全局目录均可继续生效。
+
+网络失败会静默降级并在冷却期后重试；并发命令通过锁避免重复安装。全局目录不可写时不会自动调用 `sudo`，下次运行会给出修复权限后可执行的准确命令。本地依赖、npx 临时安装和 CI 环境不会被修改。
+
+设置 `RNU_AUTO_UPDATE=0`（或 `RNU_DISABLE_AUTO_UPDATE=1`）可关闭；`RNU_AUTO_UPDATE_PACKAGE_MANAGER=npm|pnpm|yarn|bun` 可覆盖包管理器识别结果。
+
 ## 基础用法
 
 ```bash

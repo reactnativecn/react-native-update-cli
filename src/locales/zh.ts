@@ -33,6 +33,9 @@ export default {
     '尚未选择应用。请先运行 `pushy selectApp --platform {{platform}}` 来选择应用',
   appUploadSuccess:
     '已成功上传app原生包（id: {{id}}, version: {{version}}, buildTime: {{buildTime}}）',
+  autoUpdatePermission:
+    'CLI 自动更新已跳过：全局包目录不可写。请修复包管理器的全局目录权限后运行：{{- command}}',
+  autoUpdateSuccess: 'CLI 已在后台自动更新：{{from}} -> {{to}}',
   apkUploadSuccess:
     '已成功上传apk原生包（id: {{id}}, version: {{version}}, buildTime: {{buildTime}}）',
   boundTo: ', 已绑定：{{name}} ({{id}})',

@@ -35,6 +35,10 @@ export default {
     'App not selected. run `cresc selectApp --platform {{platform}}` first!',
   appUploadSuccess:
     'Successfully uploaded APP native package (id: {{id}}, version: {{version}}, buildTime: {{buildTime}})',
+  autoUpdatePermission:
+    'CLI auto-update was skipped because the global package directory is not writable. Fix the package-manager prefix permissions, then run: {{- command}}',
+  autoUpdateSuccess:
+    'CLI was automatically updated in the background: {{from}} -> {{to}}',
   apkUploadSuccess:
     'Successfully uploaded APK native package (id: {{id}}, version: {{version}}, buildTime: {{buildTime}})',
   boundTo: ', bound to: {{name}} ({{id}})',

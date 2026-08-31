@@ -67,11 +67,13 @@ async function run() {
   // exit on their own.
   const versionCheck = await printVersionCommand({ wait: versionOnly });
   if (versionOnly) {
+    versionCheck.startAutoUpdate();
     process.exit();
   }
   process.on('exit', (code) => {
     if (code === 0) {
       versionCheck.printHints();
+      versionCheck.startAutoUpdate();
     }
   });
 
@@ -96,6 +98,7 @@ async function run() {
       // registry request itself is unref'd, so exiting never waits on it
       await versionCheck.settle(500);
       versionCheck.printHints();
+      versionCheck.startAutoUpdate();
     } else {
       throw new Error(t('unknownCommand', { command: argv.command }));
     }

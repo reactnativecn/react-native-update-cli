@@ -19,6 +19,23 @@ npm install -g react-native-update-cli
 
 The command-line tool is installed globally. Invoke `pushy` or `cresc` directly; do not use a project-local CLI or prefix commands with `npx`.
 
+### Background CLI updates
+
+Global installations update themselves in a detached background process after
+a successful command. The foreground command is never held open for the
+install. The CLI reuses the package manager that owns the global installation
+(`npm`, `pnpm`, Yarn Classic, or Bun) and the registry configured in the current
+`.npmrc`/environment, so private mirrors, credentials, proxies, and custom
+global prefixes keep working.
+
+Network failures are silent and retried after a cooldown. Concurrent commands
+share a lock. A non-writable global directory is never escalated with `sudo`;
+the next invocation prints the exact manual command after the permission issue
+has been fixed. Project-local/npx installations and CI are not modified.
+
+Set `RNU_AUTO_UPDATE=0` (or `RNU_DISABLE_AUTO_UPDATE=1`) to disable the feature.
+`RNU_AUTO_UPDATE_PACKAGE_MANAGER=npm|pnpm|yarn|bun` overrides manager detection.
+
 ## Basic Usage
 
 ```bash
