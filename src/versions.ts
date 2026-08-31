@@ -1,6 +1,8 @@
 import chalk from 'chalk';
 import { compare, satisfies } from 'compare-versions';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, resolveAppId } from './app';
 import { choosePackage } from './package';
@@ -18,6 +20,7 @@ import {
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getBooleanOption, getStringListOption } from './utils/options';
+import { slimSourceMap } from './utils/slim-sourcemap';
 import {
   bundleLocationFields,
   readZipEntryWithLocation,
@@ -543,6 +546,26 @@ export const versionCommands = {
     if (!sourcemapPath) {
       console.log(chalk.yellow(t('sourceMapMissingWarning')));
     }
+    // Archive a slimmed copy: relative paths, no dependency sourcesContent
+    // (see slimSourceMap). Frames keep symbolicating everywhere; only inline
+    // snippets of node_modules code are dropped, and the map shrinks by the
+    // bulk of its bytes. If the file is not a plain map, upload it untouched.
+    let uploadSourcemapPath = sourcemapPath;
+    let slimTempDir: string | undefined;
+    if (sourcemapPath) {
+      const slimmed = slimSourceMap(
+        fs.readFileSync(sourcemapPath, 'utf8'),
+        process.cwd(),
+      );
+      if (slimmed !== null) {
+        slimTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-sourcemap-'));
+        uploadSourcemapPath = path.join(
+          slimTempDir,
+          path.basename(sourcemapPath),
+        );
+        fs.writeFileSync(uploadSourcemapPath, slimmed);
+      }
+    }
 
     // Hashing/caching the bundle and asking git for the commit are independent
     // of the upload, so they overlap with it instead of running afterwards.
@@ -556,8 +579,8 @@ export const versionCommands = {
       uploadFile(fn, undefined, appId),
       describePpkBundle(fn, options.hermesBase),
       getCommitInfo(),
-      sourcemapPath
-        ? uploadFile(sourcemapPath, undefined, appId).catch(
+      uploadSourcemapPath
+        ? uploadFile(uploadSourcemapPath, undefined, appId).catch(
             (error: unknown) => {
               sourceMapUploadError = error;
               return undefined;
@@ -565,6 +588,9 @@ export const versionCommands = {
           )
         : Promise.resolve(undefined),
     ]);
+    if (slimTempDir) {
+      fs.rmSync(slimTempDir, { recursive: true, force: true });
+    }
     const sourceMapKey = sourceMapUpload?.hash;
     if (sourcemapPath && !sourceMapKey) {
       console.log(

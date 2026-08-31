@@ -766,14 +766,23 @@ async function composeSourceMaps(
 ): Promise<boolean> {
   let composerPath: string;
   try {
-    // resolve through the project so hoisted node_modules (monorepos) work
-    composerPath = require.resolve(
-      'react-native/scripts/compose-source-maps.js',
-      { paths: [process.cwd()] },
-    );
+    // resolve through the project so hoisted node_modules (monorepos) work.
+    // Extensionless first: RN >= 0.87 maps "./scripts/*" to "./scripts/*.js"
+    // in its exports, so the ".js" specifier resolves to ".js.js" and
+    // fails; CJS resolution adds the extension itself on older RN.
+    composerPath = require.resolve('react-native/scripts/compose-source-maps', {
+      paths: [process.cwd()],
+    });
   } catch {
-    console.warn(t('composeSourceMapsNotFound'));
-    return false;
+    try {
+      composerPath = require.resolve(
+        'react-native/scripts/compose-source-maps.js',
+        { paths: [process.cwd()] },
+      );
+    } catch {
+      console.warn(t('composeSourceMapsNotFound'));
+      return false;
+    }
   }
   console.log(t('composingSourceMap'));
   assertSuccessfulSyncProcess(
