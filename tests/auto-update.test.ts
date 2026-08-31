@@ -67,6 +67,7 @@ describe('auto update package-manager detection', () => {
     expect(
       detectGlobalPackageManager({
         packageRoot: '/custom/prefix/lib/node_modules/react-native-update-cli',
+        env: {},
       }),
     ).toBe('npm');
   });
