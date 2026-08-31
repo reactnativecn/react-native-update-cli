@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { slimSourceMap } from '../src/utils/slim-sourcemap';
+import zlib from 'zlib';
+import {
+  packSourceMap,
+  slimSourceMap,
+  unpackSourceMap,
+} from '../src/utils/slim-sourcemap';
 
 const root = '/work/app';
 
@@ -70,5 +75,42 @@ describe('slimSourceMap', () => {
     ).toBeNull();
     expect(slimSourceMap(JSON.stringify({ version: 3 }), root)).toBeNull();
     expect(slimSourceMap(JSON.stringify([1, 2]), root)).toBeNull();
+  });
+});
+
+describe('packSourceMap / unpackSourceMap', () => {
+  const map = JSON.stringify({
+    version: 3,
+    sources: ['/work/app/src/a.ts', '/work/app/node_modules/lib/b.js'],
+    sourcesContent: ['app code', 'dependency code'],
+    mappings: 'AAAA',
+  });
+
+  test('gzips the slimmed map and round-trips through unpack', () => {
+    const packed = packSourceMap(map, root);
+    expect(packed[0]).toBe(0x1f);
+    expect(packed[1]).toBe(0x8b);
+    expect(packed.length).toBeLessThan(Buffer.byteLength(map));
+    const restored = JSON.parse(unpackSourceMap(packed));
+    expect(restored.sources).toEqual(['src/a.ts', 'node_modules/lib/b.js']);
+    expect(restored.sourcesContent).toEqual(['app code', null]);
+  });
+
+  test('gzips unslimmable input unchanged rather than dropping it', () => {
+    const indexed = JSON.stringify({ version: 3, sections: [] });
+    const packed = packSourceMap(indexed, root);
+    expect(unpackSourceMap(packed)).toBe(indexed);
+  });
+
+  test('unpack accepts plain maps archived by older CLI versions', () => {
+    expect(unpackSourceMap(Buffer.from(map, 'utf8'))).toBe(map);
+  });
+
+  test('unpack rejects corrupt gzip instead of returning garbage', () => {
+    const broken = Buffer.concat([
+      zlib.gzipSync(Buffer.from(map)).subarray(0, 20),
+      Buffer.from([0, 0, 0, 0]),
+    ]);
+    expect(() => unpackSourceMap(broken)).toThrow();
   });
 });

@@ -1,4 +1,5 @@
 import path from 'path';
+import zlib from 'zlib';
 
 interface SourceMapV3 {
   sources?: unknown;
@@ -80,4 +81,25 @@ function isDependencySource(source: string): boolean {
   return (
     source.startsWith('node_modules/') || source.includes('/node_modules/')
   );
+}
+
+/**
+ * Build the bytes actually archived with a version: the slimmed map (when it
+ * is a plain map we understand), gzipped. Source maps are JSON and compress
+ * about 5x, which is the difference between a multi-megabyte upload on every
+ * publish and a small one. Readers detect the gzip magic bytes rather than
+ * trusting a file name, so plain maps archived by older CLI versions keep
+ * working unchanged.
+ */
+export function packSourceMap(content: string, projectRoot: string): Buffer {
+  const slimmed = slimSourceMap(content, projectRoot);
+  return zlib.gzipSync(Buffer.from(slimmed ?? content, 'utf8'));
+}
+
+/** Decode an archived source map: gzip when the magic bytes say so. */
+export function unpackSourceMap(data: Buffer): string {
+  if (data.length >= 2 && data[0] === 0x1f && data[1] === 0x8b) {
+    return zlib.gunzipSync(data).toString('utf8');
+  }
+  return data.toString('utf8');
 }

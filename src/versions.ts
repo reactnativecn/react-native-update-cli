@@ -20,7 +20,7 @@ import {
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getBooleanOption, getStringListOption } from './utils/options';
-import { slimSourceMap } from './utils/slim-sourcemap';
+import { packSourceMap } from './utils/slim-sourcemap';
 import {
   bundleLocationFields,
   readZipEntryWithLocation,
@@ -546,25 +546,23 @@ export const versionCommands = {
     if (!sourcemapPath) {
       console.log(chalk.yellow(t('sourceMapMissingWarning')));
     }
-    // Archive a slimmed copy: relative paths, no dependency sourcesContent
-    // (see slimSourceMap). Frames keep symbolicating everywhere; only inline
-    // snippets of node_modules code are dropped, and the map shrinks by the
-    // bulk of its bytes. If the file is not a plain map, upload it untouched.
+    // Archive a slimmed, gzipped copy (see packSourceMap): relative paths, no
+    // dependency sourcesContent, ~5x smaller on the wire. Frames keep
+    // symbolicating everywhere; only inline snippets of node_modules code are
+    // dropped. The temp file keeps the .map extension because /upload routes
+    // by extension; readers detect gzip by magic bytes.
     let uploadSourcemapPath = sourcemapPath;
-    let slimTempDir: string | undefined;
+    let packTempDir: string | undefined;
     if (sourcemapPath) {
-      const slimmed = slimSourceMap(
-        fs.readFileSync(sourcemapPath, 'utf8'),
-        process.cwd(),
+      packTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-sourcemap-'));
+      uploadSourcemapPath = path.join(
+        packTempDir,
+        path.basename(sourcemapPath),
       );
-      if (slimmed !== null) {
-        slimTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-sourcemap-'));
-        uploadSourcemapPath = path.join(
-          slimTempDir,
-          path.basename(sourcemapPath),
-        );
-        fs.writeFileSync(uploadSourcemapPath, slimmed);
-      }
+      fs.writeFileSync(
+        uploadSourcemapPath,
+        packSourceMap(fs.readFileSync(sourcemapPath, 'utf8'), process.cwd()),
+      );
     }
 
     // Hashing/caching the bundle and asking git for the commit are independent
@@ -588,8 +586,8 @@ export const versionCommands = {
           )
         : Promise.resolve(undefined),
     ]);
-    if (slimTempDir) {
-      fs.rmSync(slimTempDir, { recursive: true, force: true });
+    if (packTempDir) {
+      fs.rmSync(packTempDir, { recursive: true, force: true });
     }
     const sourceMapKey = sourceMapUpload?.hash;
     if (sourcemapPath && !sourceMapKey) {

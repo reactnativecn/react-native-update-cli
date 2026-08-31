@@ -5,6 +5,7 @@ import { get } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import type { Platform, Version } from './types';
 import { t } from './utils/i18n';
+import { unpackSourceMap } from './utils/slim-sourcemap';
 import { fetchVersions } from './versions';
 
 // A frame location inside a shipped bundle: `<bundle>:<line>:<column>`. Covers
@@ -137,7 +138,11 @@ export const symbolicateCommands = {
     if (!response.ok) {
       throw new Error(`Failed to download source map: HTTP ${response.status}`);
     }
-    const rawMap = JSON.parse(await response.text());
+    // Maps archived by recent CLI versions are gzipped; older ones are plain
+    // JSON, and unpackSourceMap accepts both.
+    const rawMap = JSON.parse(
+      unpackSourceMap(Buffer.from(await response.arrayBuffer())),
+    );
     const consumer = new SourceMapConsumer(rawMap);
 
     const stack = await readStack(args[0]);
