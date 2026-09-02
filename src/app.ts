@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { doDelete, get, post } from './api';
 import type { Platform } from './types';
-import { loadTtyTable, question } from './utils';
+import { isNonInteractive, loadTtyTable, question } from './utils';
 import { updateJson } from './utils/constants';
 import { t } from './utils/i18n';
 
@@ -144,6 +144,11 @@ export async function listApp(platform: Platform | '' = '') {
 /** Prompt until the user chooses an app belonging to the target platform. */
 export async function chooseApp(platform: Platform) {
   const list = await listApp(platform);
+  // without a terminal `question` answers '' and no app has that id: the
+  // loop below would never end
+  if (isNonInteractive()) {
+    throw new Error(t('appIdRequired'));
+  }
 
   while (true) {
     const id = await question(t('enterAppIdQuestion'));
@@ -166,6 +171,9 @@ async function selectApp({
   const id = args[0]
     ? Number.parseInt(args[0], 10)
     : (await chooseApp(platform)).id;
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error(t('invalidId', { id: args[0] }));
+  }
 
   const configPath = options.config || updateJson;
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =

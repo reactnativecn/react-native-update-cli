@@ -585,10 +585,13 @@ export const versionCommands = {
             },
           )
         : Promise.resolve(undefined),
-    ]);
-    if (packTempDir) {
-      fs.rmSync(packTempDir, { recursive: true, force: true });
-    }
+    ]).finally(() => {
+      // the packed copy only exists for the upload; a failed ppk upload must
+      // not leave it behind in the OS temp dir
+      if (packTempDir) {
+        fs.rmSync(packTempDir, { recursive: true, force: true });
+      }
+    });
     const sourceMapKey = sourceMapUpload?.hash;
     if (sourcemapPath && !sourceMapKey) {
       console.log(

@@ -16,8 +16,14 @@ export function addGitIgnore() {
 
   const gitignoreLines = gitignoreContent.split('\n');
 
+  // `.pushy`, `/.pushy` and `.pushy/` all ignore the same directory; a
+  // trailing slash only matches directories, so it counts for tempDir alone
+  const covers = (entry: string, line: string) => {
+    const pattern = line.trim().replace(/^\//, '');
+    return pattern === entry || (entry === tempDir && pattern === `${entry}/`);
+  };
   for (const line of gitignoreLines) {
-    const index = shouldIgnore.indexOf(line.trim());
+    const index = shouldIgnore.findIndex((entry) => covers(entry, line));
     if (index !== -1) {
       shouldIgnore.splice(index, 1);
     }

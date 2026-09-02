@@ -1,6 +1,9 @@
 import filesizeParser from 'filesize-parser';
 import fs from 'fs';
-import fetch from 'node-fetch';
+import type {
+  RequestInit as NodeFetchRequestInit,
+  Response as NodeFetchResponse,
+} from 'node-fetch';
 import path from 'path';
 import type ProgressBar from 'progress';
 import packageJson from '../package.json';
@@ -256,6 +259,17 @@ class UploadTimeoutError extends Error {
 }
 
 /**
+ * node-fetch is only needed for the streaming multipart / PUT upload below
+ * (the built-in fetch cannot stream a form-data body). Loading it eagerly
+ * pulled whatwg-url → punycode into every command, which Node ≥ 21 greets
+ * with a DEP0040 deprecation warning on stderr; so it is loaded on first use.
+ */
+function loadNodeFetch(): typeof import('node-fetch').default {
+  const mod = require('node-fetch');
+  return (mod.default ?? mod) as typeof import('node-fetch').default;
+}
+
+/**
  * Send the file with a size-scaled deadline and one retry on a transient
  * network error. `buildRequest` is invoked per attempt with a fresh file
  * stream (a consumed stream/form cannot be replayed).
@@ -265,9 +279,10 @@ async function sendUpload(
   realUrl: string,
   fileSize: number,
   bar: ProgressBar,
-  buildRequest: (fileStream: fs.ReadStream) => fetch.RequestInit,
-): Promise<fetch.Response> {
+  buildRequest: (fileStream: fs.ReadStream) => NodeFetchRequestInit,
+): Promise<NodeFetchResponse> {
   const timeoutMs = uploadTimeoutMs(fileSize);
+  const nodeFetch = loadNodeFetch();
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
     let timedOut = false;
@@ -280,7 +295,7 @@ async function sendUpload(
       bar.tick(data.length);
     });
     try {
-      return await fetch(realUrl, {
+      return await nodeFetch(realUrl, {
         ...buildRequest(fileStream),
         signal: controller.signal,
       });
@@ -361,7 +376,7 @@ export async function uploadFile(
 
   // 自托管节点的 s3 直传:服务端下发预签名 PUT,字节直达用户的对象存储
   if (resp.method === 'PUT') {
-    let putRes: fetch.Response;
+    let putRes: NodeFetchResponse;
     try {
       putRes = await sendUpload(fn, realUrl, fileSize, bar, (fileStream) => ({
         method: 'PUT',
@@ -385,7 +400,7 @@ export async function uploadFile(
   }
 
   const FormData = require('form-data') as typeof import('form-data');
-  let res: fetch.Response;
+  let res: NodeFetchResponse;
   try {
     res = await sendUpload(fn, realUrl, fileSize, bar, (fileStream) => {
       const form = new FormData();

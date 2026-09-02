@@ -65,3 +65,42 @@ describe('utils/add-gitignore', () => {
     );
   });
 });
+
+describe('utils/add-gitignore pattern variants', () => {
+  let tempRoot = '';
+
+  beforeEach(() => {
+    tempRoot = mkTempDir('rn-update-gitignore-variants-');
+    process.chdir(tempRoot);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (tempRoot && fs.existsSync(tempRoot)) {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test('treats anchored and directory forms as already ignored', () => {
+    const original = [`/${credentialFile}`, `${tempDir}/`, ''].join('\n');
+    fs.writeFileSync(path.join(tempRoot, '.gitignore'), original);
+
+    addGitIgnore();
+
+    expect(readGitIgnore(tempRoot)).toBe(original);
+  });
+
+  test('a trailing slash does not cover the credential file', () => {
+    // `.update/` only matches a directory, but the token is a file
+    fs.writeFileSync(
+      path.join(tempRoot, '.gitignore'),
+      [`${credentialFile}/`, tempDir].join('\n'),
+    );
+
+    addGitIgnore();
+
+    const lines = readGitIgnore(tempRoot).split('\n');
+    expect(lines).toContain(credentialFile);
+    expect(lines.filter((line) => line === tempDir)).toHaveLength(1);
+  });
+});

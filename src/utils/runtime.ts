@@ -7,7 +7,6 @@ import {
 } from 'child_process';
 import fs from 'fs';
 import { createConnection } from 'net';
-import nodeFetch from 'node-fetch';
 import path from 'path';
 
 export type RuntimeRequestInit = {
@@ -34,12 +33,15 @@ export function runtimeFetch(
   url: string,
   options?: RuntimeRequestInit,
 ): Promise<RuntimeResponse> {
-  const fetchImpl =
-    typeof globalThis.fetch === 'function'
-      ? globalThis.fetch.bind(globalThis)
-      : nodeFetch;
-
-  return fetchImpl(url, options as any) as Promise<RuntimeResponse>;
+  if (typeof globalThis.fetch === 'function') {
+    return globalThis.fetch(url, options as any) as Promise<RuntimeResponse>;
+  }
+  // Node < 18 only. Loaded on demand so the built-in fetch path never pays
+  // for node-fetch (nor for the punycode deprecation warning it triggers on
+  // Node ≥ 21).
+  const mod = require('node-fetch');
+  const nodeFetch = (mod.default ?? mod) as typeof import('node-fetch').default;
+  return nodeFetch(url, options as any) as unknown as Promise<RuntimeResponse>;
 }
 
 function resolveTcpTarget(input: string): { host: string; port: number } {

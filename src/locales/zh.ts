@@ -47,17 +47,12 @@ export default {
   bundlingWithRN: '正在使用 react-native {{version}} 打包',
   cancelled: '已取消',
   composingSourceMap: '正在生成 source map',
-  copyFileFailed: '复制文件失败：{{error}}',
-  copyHarmonyBundleError: '复制 Harmony bundle 错误：{{error}}',
   copyingDebugId: '正在复制 debugid',
   createAppSuccess: '已成功创建应用（id: {{id}}）',
   deleteFile: '删除 {{- file}}',
-  deletingFile: '删除 {{- file}}',
   enterAppIdQuestion: '输入应用 id:',
   enterNativePackageId: '输入原生包 id:',
-  errorInHarmonyApp: '获取 Harmony 应用入口时出错：{{error}}',
   expiredStatus: '(已过期)',
-  failedToParseIcon: '[警告] 解析图标失败：{{error}}',
   failedToParseUpdateJson: '无法解析文件 `{{- configPath}}`。请手动删除它。',
   fileGenerated: '已生成 {{- file}}',
   fileSizeExceeded:
@@ -66,7 +61,6 @@ export default {
   hermesEnabledCompiling: 'Hermes 已启用，正在编译为 hermes 字节码：\n',
   ipaUploadSuccess:
     '已成功上传ipa原生包（id: {{id}}, version: {{version}}, buildTime: {{buildTime}}）',
-  keyStrings: '键字符串：',
   latestVersionTag: '（最新：{{version}}）',
   lockBestPractice: `
 关于 lock 文件的最佳实践：
@@ -114,15 +108,9 @@ export default {
   packing: '正在打包',
   pausedStatus: '(已暂停)',
   platform: '平台',
-  platformPrompt: '平台(ios/android/harmony):',
   platformQuestion: '平台(ios/android/harmony):',
-  platformRequired: '必须指定平台。',
   pluginDetectionError: '检测 {{name}} 插件时出错：{{error}}',
   pluginDetected: '检测到 {{name}} 插件',
-  ppkPackageGenerated: 'ppk 热更包已生成并保存到: {{- output}}',
-  processingError: '处理文件时出错：{{error}}',
-  processingPackage: '正在处理包 {{count}}...',
-  processingStringPool: '正在处理字符串池...',
   sourceMapNotFound: '找不到 source map：{{path}}',
   sourceMapMissingWarning:
     '本版本没有归档 source map，之后的崩溃堆栈将无法还原。请用默认的 --sourcemap 打包，或在 publish 时传 --sourcemap <文件>。',
@@ -149,7 +137,6 @@ export default {
   sentryReleaseCreated: '已为版本 {{version}} 创建 Sentry release',
   totalApps: '共 {{count}} 个 {{platform}} 应用',
   totalPackages: '共 {{count}} 个包',
-  typeStrings: '类型字符串：',
   unsupportedPlatform: '无法识别的平台 `{{platform}}`',
   uploadBundlePrompt: '是否现在上传此热更包?(Y/N)',
   uploadingSourcemap: '正在上传 sourcemap',
@@ -231,4 +218,10 @@ export default {
     'Hermes base：字节码与普通编译不等价，放弃 base 重新编译',
   cacheCleaned: '已清理 {{count}} 个缓存 bundle',
   cacheStats: 'bundle 缓存：{{- dir}} — {{files}} 个文件，{{mb}} MB',
+  loginCredentialsRequired:
+    '需要提供邮箱和密码。用法：{{scriptName}} login <邮箱> <密码>',
+  bundleUnexpectedArgs:
+    'bundle 不接受位置参数，收到：{{- args}}。布尔选项不带值，关闭请使用 --no-<选项>（例如 --no-sourcemap）。',
+  unsafeIntermediateDir:
+    '拒绝清空中间目录 {{- dir}}：它是项目目录本身（或其上级）。请用 --intermediaDir 指定一个专用的构建目录。',
 };

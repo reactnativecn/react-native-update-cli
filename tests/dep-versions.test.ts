@@ -157,6 +157,36 @@ describe('depVersions utility', () => {
     });
   });
 
+  test('getDepVersion answers for one direct dependency without the whole map', async () => {
+    fs.writeFileSync(
+      path.join(testDir, 'package.json'),
+      JSON.stringify({ dependencies: { direct: '^1.0.0' } }),
+    );
+    for (const [name, version] of [
+      ['direct', '1.2.3'],
+      ['transitive', '9.9.9'],
+    ]) {
+      const dir = path.join(testDir, 'node_modules', name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'package.json'),
+        JSON.stringify({ version }),
+      );
+    }
+
+    const modulePath = path.join(
+      originalCwd,
+      'src',
+      'utils',
+      'dep-versions.ts',
+    );
+    const module = await import(`${modulePath}?t=${Date.now()}_${testCount}_1`);
+    expect(module.getDepVersion('direct')).toBe('1.2.3');
+    // installed but not declared by the project: not a project dependency
+    expect(module.getDepVersion('transitive')).toBeUndefined();
+    expect(module.getDepVersion('missing')).toBeUndefined();
+  });
+
   test('should deduplicate dependencies appearing in both dependencies and devDependencies', async () => {
     fs.writeFileSync(
       path.join(testDir, 'package.json'),

@@ -230,6 +230,7 @@ export async function runReactNativeBundleCommand({
     reactNativeBundleArgs.push(...envArgs.trim().split(/\s+/));
   }
 
+  assertSafeToEmpty(outputFolder);
   fs.emptyDirSync(outputFolder);
 
   let cliPath = '';
@@ -408,6 +409,30 @@ export async function runReactNativeBundleCommand({
     });
   });
   return hermesResult;
+}
+
+/**
+ * The intermediate directory is emptied before every bundle. Refuse to do that
+ * to the project itself (`--intermediaDir .`), to anything above it, to the
+ * home directory or to the filesystem root: one typo must not wipe a working
+ * tree.
+ */
+export function assertSafeToEmpty(dir: string, cwd = process.cwd()): void {
+  const target = path.resolve(cwd, dir);
+  const contains = (parent: string, child: string) => {
+    const relative = path.relative(parent, child);
+    return (
+      relative === '' ||
+      (!relative.startsWith('..') && !path.isAbsolute(relative))
+    );
+  };
+  if (
+    target === path.parse(target).root ||
+    target === path.resolve(os.homedir()) ||
+    contains(target, path.resolve(cwd))
+  ) {
+    throw new Error(t('unsafeIntermediateDir', { dir: target }));
+  }
 }
 
 async function detectHermesEnabled(

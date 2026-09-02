@@ -76,7 +76,7 @@ const publishResult = await provider.publish({
 - `hdiffFromApp`: 基于 APP 文件生成 hdiff
 - `hdiffFromIpa`: 基于 IPA 文件生成 hdiff
 
-Hermes 工程：`bundle` 调用 hermesc 时始终带 `-output-source-map`，因此字节码不含 debug info 段（小 15%～40%，与 React Native 自身 release 构建一致）。Hermes sourcemap 保留在中间目录（`.pushy/intermedia/<platform>/<bundle>.map`，不会打进 ppk），并与 packager map 合成——自 2.23 起 `--sourcemap` 默认开启（`--sourcemap false` 关闭）。`bundle` 发布时会把这份最终 map 上传并随版本归档（`sourceMapKey`），之后用 `pushy symbolicate` 即可把崩溃堆栈（含 Hermes 的 `address at` 帧）还原到源码。别处打好的 ppk 可用 `pushy publish <ppk> --sourcemap <file.map>` 归档；不带 map 发布会打印警告。
+Hermes 工程：`bundle` 调用 hermesc 时始终带 `-output-source-map`，因此字节码不含 debug info 段（小 15%～40%，与 React Native 自身 release 构建一致）。Hermes sourcemap 保留在中间目录（`.pushy/intermedia/<platform>/<bundle>.map`，不会打进 ppk），并与 packager map 合成——自 2.23 起 `--sourcemap` 默认开启（`--no-sourcemap` 关闭）。`bundle` 发布时会把这份最终 map 上传并随版本归档（`sourceMapKey`），之后用 `pushy symbolicate` 即可把崩溃堆栈（含 Hermes 的 `address at` 帧）还原到源码。别处打好的 ppk 可用 `pushy publish <ppk> --sourcemap <file.map>` 归档；不带 map 发布会打印警告。
 
 Hermes delta 模式（`-base-bytecode`）：默认 `--hermesBase auto`，`bundle` 会以同一应用上一版的 HBC 为 base 编译，让 Hermes 字符串 ID 跨版本稳定，热更 patch 可缩小 5～30 倍。base 由服务端（`GET /app/:id/hermesBase`）给出、按 sha256 校验并存入本地缓存（`.pushy/cache/<sha256>`，默认 500 MB / 20 个，可用 `PUSHY_CACHE_DIR` / `--cacheMaxMb` 调整，`pushy cache [clean]` 查看或清空）。`--hermesBase none` 关闭；`--hermesBase <file.hbc|.ppk|.apk|.ipa>` 指定本地文件（比如商店包）作 base。`--verifyHermesBase`（默认开）会并行再做一次普通编译并比对两份反汇编；任何不一致或失败都静默回退到普通编译，不会阻塞发版。只有包含上游 delta 模式修复的 hermesc 才会启用（经典 `react-native/sdks/hermesc`，或 `hermes-compiler` ≥ 250829098）。base 编译失败时，完整的 hermesc 输出会写到中间目录旁边的 `hermes-base-error.log`。`--resetCache false` 可跳过 Metro 的 `--reset-cache`，复用其转换缓存，重复打包会快很多。
 
@@ -122,20 +122,23 @@ Hermes delta 模式（`-base-bytecode`）：默认 `--hermesBase auto`，`bundle
 interface CLIProvider {
   bundle(options: BundleOptions): Promise<CommandResult>;
   publish(options: PublishOptions): Promise<CommandResult>;
+  symbolicate(options: SymbolicateOptions): Promise<CommandResult>;
   upload(options: UploadOptions): Promise<CommandResult>;
 
+  createApp(name: string, platform: Platform): Promise<CommandResult>;
+  listApps(platform?: Platform): Promise<CommandResult>;
   getSelectedApp(
     platform?: Platform,
+    config?: string,
   ): Promise<{ appId: string; platform: Platform }>;
-  listApps(platform?: Platform): Promise<CommandResult>;
-  createApp(name: string, platform: Platform): Promise<CommandResult>;
 
   listVersions(appId: string): Promise<CommandResult>;
   updateVersion(
     appId: string,
     versionId: string,
-    updates: Partial<Version>,
+    updates: UpdateVersionOptions,
   ): Promise<CommandResult>;
+  listPackages(appId?: string): Promise<CommandResult>;
 
   getPlatform(platform?: Platform): Promise<Platform>;
   loadSession(): Promise<Session>;

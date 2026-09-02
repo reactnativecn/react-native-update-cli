@@ -10,6 +10,7 @@ import {
   getApkInfo,
   getAppInfo,
   getIpaInfo,
+  isNonInteractive,
   loadTtyTable,
   question,
 } from './utils';
@@ -253,6 +254,11 @@ export async function listPackage(appId: string, packages?: Package[]) {
 
 export async function choosePackage(appId: string, packages?: Package[]) {
   const list = await listPackage(appId, packages);
+  // without a terminal `question` answers '' and no package has that id: the
+  // loop below would never end
+  if (isNonInteractive()) {
+    throw new Error(t('packageIdRequired'));
+  }
   const packageMap = new Map(list?.map((v) => [v.id.toString(), v]));
 
   while (true) {

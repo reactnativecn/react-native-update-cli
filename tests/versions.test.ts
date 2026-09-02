@@ -11,6 +11,9 @@ import {
 // We test the exported helper bindVersionToPackages and the internal rollout
 // parsing logic by calling versionCommands.update with mocked API calls.
 
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import * as api from '../src/api';
 import * as app from '../src/app';
 import * as utils from '../src/utils';
@@ -153,6 +156,37 @@ describe('versionCommands.publish', () => {
     getCommitInfoSpy.mockRestore();
     updateSpy.mockRestore();
     appGetSpy.mockRestore();
+  });
+
+  test('removes the packed source map copy even when the ppk upload fails', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-publish-map-'));
+    const mapPath = path.join(dir, 'index.bundlejs.map');
+    fs.writeFileSync(
+      mapPath,
+      JSON.stringify({ version: 3, sources: ['a.js'], mappings: '' }),
+    );
+    const packedDirs = () =>
+      fs
+        .readdirSync(os.tmpdir())
+        .filter((name) => name.startsWith('rnu-sourcemap-'));
+    const before = packedDirs();
+    uploadFileSpy.mockRejectedValue(new Error('upload failed'));
+    try {
+      await expect(
+        versionCommands.publish({
+          args: ['bundle.ppk'],
+          options: {
+            platform: 'android',
+            name: 'v1',
+            sourcemap: mapPath,
+            'no-interactive': true,
+          },
+        }),
+      ).rejects.toThrow('upload failed');
+      expect(packedDirs().filter((name) => !before.includes(name))).toEqual([]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test('can bind after publish when called without object receiver', async () => {

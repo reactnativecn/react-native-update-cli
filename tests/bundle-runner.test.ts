@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import {
+  assertSafeToEmpty,
   buildHermescArgs,
   buildSentrySourcemapsUploadArgs,
   hasProjectDependency,
@@ -495,5 +496,24 @@ describe('summarizeHermescStderr', () => {
 
   test('returns an empty string for empty stderr', () => {
     expect(summarizeHermescStderr('')).toBe('');
+  });
+});
+
+describe('assertSafeToEmpty', () => {
+  const cwd = path.join(os.tmpdir(), 'rnu-project');
+
+  test('allows a build directory inside or outside the project', () => {
+    expect(() => assertSafeToEmpty('.pushy/intermedia/ios', cwd)).not.toThrow();
+    expect(() =>
+      assertSafeToEmpty(path.join(os.tmpdir(), 'elsewhere', 'build'), cwd),
+    ).not.toThrow();
+  });
+
+  test('refuses the project directory, its ancestors, home and the root', () => {
+    expect(() => assertSafeToEmpty('.', cwd)).toThrow();
+    expect(() => assertSafeToEmpty('..', cwd)).toThrow();
+    expect(() => assertSafeToEmpty(cwd, cwd)).toThrow();
+    expect(() => assertSafeToEmpty(os.homedir(), cwd)).toThrow();
+    expect(() => assertSafeToEmpty(path.parse(cwd).root, cwd)).toThrow();
   });
 });

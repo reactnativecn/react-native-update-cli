@@ -1,38 +1,61 @@
-// Installed versions of every dependency/devDependency of the project in cwd.
-// Resolving them means reading one package.json per dependency, so this is
-// done lazily (on first use) and memoized rather than at import time, which
-// used to cost every command ~3-30 ms before it even parsed its arguments.
+// Installed versions of the dependencies/devDependencies of the project in
+// cwd. Resolving them means reading one package.json per dependency, so the
+// full map is built lazily (on first use) and memoized rather than at import
+// time, and the version banner printed by every command asks for the single
+// dependency it needs (`getDepVersion`) instead of the whole map.
+
+import fs from 'fs';
+import path from 'path';
+
+type ProjectPackageJson = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+};
 
 let cached: Record<string, string> | undefined;
 
-function readDepVersions(): Record<string, string> {
-  let currentPackage: {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-  } | null = null;
+function readProjectPackageJson(): ProjectPackageJson | null {
   try {
-    currentPackage = require(`${process.cwd()}/package.json`);
-  } catch (_e) {
-    // console.warn('No package.json file were found');
+    return JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
+    ) as ProjectPackageJson;
+  } catch {
+    // no package.json (or not JSON): the project simply declares nothing
+    return null;
   }
+}
 
+/** direct dependency names (dependencies + devDependencies), deduplicated */
+function directDependencyNames(pkg: ProjectPackageJson): string[] {
+  return [
+    ...new Set([
+      ...Object.keys(pkg.dependencies ?? {}),
+      ...Object.keys(pkg.devDependencies ?? {}),
+    ]),
+  ];
+}
+
+/** version of the installed copy of `dep`, resolved from cwd */
+function readInstalledVersion(dep: string): string | undefined {
+  try {
+    const packageJsonPath = require.resolve(`${dep}/package.json`, {
+      paths: [process.cwd()],
+    });
+    return require(packageJsonPath).version;
+  } catch {
+    return undefined;
+  }
+}
+
+function readDepVersions(): Record<string, string> {
   const versions: Record<string, string> = {};
-  if (currentPackage) {
-    const depKeys = currentPackage.dependencies
-      ? Object.keys(currentPackage.dependencies)
-      : [];
-    const devDepKeys = currentPackage.devDependencies
-      ? Object.keys(currentPackage.devDependencies)
-      : [];
-    const dedupedDeps = [...new Set([...depKeys, ...devDepKeys])];
-
-    for (const dep of dedupedDeps) {
-      try {
-        const packageJsonPath = require.resolve(`${dep}/package.json`, {
-          paths: [process.cwd()],
-        });
-        versions[dep] = require(packageJsonPath).version;
-      } catch (_e) {}
+  const pkg = readProjectPackageJson();
+  if (pkg) {
+    for (const dep of directDependencyNames(pkg)) {
+      const version = readInstalledVersion(dep);
+      if (version) {
+        versions[dep] = version;
+      }
     }
   }
 
@@ -54,6 +77,23 @@ export function getDepVersions(): Record<string, string> {
     cached = readDepVersions();
   }
   return cached;
+}
+
+/**
+ * Installed version of one direct (dev)dependency of the cwd project, or
+ * undefined when the project does not declare it or it is not installed.
+ * Two file reads instead of one per dependency: the version banner printed
+ * before every command must not scale with the size of the project.
+ */
+export function getDepVersion(name: string): string | undefined {
+  if (cached) {
+    return cached[name];
+  }
+  const pkg = readProjectPackageJson();
+  if (!pkg || !directDependencyNames(pkg).includes(name)) {
+    return undefined;
+  }
+  return readInstalledVersion(name);
 }
 
 /**

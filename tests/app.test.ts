@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import fs from 'fs';
 import * as api from '../src/api';
-import { assertPlatform, getAppCommands, getSelectedApp } from '../src/app';
+import {
+  assertPlatform,
+  chooseApp,
+  getAppCommands,
+  getSelectedApp,
+} from '../src/app';
 
 describe('assertPlatform', () => {
   test('accepts ios', () => {
@@ -162,5 +167,43 @@ describe('appCommands.createApp', () => {
       ),
       'utf8',
     );
+  });
+});
+
+describe('non-interactive guards', () => {
+  afterEach(() => {
+    global.NO_INTERACTIVE = undefined;
+  });
+
+  test('chooseApp fails instead of looping forever when nothing can answer', async () => {
+    global.NO_INTERACTIVE = true;
+    const getSpy = spyOn(api, 'get').mockResolvedValue({
+      data: [{ id: 1, name: 'DemoApp', platform: 'ios' }],
+    });
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      // `question` answers '' without a terminal, which matches no app id
+      await expect(chooseApp('ios')).rejects.toThrow();
+    } finally {
+      getSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  test('selectApp rejects an app id that is not a positive integer', async () => {
+    const getSpy = spyOn(api, 'get').mockRejectedValue(
+      new Error('must not reach the server'),
+    );
+    try {
+      await expect(
+        getAppCommands().selectApp({
+          args: ['abc'],
+          options: { platform: 'ios' },
+        }),
+      ).rejects.toThrow(/abc/);
+      expect(getSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+    }
   });
 });

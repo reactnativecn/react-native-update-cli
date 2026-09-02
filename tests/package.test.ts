@@ -4,7 +4,11 @@ import os from 'os';
 import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
 import * as api from '../src/api';
-import { normalizeUploadBuildTime, packageCommands } from '../src/package';
+import {
+  choosePackage,
+  normalizeUploadBuildTime,
+  packageCommands,
+} from '../src/package';
 import * as utils from '../src/utils';
 import { enumZipEntries } from '../src/utils/zip-entries';
 
@@ -293,5 +297,24 @@ describe('packageCommands native upload', () => {
 
     expect(fs.existsSync(uploadedPath)).toBe(false);
     expect(postSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('choosePackage', () => {
+  afterEach(() => {
+    global.NO_INTERACTIVE = undefined;
+  });
+
+  test('fails instead of looping forever when nothing can answer', async () => {
+    global.NO_INTERACTIVE = true;
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      // `question` answers '' without a terminal, which matches no package id
+      await expect(
+        choosePackage('100', [{ id: 1, name: '1.0.0' }]),
+      ).rejects.toThrow();
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });

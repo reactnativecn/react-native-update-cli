@@ -57,6 +57,11 @@ type NormalizedBundleOptions = {
   sentryDist?: string;
 };
 
+/** `--no-<flag>` as parsed by cli-arguments: the key is present without a value. */
+function isClearedFlag(options: Record<string, unknown>, key: string): boolean {
+  return key in options && options[key] === undefined;
+}
+
 /** Parse a positive cache-size option expressed in megabytes. */
 function parseCacheMaxMb(value: unknown): number | undefined {
   const parsed = typeof value === 'string' ? Number(value) : (value as number);
@@ -117,8 +122,13 @@ export function normalizeBundleOptions(
     ),
     dev: getBooleanOption(translatedOptions, 'dev', false) ? 'true' : 'false',
     // On by default since 2.23: the map is archived with the published
-    // version (pushy symbolicate). --no-sourcemap / --sourcemap=false opts out.
-    sourcemap: getBooleanOption(translatedOptions, 'sourcemap', true),
+    // version (pushy symbolicate). `--no-sourcemap` opts out: cli-arguments
+    // implements `--no-<flag>` by clearing the flag's value, so a key that is
+    // present but undefined is the opt-out and only a missing key means
+    // "default" (`--sourcemap false` would leave the flag on, see `bundle`).
+    sourcemap: isClearedFlag(translatedOptions, 'sourcemap')
+      ? false
+      : getBooleanOption(translatedOptions, 'sourcemap', true),
     taro: getBooleanOption(translatedOptions, 'taro', false),
     expo: getBooleanOption(translatedOptions, 'expo', false),
     rncli: getBooleanOption(translatedOptions, 'rncli', false),
@@ -209,11 +219,19 @@ async function publishBundleVersion(
 export const bundleCommands = {
   /** Build a bundle and optionally publish it to one operation-scoped app. */
   bundle: async ({
+    args = [],
     options,
   }: {
     args?: string[];
     options: Record<string, unknown>;
   }) => {
+    // Boolean flags take no value: `--sourcemap false` leaves the flag on and
+    // turns "false" into a stray argument. Refuse it rather than silently
+    // bundling with the wrong settings (a flag is switched off with
+    // `--no-<flag>`).
+    if (args.length > 0) {
+      throw new Error(t('bundleUnexpectedArgs', { args: args.join(' ') }));
+    }
     const platform = await getPlatform(
       typeof options.platform === 'string' ? options.platform : undefined,
     );
@@ -275,10 +293,6 @@ export const bundleCommands = {
       /\$\{time\}/g,
       `${Date.now()}`,
     );
-
-    if (!platform) {
-      throw new Error(t('platformRequired'));
-    }
 
     console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
 
