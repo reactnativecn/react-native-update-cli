@@ -4,7 +4,7 @@
 // a dependency or an API that needs a newer runtime fails here rather than on
 // a user's machine; the test suite itself runs under bun and cannot tell.
 
-const { spawnSync } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -66,3 +66,248 @@ function runCli(args) {
 runCli(['help']);
 runCli(['-v']);
 console.log('smoke: `help` and `-v` ran without warnings');
+
+// --- proxy scenario ---------------------------------------------------------
+// Node's built-in fetch ignores HTTP(S)_PROXY, so the CLI routes every request
+// itself (src/utils/runtime.ts): every client opens a CONNECT tunnel through
+// the proxy. A mock API and a local forward proxy show that the API call, the
+// registry check and the multipart upload all tunnel through the proxy, and
+// that NO_PROXY switches it off again.
+
+const http = require('node:http');
+const net = require('node:net');
+const os = require('node:os');
+
+function listen(server) {
+  return new Promise((resolve) =>
+    server.listen(0, '127.0.0.1', () => resolve(server.address().port)),
+  );
+}
+
+function createMockApi(requests) {
+  return http.createServer((req, res) => {
+    requests.push(`${req.method} ${req.url}`);
+    const json = (status, body) => {
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(body));
+    };
+    const url = req.url ?? '/';
+    if (url.startsWith('/registry/')) {
+      return json(200, { versions: {}, 'dist-tags': { latest: '0.0.0' } });
+    }
+    if (url === '/api/app/list') {
+      return json(200, {
+        data: [{ id: 100, name: 'DemoApp', platform: 'android' }],
+      });
+    }
+    if (url === '/api/upload') {
+      return json(200, {
+        url: `http://${req.headers.host}/oss/upload`,
+        formData: { key: 'hash-from-oss' },
+      });
+    }
+    if (url === '/oss/upload') {
+      req.resume();
+      req.on('end', () => {
+        res.writeHead(204);
+        res.end();
+      });
+      return;
+    }
+    if (url === '/api/app/100/version/create') {
+      req.resume();
+      req.on('end', () => json(200, { id: 1 }));
+      return;
+    }
+    json(404, { message: `unhandled ${url}` });
+  });
+}
+
+function createForwardProxy(seen) {
+  const proxy = http.createServer((req, res) => {
+    seen.push(`${req.method} ${req.url}`);
+    const target = new URL(req.url);
+    // hop-by-hop headers are not forwarded; the client below frames the body
+    // itself (a copied transfer-encoding would make the upstream reject it)
+    const {
+      connection: _connection,
+      'proxy-connection': _proxyConnection,
+      'keep-alive': _keepAlive,
+      'transfer-encoding': _transferEncoding,
+      ...headers
+    } = req.headers;
+    const upstream = http.request(
+      {
+        host: target.hostname,
+        port: target.port,
+        path: `${target.pathname}${target.search}`,
+        method: req.method,
+        headers: { ...headers, host: target.host },
+      },
+      (response) => {
+        res.writeHead(response.statusCode ?? 502, response.headers);
+        response.pipe(res);
+      },
+    );
+    upstream.on('error', (error) => {
+      res.writeHead(502);
+      res.end(String(error));
+    });
+    req.pipe(upstream);
+  });
+  proxy.on('connect', (req, socket, head) => {
+    seen.push(`CONNECT ${req.url}`);
+    const [host, port] = req.url.split(':');
+    const tunnel = net.connect(Number(port), host, () => {
+      socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      if (head?.length) tunnel.write(head);
+      socket.pipe(tunnel);
+      tunnel.pipe(socket);
+    });
+    tunnel.on('error', () => socket.destroy());
+    socket.on('error', () => tunnel.destroy());
+  });
+  return proxy;
+}
+
+async function proxyScenario() {
+  const apiRequests = [];
+  const seenByProxy = [];
+  const api = createMockApi(apiRequests);
+  const proxy = createForwardProxy(seenByProxy);
+  const apiPort = await listen(api);
+  const proxyPort = await listen(proxy);
+  const project = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-smoke-project-'));
+  const cache = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-smoke-cache-'));
+  fs.writeFileSync(
+    path.join(project, 'update.json'),
+    JSON.stringify({ android: { appId: 100, appKey: 'key' } }),
+  );
+  fs.writeFileSync(path.join(project, 'bundle.ppk'), 'fake-ppk');
+  const baseEnv = {
+    ...process.env,
+    NO_INTERACTIVE: 'true',
+    RNU_AUTO_UPDATE: '0',
+    PUSHY_REGISTRY: `http://127.0.0.1:${apiPort}/api`,
+    npm_config_registry: `http://127.0.0.1:${apiPort}/registry/`,
+    XDG_CACHE_HOME: cache,
+    HTTP_PROXY: `http://127.0.0.1:${proxyPort}`,
+    http_proxy: `http://127.0.0.1:${proxyPort}`,
+    HTTPS_PROXY: '',
+    https_proxy: '',
+    NO_PROXY: '',
+    no_proxy: '',
+  };
+  // asynchronous: spawnSync would block this process, and with it the mock
+  // API and the proxy the CLI is talking to
+  const run = (args, env) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [path.join(lib, 'bin.js'), ...args],
+        { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      let stdout = '';
+      let stderr = '';
+      child.stdout.setEncoding('utf8');
+      child.stderr.setEncoding('utf8');
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM');
+        reject(new Error(`pushy ${args.join(' ')} timed out`));
+      }, 30_000);
+      child.on('error', (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+      child.on('close', (status) => {
+        clearTimeout(timer);
+        if (status !== 0) {
+          console.error(stdout);
+          console.error(stderr);
+          reject(new Error(`pushy ${args.join(' ')} exited with ${status}`));
+          return;
+        }
+        resolve({ stdout, stderr });
+      });
+    });
+  // tunnels to the mock host: the API client (undici), the registry check
+  // (http.get) and the upload (node-fetch) each open their own
+  const tunnels = () =>
+    seenByProxy.filter((line) => line === `CONNECT 127.0.0.1:${apiPort}`)
+      .length;
+  try {
+    await run(['apps', '--no-interactive'], baseEnv);
+    if (tunnels() < 2) {
+      throw new Error(
+        `the API call or the registry check bypassed HTTP_PROXY: ${JSON.stringify(seenByProxy)}`,
+      );
+    }
+    if (!apiRequests.includes('GET /api/app/list')) {
+      throw new Error(
+        `apps did not reach the API: ${JSON.stringify(apiRequests)}`,
+      );
+    }
+    seenByProxy.length = 0;
+    apiRequests.length = 0;
+    await run(
+      [
+        'publish',
+        'bundle.ppk',
+        '--platform',
+        'android',
+        '--name',
+        'v1',
+        '--no-interactive',
+      ],
+      baseEnv,
+    );
+    if (tunnels() < 2) {
+      throw new Error(
+        `the upload bypassed HTTP_PROXY: ${JSON.stringify(seenByProxy)}`,
+      );
+    }
+    if (!apiRequests.includes('POST /oss/upload')) {
+      throw new Error(
+        `the upload did not arrive: ${JSON.stringify(apiRequests)}`,
+      );
+    }
+    if (!apiRequests.includes('POST /api/app/100/version/create')) {
+      throw new Error(
+        `publish did not reach the API: ${JSON.stringify(apiRequests)}`,
+      );
+    }
+    seenByProxy.length = 0;
+    apiRequests.length = 0;
+    await run(['apps', '--no-interactive'], {
+      ...baseEnv,
+      NO_PROXY: '127.0.0.1',
+    });
+    if (seenByProxy.length > 0) {
+      throw new Error(`NO_PROXY was ignored: ${JSON.stringify(seenByProxy)}`);
+    }
+    if (!apiRequests.includes('GET /api/app/list')) {
+      throw new Error(
+        `the API call did not arrive directly: ${JSON.stringify(apiRequests)}`,
+      );
+    }
+    console.log(
+      'smoke: API, registry check and upload honor HTTP_PROXY and NO_PROXY',
+    );
+  } finally {
+    api.close();
+    proxy.close();
+    fs.rmSync(project, { recursive: true, force: true });
+    fs.rmSync(cache, { recursive: true, force: true });
+  }
+}
+
+proxyScenario().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

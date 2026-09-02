@@ -156,6 +156,8 @@ export RNU_LANG=en      # 界面语言（默认：pushy 为 zh，cresc 为 en）
 export RNU_DEBUG=1      # 出错时打印完整堆栈
 ```
 
+所有请求都遵循 `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY`（大小写均可）：API 调用、原生包与热更包上传、source map 与 Hermes base 下载、registry 版本检查。
+
 ## Sentry Sourcemap
 
 当项目存在 `ios/sentry.properties` 或 `android/sentry.properties` 时，`bundle` 会为 OTA 包上传 sourcemap。默认使用 Sentry Debug ID 匹配，不再根据原生包推导 release/dist。

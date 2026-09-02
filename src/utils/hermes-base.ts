@@ -18,6 +18,7 @@ import { pipeline } from 'stream/promises';
 import { tempDir } from './constants';
 import { getHbcVersion } from './hbcTransform';
 import { t } from './i18n';
+import { webFetch } from './runtime';
 import { enumZipEntries, readEntry } from './zip-entries';
 import {
   fetchZipEntryData,
@@ -526,7 +527,7 @@ export async function downloadToFile(
   );
   let response: Response;
   try {
-    response = await fetch(url, { signal: controller.signal });
+    response = await webFetch(url, { signal: controller.signal });
   } finally {
     clearTimeout(headersTimer);
   }

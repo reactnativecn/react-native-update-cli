@@ -43,6 +43,14 @@ function printUsage(exitCode = 1) {
 function reportError(err: unknown) {
   if (isTruthyEnv(process.env.RNU_DEBUG)) {
     console.error(err instanceof Error ? err.stack : err);
+    // fetch failures wrap the real reason (ECONNREFUSED, TLS, ...) as `cause`
+    for (
+      let cause = (err as { cause?: unknown })?.cause;
+      cause;
+      cause = (cause as { cause?: unknown })?.cause
+    ) {
+      console.error('Caused by:', cause);
+    }
     return;
   }
   console.error(err instanceof Error ? err.message : String(err));

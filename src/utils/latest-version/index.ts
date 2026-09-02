@@ -12,6 +12,7 @@ import { dirname, join, parse, resolve as pathResolve } from 'path';
 import registryAuthToken from 'registry-auth-token';
 import getRegistryUrl from 'registry-auth-token/registry-url';
 import { URL } from 'url';
+import { proxyAgentFor } from '../runtime';
 
 interface RegistryVersions {
   /**
@@ -243,6 +244,13 @@ const downloadMetadata = (
     }
     if (options?.requestOptions) {
       requestOptions = { ...requestOptions, ...options.requestOptions };
+    }
+    if (requestOptions.agent === undefined) {
+      // HTTP(S)_PROXY / NO_PROXY, like every other request of the CLI
+      const agent = proxyAgentFor(pkgUrl.toString());
+      if (agent) {
+        requestOptions = { ...requestOptions, agent };
+      }
     }
 
     const { get } = require(pkgUrl.protocol === 'https:' ? 'https' : 'http');

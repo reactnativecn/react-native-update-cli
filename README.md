@@ -165,6 +165,8 @@ export RNU_LANG=en      # CLI language (default: zh for pushy, en for cresc)
 export RNU_DEBUG=1      # print stack traces for errors
 ```
 
+`HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` (upper or lower case) are honored by every request: the API, package and bundle uploads, source map and Hermes base downloads, and the registry version check.
+
 ## Sentry Sourcemaps
 
 When `ios/sentry.properties` or `android/sentry.properties` exists, `bundle` uploads sourcemaps for OTA packages. The default matching path is Sentry Debug IDs; the CLI no longer infers release/dist from the native package.

@@ -14,8 +14,10 @@ import { getBaseUrl } from './utils/http-helper';
 import { t } from './utils/i18n';
 import {
   measureTcpLatency,
+  proxyAgentFor,
   type RuntimeRequestInit,
   type RuntimeResponse,
+  resolveProxy,
   runtimeFetch,
 } from './utils/runtime';
 
@@ -283,6 +285,8 @@ async function sendUpload(
 ): Promise<NodeFetchResponse> {
   const timeoutMs = uploadTimeoutMs(fileSize);
   const nodeFetch = loadNodeFetch();
+  // HTTP(S)_PROXY / NO_PROXY, like every other request of the CLI
+  const agent = proxyAgentFor(realUrl);
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
     let timedOut = false;
@@ -297,6 +301,7 @@ async function sendUpload(
     try {
       return await nodeFetch(realUrl, {
         ...buildRequest(fileStream),
+        agent,
         signal: controller.signal,
       });
     } catch (rawError) {
@@ -332,7 +337,9 @@ export async function uploadFile(
   if (backupUrl) {
     if (global.USE_ACC_OSS) {
       realUrl = backupUrl;
-    } else {
+    } else if (!resolveProxy(url)) {
+      // a direct TCP probe says nothing about the path through a proxy (and
+      // usually cannot connect at all): the primary url stays in that case
       const latency = await measureTcpLatency(url, {
         attempts: 4,
         timeout: 1000,
@@ -410,10 +417,10 @@ export async function uploadFile(
       if (key) {
         form.append('key', key);
       }
-      form.append('file', fileStream);
-      // form.append('file', fileStream, {
-      //   contentType: 'application/octet-stream',
-      // });
+      // With every part's length known node-fetch sends Content-Length instead
+      // of a chunked body: what object stores expect, and the only framing
+      // that survives http-proxy-agent's rewrite of the buffered request head.
+      form.append('file', fileStream, { knownLength: fileSize });
       return { method: 'POST', body: form };
     });
   } catch (error) {
