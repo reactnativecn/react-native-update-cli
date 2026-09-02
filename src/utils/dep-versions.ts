@@ -35,15 +35,31 @@ function directDependencyNames(pkg: ProjectPackageJson): string[] {
   ];
 }
 
-/** version of the installed copy of `dep`, resolved from `cwd` */
+/**
+ * Version of the installed copy of `dep`: the nearest
+ * `node_modules/<dep>/package.json` from `cwd` upwards, read directly. Not
+ * `require.resolve`: a package whose `exports` map omits package.json makes
+ * it throw, and bun caches its answer per specifier, ignoring `paths`.
+ */
 function readInstalledVersion(dep: string, cwd: string): string | undefined {
-  try {
-    const packageJsonPath = require.resolve(`${dep}/package.json`, {
-      paths: [cwd],
-    });
-    return require(packageJsonPath).version;
-  } catch {
-    return undefined;
+  let dir = path.resolve(cwd);
+  for (;;) {
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(
+          path.join(dir, 'node_modules', dep, 'package.json'),
+          'utf8',
+        ),
+      ) as { version?: unknown };
+      return typeof pkg.version === 'string' ? pkg.version : undefined;
+    } catch {
+      // not installed at this level
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      return undefined;
+    }
+    dir = parent;
   }
 }
 
