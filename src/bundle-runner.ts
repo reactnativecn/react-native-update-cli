@@ -505,11 +505,14 @@ function readGradleProperties(
 /** React Native's gradle plugin (0.71+) enables Hermes unless a property says otherwise */
 function reactNativeDefaultsToHermes(projectRoot: string): boolean {
   const version = getDepVersion('react-native', projectRoot);
-  try {
-    return version !== undefined && satisfies(version, '>=0.71.0');
-  } catch {
+  // major.minor by hand: React Native is 0.x, and the check must not depend
+  // on a semver library (tests replace compare-versions wholesale)
+  const match = version ? /^(\d+)\.(\d+)\./.exec(version) : null;
+  if (!match) {
     return false;
   }
+  const [major, minor] = [Number(match[1]), Number(match[2])];
+  return major > 0 || minor >= 71;
 }
 
 /** Hermes on iOS: installed pod, Expo's engine property, or the lockfile. */
