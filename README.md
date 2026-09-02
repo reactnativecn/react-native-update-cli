@@ -161,6 +161,8 @@ interface CLIProvider {
 ```bash
 export PUSHY_REGISTRY=https://your-api-endpoint.com
 export NO_INTERACTIVE=true
+export RNU_LANG=en      # CLI language (default: zh for pushy, en for cresc)
+export RNU_DEBUG=1      # print stack traces for errors
 ```
 
 ## Sentry Sourcemaps

@@ -27,7 +27,6 @@
   },
   "files": [
     "lib",
-    "src",
     "proto",
     "cli.json"
   ],
@@ -39,6 +38,7 @@
     "lint": "bun run typecheck && biome check .",
     "lint:fix": "bun run typecheck && biome check --write .",
     "test": "bun test",
+    "smoke": "node scripts/smoke-lib.js",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov",
     "benchmark:diff-stream": "bun scripts/benchmark-diff-stream.ts"
   },

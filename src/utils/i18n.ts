@@ -3,8 +3,22 @@ import en from '../locales/en';
 import zh from '../locales/zh';
 import { IS_CRESC } from './constants';
 
+/**
+ * UI language: `RNU_LANG=en|zh` (a locale such as `zh_CN` counts by its
+ * prefix) overrides the brand default, Chinese for pushy and English for cresc.
+ */
+export function resolveLanguage(
+  env: NodeJS.ProcessEnv = process.env,
+  isCresc = IS_CRESC,
+): 'en' | 'zh' {
+  const override = env.RNU_LANG?.trim().toLowerCase();
+  if (override?.startsWith('zh')) return 'zh';
+  if (override?.startsWith('en')) return 'en';
+  return isCresc ? 'en' : 'zh';
+}
+
 i18next.init({
-  lng: IS_CRESC ? 'en' : 'zh',
+  lng: resolveLanguage(),
   // debug: process.env.NODE_ENV !== 'production',
   // debug: true,
   resources: {

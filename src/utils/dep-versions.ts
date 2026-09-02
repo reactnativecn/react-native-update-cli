@@ -14,10 +14,10 @@ type ProjectPackageJson = {
 
 let cached: Record<string, string> | undefined;
 
-function readProjectPackageJson(): ProjectPackageJson | null {
+function readProjectPackageJson(cwd: string): ProjectPackageJson | null {
   try {
     return JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8'),
+      fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'),
     ) as ProjectPackageJson;
   } catch {
     // no package.json (or not JSON): the project simply declares nothing
@@ -35,11 +35,11 @@ function directDependencyNames(pkg: ProjectPackageJson): string[] {
   ];
 }
 
-/** version of the installed copy of `dep`, resolved from cwd */
-function readInstalledVersion(dep: string): string | undefined {
+/** version of the installed copy of `dep`, resolved from `cwd` */
+function readInstalledVersion(dep: string, cwd: string): string | undefined {
   try {
     const packageJsonPath = require.resolve(`${dep}/package.json`, {
-      paths: [process.cwd()],
+      paths: [cwd],
     });
     return require(packageJsonPath).version;
   } catch {
@@ -49,10 +49,11 @@ function readInstalledVersion(dep: string): string | undefined {
 
 function readDepVersions(): Record<string, string> {
   const versions: Record<string, string> = {};
-  const pkg = readProjectPackageJson();
+  const cwd = process.cwd();
+  const pkg = readProjectPackageJson(cwd);
   if (pkg) {
     for (const dep of directDependencyNames(pkg)) {
-      const version = readInstalledVersion(dep);
+      const version = readInstalledVersion(dep, cwd);
       if (version) {
         versions[dep] = version;
       }
@@ -85,15 +86,18 @@ export function getDepVersions(): Record<string, string> {
  * Two file reads instead of one per dependency: the version banner printed
  * before every command must not scale with the size of the project.
  */
-export function getDepVersion(name: string): string | undefined {
-  if (cached) {
+export function getDepVersion(
+  name: string,
+  cwd = process.cwd(),
+): string | undefined {
+  if (cached && cwd === process.cwd()) {
     return cached[name];
   }
-  const pkg = readProjectPackageJson();
+  const pkg = readProjectPackageJson(cwd);
   if (!pkg || !directDependencyNames(pkg).includes(name)) {
     return undefined;
   }
-  return readInstalledVersion(name);
+  return readInstalledVersion(name, cwd);
 }
 
 /**

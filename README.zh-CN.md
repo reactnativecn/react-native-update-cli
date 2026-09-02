@@ -152,6 +152,8 @@ interface CLIProvider {
 ```bash
 export PUSHY_REGISTRY=https://your-api-endpoint.com
 export NO_INTERACTIVE=true
+export RNU_LANG=en      # 界面语言（默认：pushy 为 zh，cresc 为 en）
+export RNU_DEBUG=1      # 出错时打印完整堆栈
 ```
 
 ## Sentry Sourcemap

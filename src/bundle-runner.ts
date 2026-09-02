@@ -4,6 +4,7 @@ import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import { getHermesBase } from './api';
+import { getDepVersion } from './utils/dep-versions';
 import {
   classifyHermesCommand,
   type HermesBaseOption,
@@ -217,7 +218,7 @@ export async function runReactNativeBundleCommand({
 }: RunBundleCommandOptions): Promise<HermesCompileResult | null> {
   let gradleConfig: GradleConfig = {};
   if (platform === 'android') {
-    gradleConfig = await checkGradleConfig();
+    gradleConfig = await checkGradleConfig(process.cwd());
     if (gradleConfig.crunchPngs !== false) {
       console.warn(t('androidCrunchPngsWarning'));
     }
@@ -435,39 +436,104 @@ export function assertSafeToEmpty(dir: string, cwd = process.cwd()): void {
   }
 }
 
-async function detectHermesEnabled(
+/**
+ * Whether the app runs Hermes, i.e. whether the bundle must be compiled to
+ * bytecode. A JS bundle shipped to a Hermes app still runs, but starts slower
+ * and cannot use the Hermes base delta, so false negatives are what this
+ * guards against.
+ *
+ * Android: `hermesEnabled` in gradle.properties wins; then the legacy
+ * `project.ext.react.enableHermes` of build.gradle; with neither, the React
+ * Native gradle plugin (0.71+) defaults to Hermes and older versions to JSC.
+ * iOS: an installed `Pods/hermes-engine`; when `pod install` has not run on
+ * this machine (CI), Expo's `Podfile.properties.json` or the pod listed in
+ * `Podfile.lock` tell the same.
+ */
+export async function detectHermesEnabled(
   platform: string,
   forceHermes: boolean | undefined,
   gradleConfig: GradleConfig,
+  projectRoot = process.cwd(),
 ): Promise<boolean> {
   if (forceHermes) {
     console.log(t('forceHermes'));
     return true;
   }
   if (platform === 'android') {
-    const gradleProperties = await new Promise<{ hermesEnabled?: boolean }>(
-      (resolve) => {
-        properties.parse(
-          './android/gradle.properties',
-          { path: true },
-          (error: Error | null, props: { hermesEnabled?: boolean } = {}) => {
-            if (error) {
-              console.error(error);
-              resolve({});
-              return;
-            }
-            resolve(props);
-          },
-        );
-      },
+    const gradleProperties = await readGradleProperties(
+      path.join(projectRoot, 'android', 'gradle.properties'),
     );
     if (typeof gradleProperties.hermesEnabled === 'boolean') {
       return gradleProperties.hermesEnabled;
     }
-    return Boolean(gradleConfig.enableHermes);
+    if (typeof gradleConfig.enableHermes === 'boolean') {
+      return gradleConfig.enableHermes;
+    }
+    return reactNativeDefaultsToHermes(projectRoot);
   }
-  if (platform === 'ios' && fs.existsSync('ios/Pods/hermes-engine')) {
+  if (platform === 'ios') {
+    return detectIosHermes(projectRoot);
+  }
+  return false;
+}
+
+/** parsed gradle.properties; a missing file is simply empty */
+function readGradleProperties(
+  file: string,
+): Promise<{ hermesEnabled?: boolean }> {
+  return new Promise((resolve) => {
+    properties.parse(
+      file,
+      { path: true },
+      (
+        error: (Error & { code?: string }) | null,
+        props: { hermesEnabled?: boolean } = {},
+      ) => {
+        if (error) {
+          if (error.code !== 'ENOENT') {
+            console.warn(`${file}: ${error.message ?? error}`);
+          }
+          resolve({});
+          return;
+        }
+        resolve(props);
+      },
+    );
+  });
+}
+
+/** React Native's gradle plugin (0.71+) enables Hermes unless a property says otherwise */
+function reactNativeDefaultsToHermes(projectRoot: string): boolean {
+  const version = getDepVersion('react-native', projectRoot);
+  try {
+    return version !== undefined && satisfies(version, '>=0.71.0');
+  } catch {
+    return false;
+  }
+}
+
+/** Hermes on iOS: installed pod, Expo's engine property, or the lockfile. */
+export function detectIosHermes(projectRoot: string): boolean {
+  const ios = path.join(projectRoot, 'ios');
+  if (fs.existsSync(path.join(ios, 'Pods', 'hermes-engine'))) {
     return true;
+  }
+  // Expo prebuild records the engine here, whether or not Pods are installed
+  try {
+    const engine = JSON.parse(
+      fs.readFileSync(path.join(ios, 'Podfile.properties.json'), 'utf8'),
+    )?.['expo.jsEngine'];
+    if (engine === 'hermes') return true;
+    if (engine === 'jsc') return false;
+  } catch {
+    // no Expo properties file
+  }
+  // no Pods checkout (CI without `pod install`): the lockfile still lists it
+  try {
+    const lock = fs.readFileSync(path.join(ios, 'Podfile.lock'), 'utf8');
+    if (/^\s*-\s+hermes-engine\b/m.test(lock)) return true;
+  } catch {
+    // no lockfile either
   }
   return false;
 }
@@ -572,20 +638,21 @@ export function resolveHermesCommand(projectRoot = process.cwd()): string {
   );
 }
 
-async function checkGradleConfig(): Promise<GradleConfig> {
-  let enableHermes = false;
+async function checkGradleConfig(projectRoot: string): Promise<GradleConfig> {
+  // undefined when build.gradle does not mention Hermes at all (React Native
+  // 0.71+ moved the switch to gradle.properties; see detectHermesEnabled)
+  let enableHermes: boolean | undefined;
   let crunchPngs: boolean | undefined;
   try {
-    const gradleConfig = await g2js.parseFile('android/app/build.gradle');
+    const gradleConfig = await g2js.parseFile(
+      path.join(projectRoot, 'android', 'app', 'build.gradle'),
+    );
     crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;
     const projectConfig = gradleConfig['project.ext.react'];
     if (projectConfig) {
       for (const packagerConfig of projectConfig) {
-        if (
-          packagerConfig.includes('enableHermes') &&
-          packagerConfig.includes('true')
-        ) {
-          enableHermes = true;
+        if (packagerConfig.includes('enableHermes')) {
+          enableHermes = packagerConfig.includes('true');
           break;
         }
       }
@@ -828,7 +895,7 @@ export async function compileHermesByteCode({
   shouldCleanSourcemap,
   baseRequest,
   pendingBase,
-  hermesCommand = resolveHermesCommand(),
+  hermesCommand,
 }: CompileHermesOptions): Promise<HermesCompileResult> {
   console.log(t('hermesEnabledCompiling'));
 
@@ -847,6 +914,8 @@ export async function compileHermesByteCode({
     console.log(t('hermesSourcemapKept', { file: hermesMap }));
   }
 
+  // the selection already resolved hermesc while Metro ran; only look it up
+  // again when there was no selection (or it could not find the binary)
   let selection = pendingBase ? await awaitPendingBase(pendingBase) : null;
   const command =
     hermesCommand ?? selection?.hermesCommand ?? resolveHermesCommand();

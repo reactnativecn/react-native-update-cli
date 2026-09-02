@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import i18next from 'i18next';
-import { t } from '../src/utils/i18n';
+import { resolveLanguage, t } from '../src/utils/i18n';
 
 describe('i18n t()', () => {
   test('returns a non-empty translated string for a known key in English', async () => {
@@ -62,5 +62,23 @@ describe('i18n t()', () => {
     expect(zhResult.length).toBeGreaterThan(0);
     // They should differ (different languages)
     expect(enResult).not.toBe(zhResult);
+  });
+});
+
+describe('resolveLanguage', () => {
+  test('follows the brand by default', () => {
+    expect(resolveLanguage({}, false)).toBe('zh');
+    expect(resolveLanguage({}, true)).toBe('en');
+  });
+
+  test('RNU_LANG overrides the brand default, by language prefix', () => {
+    expect(resolveLanguage({ RNU_LANG: 'en' }, false)).toBe('en');
+    expect(resolveLanguage({ RNU_LANG: 'zh_CN.UTF-8' }, true)).toBe('zh');
+    expect(resolveLanguage({ RNU_LANG: 'EN-us' }, false)).toBe('en');
+  });
+
+  test('an unsupported RNU_LANG falls back to the brand default', () => {
+    expect(resolveLanguage({ RNU_LANG: 'fr' }, false)).toBe('zh');
+    expect(resolveLanguage({ RNU_LANG: '' }, true)).toBe('en');
   });
 });

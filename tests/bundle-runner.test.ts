@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -6,6 +6,8 @@ import {
   assertSafeToEmpty,
   buildHermescArgs,
   buildSentrySourcemapsUploadArgs,
+  detectHermesEnabled,
+  detectIosHermes,
   hasProjectDependency,
   prepareSentryUploadArtifacts,
   readSourcemapDebugId,
@@ -515,5 +517,126 @@ describe('assertSafeToEmpty', () => {
     expect(() => assertSafeToEmpty(cwd, cwd)).toThrow();
     expect(() => assertSafeToEmpty(os.homedir(), cwd)).toThrow();
     expect(() => assertSafeToEmpty(path.parse(cwd).root, cwd)).toThrow();
+  });
+});
+
+describe('detectHermesEnabled', () => {
+  const roots: string[] = [];
+
+  afterEach(() => {
+    for (const root of roots.splice(0)) {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /** a project directory declaring (and having installed) one RN version */
+  function project(reactNativeVersion?: string): string {
+    const root = mkTempDir('rn-update-hermes-detect-');
+    roots.push(root);
+    if (reactNativeVersion) {
+      writeJson(path.join(root, 'package.json'), {
+        dependencies: { 'react-native': `^${reactNativeVersion}` },
+      });
+      writeJson(
+        path.join(root, 'node_modules', 'react-native', 'package.json'),
+        { name: 'react-native', version: reactNativeVersion },
+      );
+    }
+    return root;
+  }
+
+  test('android: gradle.properties decides first', async () => {
+    const root = project('0.73.0');
+    _writeFile(
+      path.join(root, 'android', 'gradle.properties'),
+      'hermesEnabled=false\n',
+    );
+    expect(
+      await detectHermesEnabled(
+        'android',
+        undefined,
+        { enableHermes: true },
+        root,
+      ),
+    ).toBe(false);
+    _writeFile(
+      path.join(root, 'android', 'gradle.properties'),
+      'hermesEnabled=true\n',
+    );
+    expect(await detectHermesEnabled('android', undefined, {}, root)).toBe(
+      true,
+    );
+  });
+
+  test('android: the legacy build.gradle switch when gradle.properties is silent', async () => {
+    expect(
+      await detectHermesEnabled(
+        'android',
+        undefined,
+        { enableHermes: false },
+        project('0.73.0'),
+      ),
+    ).toBe(false);
+    expect(
+      await detectHermesEnabled(
+        'android',
+        undefined,
+        { enableHermes: true },
+        project('0.68.2'),
+      ),
+    ).toBe(true);
+  });
+
+  test('android: React Native 0.71+ defaults to Hermes, older versions to JSC', async () => {
+    expect(
+      await detectHermesEnabled('android', undefined, {}, project('0.73.0')),
+    ).toBe(true);
+    expect(
+      await detectHermesEnabled('android', undefined, {}, project('0.68.2')),
+    ).toBe(false);
+    // no react-native at all: nothing says Hermes
+    expect(await detectHermesEnabled('android', undefined, {}, project())).toBe(
+      false,
+    );
+  });
+
+  test('ios: installed pod, Expo engine property or Podfile.lock', async () => {
+    const root = project();
+    expect(detectIosHermes(root)).toBe(false);
+
+    const lock = path.join(root, 'ios', 'Podfile.lock');
+    _writeFile(lock, 'PODS:\n  - React-Core (0.73.2)\n');
+    expect(detectIosHermes(root)).toBe(false);
+    _writeFile(
+      lock,
+      'PODS:\n  - hermes-engine (0.73.2):\n    - hermes-engine/Pre-built (= 0.73.2)\n  - React-Core (0.73.2)\n',
+    );
+    // no `pod install` on this machine, but the lockfile lists the pod
+    expect(detectIosHermes(root)).toBe(true);
+
+    const expoProperties = path.join(root, 'ios', 'Podfile.properties.json');
+    writeJson(expoProperties, { 'expo.jsEngine': 'jsc' });
+    expect(detectIosHermes(root)).toBe(false);
+    writeJson(expoProperties, { 'expo.jsEngine': 'hermes' });
+    fs.rmSync(lock);
+    expect(detectIosHermes(root)).toBe(true);
+
+    fs.rmSync(expoProperties);
+    fs.mkdirSync(path.join(root, 'ios', 'Pods', 'hermes-engine'), {
+      recursive: true,
+    });
+    expect(detectIosHermes(root)).toBe(true);
+    expect(await detectHermesEnabled('ios', undefined, {}, root)).toBe(true);
+  });
+
+  test('forceHermes wins on every platform', async () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      expect(await detectHermesEnabled('harmony', true, {}, project())).toBe(
+        true,
+      );
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });
