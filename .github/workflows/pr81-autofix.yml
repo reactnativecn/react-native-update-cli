@@ -79,7 +79,7 @@ jobs:
               """    await withInteractiveStdin(() =>\n      publish({\n        args: ['bundle.ppk'],\n        options: { platform: 'android' },\n      }),\n    );\n""",
           )
           PY
-          rm .github/pr81-fix.py .github/workflows/pr81-autofix.yml
+          rm .github/pr81-fix.py
 
       - uses: oven-sh/setup-bun@v2
 
@@ -105,6 +105,10 @@ jobs:
 
       - name: Commit tested fixes
         run: |
+          # GitHub Actions tokens cannot push workflow-file changes. Restore
+          # the regular CI workflow here; it is committed separately through
+          # the GitHub contents API after this tested code commit is published.
+          git checkout HEAD -- .github/workflows/test.yml
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
