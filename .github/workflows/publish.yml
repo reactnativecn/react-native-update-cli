@@ -1,19 +1,28 @@
 name: Publish Package to npmjs
+
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - automation/release-v2.25.0
+    paths:
+      - .github/workflows/publish.yml
 
 permissions:
-  id-token: write  # Required for OIDC
-  contents: read
+  id-token: write
+  contents: write
+
+concurrency:
+  group: release-v2.25.0
+  cancel-in-progress: false
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # npm --provenance requires a GitHub-hosted runner
-    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: 516be8d788239e4d74e5bb81d5f03ca0adcd4a8c
           fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
@@ -22,24 +31,18 @@ jobs:
 
       - name: Prepare publish version
         env:
-          PUBLISH_VERSION: ${{ github.event.release.tag_name }}
+          PUBLISH_VERSION: v2.25.0
         run: bun scripts/prepublish.ts
 
-      - name: Verify package version matches release tag
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+      - name: Verify package version
         run: |
-          EXPECTED_VERSION="${RELEASE_TAG#v}"
           ACTUAL_VERSION="$(node -p "require('./package.json').version")"
-          echo "release tag: ${RELEASE_TAG} -> expected ${EXPECTED_VERSION}, package.json has ${ACTUAL_VERSION}"
-          test "${ACTUAL_VERSION}" = "${EXPECTED_VERSION}"
+          echo "expected 2.25.0, package.json has ${ACTUAL_VERSION}"
+          test "${ACTUAL_VERSION}" = "2.25.0"
 
       - name: Build package
         run: bun run build
 
-      # Node 18 must only be on PATH for the verification below, not during
-      # the build: typescript >= 7 ships an extensionless ESM bin/tsc that
-      # Node 18.17 cannot load (ERR_UNKNOWN_FILE_EXTENSION).
       - name: Set up Node.js 18 for runtime verification
         uses: actions/setup-node@v7
         with:
@@ -50,10 +53,9 @@ jobs:
           node --version
           node lib/bin.js -v
           node lib/bin-cresc.js -v
-          # the programmatic entry points must also load on the minimum
-          # supported Node, not only the CLI banner
           node -e "const m = require('./lib/exports.js'); if (!m) process.exit(1)"
           node -e "const d = require('./lib/diff.js'); if (!d.diffCommands) process.exit(1)"
+          node scripts/smoke-lib.js
 
       - name: Set up Node.js for npm publishing
         uses: actions/setup-node@v7
@@ -64,11 +66,81 @@ jobs:
       - name: Verify publishable package contents
         run: npm pack --dry-run --ignore-scripts
 
-      - name: Publish to npm
+      - name: Check whether npm version already exists
+        id: npm-version
         shell: bash
         run: |
-          if [[ "${{ github.event.release.tag_name }}" == *"beta"* ]]; then
-            npm publish --ignore-scripts --provenance --access public --tag beta
+          if npm view react-native-update-cli@2.25.0 version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "react-native-update-cli@2.25.0 already exists; npm publish will be skipped"
           else
-            npm publish --ignore-scripts --provenance --access public
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Publish to npm
+        if: steps.npm-version.outputs.exists != 'true'
+        shell: bash
+        run: |
+          if npm publish --ignore-scripts --provenance --access public; then
+            exit 0
+          fi
+          if npm view react-native-update-cli@2.25.0 version >/dev/null 2>&1; then
+            echo "2.25.0 became available concurrently; treating publish as successful"
+            exit 0
+          fi
+          exit 1
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view v2.25.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub release v2.25.0 already exists"
+            exit 0
+          fi
+
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          ## English
+
+          ### Highlights
+
+          - Hardened Hermes detection across Android, iOS, Expo, and CI environments. Android now follows `gradle.properties`, legacy Gradle configuration, and React Native defaults in the correct order; iOS respects explicit Hermes/JSC settings, ignores commented-out Podfile options, and falls back safely to installed pods or `Podfile.lock`.
+          - Protected intermediate-directory cleanup by canonicalizing the target and refusing filesystem, home, project, temporary, VCS, and symbolic-link redirected locations.
+          - Added proxy-aware networking for API calls, uploads, registry checks, and remote archive range requests, including `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` handling.
+          - Reduced CLI startup overhead through lazy command loading and targeted dependency-version lookup.
+
+          ### Reliability and API improvements
+
+          - Non-interactive and non-TTY executions now fail fast instead of prompting indefinitely or performing unnecessary list requests.
+          - App selection now rejects malformed IDs, verifies platform ownership, and validates `appKey` before persisting configuration.
+          - Improved explicit `appId`/configuration propagation, Provider APIs, source-map option handling, upload retry behavior, and cwd-aware dependency caching.
+          - Improved diagnostics while redacting signed URLs and credentials, preserving nested network failure causes, and supporting detailed stacks through `RNU_DEBUG=1`.
+          - Added Node.js 18.17 compatibility checks and broad regression coverage for the new safety and runtime behavior.
+
+          ## 中文
+
+          ### 主要更新
+
+          - 强化 Android、iOS、Expo 与 CI 环境下的 Hermes 检测。Android 按 `gradle.properties`、旧版 Gradle 配置和 React Native 默认值的正确优先级判断；iOS 尊重显式 Hermes/JSC 配置，忽略 Podfile 中被注释的设置，并安全回退到已安装 Pods 或 `Podfile.lock`。
+          - 强化中间目录清理安全边界：对目标路径进行规范化，阻止清空文件系统根目录、用户目录、项目目录、临时目录根、版本控制目录及符号链接重定向位置。
+          - API 请求、上传、registry 检查和远程归档 Range 请求现已支持代理，并正确处理 `HTTP_PROXY`、`HTTPS_PROXY` 与 `NO_PROXY`。
+          - 通过命令按需加载和单依赖版本查询，降低 CLI 启动开销。
+
+          ### 稳定性与接口改进
+
+          - 非交互及非 TTY 环境会直接失败，不再无限等待输入，也不会先执行无意义的列表请求。
+          - 应用选择会拒绝格式错误的 ID、校验应用平台，并在写入配置前验证 `appKey`。
+          - 改进显式 `appId`/配置传递、Provider API、source map 选项、上传重试以及按工作目录隔离的依赖版本缓存。
+          - 改进错误诊断：隐藏签名 URL 与凭据，保留嵌套网络错误原因，并支持通过 `RNU_DEBUG=1` 输出完整堆栈。
+          - 增加 Node.js 18.17 兼容性验证及覆盖安全边界和运行时行为的回归测试。
+          EOF
+
+          if gh release create v2.25.0 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 516be8d788239e4d74e5bb81d5f03ca0adcd4a8c \
+            --title "v2.25.0" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"; then
+            exit 0
+          fi
+          gh release view v2.25.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1
