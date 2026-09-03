@@ -88,6 +88,21 @@ export const closeSession = () => {
   session = undefined;
 };
 
+/** Remove credentials, query signatures and fragments before logging a URL. */
+export function redactRequestUrl(requestUrl: string): string {
+  try {
+    const parsed = new URL(requestUrl);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}${
+      parsed.search ? '?<redacted>' : ''
+    }`;
+  } catch {
+    const secretStart = requestUrl.search(/[?#]/);
+    return secretStart < 0
+      ? requestUrl
+      : `${requestUrl.slice(0, secretStart)}?<redacted>`;
+  }
+}
+
 function createRequestError(
   error: unknown,
   requestUrl: string,
@@ -99,7 +114,14 @@ function createRequestError(
       : error instanceof Error
         ? error.message
         : String(error);
-  const requestError = new Error(`${message}\nURL: ${requestUrl}`) as Error & {
+  const cause =
+    error instanceof Error || (typeof error === 'object' && error !== null)
+      ? error
+      : undefined;
+  const requestError = new Error(
+    `${message}\nURL: ${redactRequestUrl(requestUrl)}`,
+    cause === undefined ? undefined : { cause },
+  ) as Error & {
     status?: number;
   };
   requestError.status = status;
@@ -121,13 +143,23 @@ const PROXY_ERROR_PATTERNS = [
 ];
 
 function isProxyRelatedError(error: unknown): boolean {
-  const msg =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : '';
-  const lower = msg.toLowerCase();
+  const seen = new Set<unknown>();
+  const parts: string[] = [];
+  let current = error;
+  while (current !== undefined && current !== null && !seen.has(current)) {
+    seen.add(current);
+    if (current instanceof Error) {
+      const code = (current as NodeJS.ErrnoException).code;
+      parts.push(`${current.name} ${code ?? ''} ${current.message}`);
+    } else {
+      parts.push(String(current));
+    }
+    current =
+      typeof current === 'object'
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  const lower = parts.join('\n').toLowerCase();
   return PROXY_ERROR_PATTERNS.some((p) => lower.includes(p.toLowerCase()));
 }
 
@@ -142,6 +174,7 @@ async function query(url: string, options: RuntimeRequestInit) {
     if (isProxyRelatedError(error)) {
       throw new Error(
         `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+        { cause: baseError },
       );
     }
     throw baseError;
@@ -254,6 +287,8 @@ export function isTransientUploadError(error: unknown): boolean {
 }
 
 class UploadTimeoutError extends Error {
+  readonly code = 'ETIMEDOUT';
+
   constructor(timeoutMs: number) {
     super(`Upload timed out after ${Math.round(timeoutMs / 1000)}s`);
     this.name = 'UploadTimeoutError';
@@ -372,13 +407,14 @@ export async function uploadFile(
   });
 
   const rethrowUploadError = (error: unknown): never => {
+    const baseError = createRequestError(error, realUrl);
     if (isProxyRelatedError(error)) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+        `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+        { cause: baseError },
       );
     }
-    throw createRequestError(error, realUrl);
+    throw baseError;
   };
 
   // 自托管节点的 s3 直传:服务端下发预签名 PUT,字节直达用户的对象存储

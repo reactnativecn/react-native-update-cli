@@ -182,28 +182,50 @@ describe('non-interactive guards', () => {
     });
     const logSpy = spyOn(console, 'log').mockImplementation(() => {});
     try {
-      // `question` answers '' without a terminal, which matches no app id
       await expect(chooseApp('ios')).rejects.toThrow();
+      expect(getSpy).not.toHaveBeenCalled();
     } finally {
       getSpy.mockRestore();
       logSpy.mockRestore();
     }
   });
 
-  test('selectApp rejects an app id that is not a positive integer', async () => {
+  test('selectApp rejects malformed or non-positive app ids', async () => {
     const getSpy = spyOn(api, 'get').mockRejectedValue(
       new Error('must not reach the server'),
     );
     try {
-      await expect(
-        getAppCommands().selectApp({
-          args: ['abc'],
-          options: { platform: 'ios' },
-        }),
-      ).rejects.toThrow(/abc/);
+      for (const id of ['abc', '12abc', '1.5', '12e3', '0', '-1']) {
+        await expect(
+          getAppCommands().selectApp({
+            args: [id],
+            options: { platform: 'ios' },
+          }),
+        ).rejects.toThrow();
+      }
       expect(getSpy).not.toHaveBeenCalled();
     } finally {
       getSpy.mockRestore();
+    }
+  });
+
+  test('selectApp rejects an app belonging to another platform', async () => {
+    const getSpy = spyOn(api, 'get').mockResolvedValue({
+      appKey: 'android-key',
+      platform: 'android',
+    });
+    const writeFileSpy = spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    try {
+      await expect(
+        getAppCommands().selectApp({
+          args: ['12'],
+          options: { platform: 'ios' },
+        }),
+      ).rejects.toThrow();
+      expect(writeFileSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+      writeFileSpy.mockRestore();
     }
   });
 });

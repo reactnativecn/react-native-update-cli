@@ -100,10 +100,18 @@ type AabResourceTableObject = {
   package: AabResourcePackage[];
 };
 
-export function isNonInteractive() {
-  const envValue = process.env.NO_INTERACTIVE?.toLowerCase();
+/** True when prompts cannot or must not be shown. */
+export function isNonInteractive(
+  env: NodeJS.ProcessEnv = process.env,
+  stdinIsTTY: boolean | undefined = process.stdin.isTTY,
+  globalFlag: boolean | undefined = global.NO_INTERACTIVE,
+) {
+  const envValue = env.NO_INTERACTIVE?.toLowerCase();
   return (
-    global.NO_INTERACTIVE === true || envValue === 'true' || envValue === '1'
+    globalFlag === true ||
+    envValue === 'true' ||
+    envValue === '1' ||
+    stdinIsTTY !== true
   );
 }
 

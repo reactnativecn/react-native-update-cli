@@ -231,7 +231,7 @@ export async function runReactNativeBundleCommand({
     reactNativeBundleArgs.push(...envArgs.trim().split(/\s+/));
   }
 
-  assertSafeToEmpty(outputFolder);
+  outputFolder = assertSafeToEmpty(outputFolder);
   fs.emptyDirSync(outputFolder);
 
   let cliPath = '';
@@ -413,13 +413,17 @@ export async function runReactNativeBundleCommand({
 }
 
 /**
- * The intermediate directory is emptied before every bundle. Refuse to do that
- * to the project itself (`--intermediaDir .`), to anything above it, to the
- * home directory or to the filesystem root: one typo must not wipe a working
- * tree.
+ * Validate the intermediate directory before it is emptied and return the
+ * canonical path that was validated. The caller must use this returned path:
+ * validating one spelling and deleting through another re-opens symlink
+ * redirection.
  */
-export function assertSafeToEmpty(dir: string, cwd = process.cwd()): void {
-  const target = path.resolve(cwd, dir);
+export function assertSafeToEmpty(dir: string, cwd = process.cwd()): string {
+  const requested = path.resolve(cwd, dir);
+  const lexicalCwd = path.resolve(cwd);
+  const lexicalHome = path.resolve(os.homedir());
+  const lexicalTmp = path.resolve(os.tmpdir());
+
   const contains = (parent: string, child: string) => {
     const relative = path.relative(parent, child);
     return (
@@ -427,13 +431,77 @@ export function assertSafeToEmpty(dir: string, cwd = process.cwd()): void {
       (!relative.startsWith('..') && !path.isAbsolute(relative))
     );
   };
-  if (
-    target === path.parse(target).root ||
-    target === path.resolve(os.homedir()) ||
-    contains(target, path.resolve(cwd))
-  ) {
+  const samePath = (left: string, right: string) => {
+    const normalize = (value: string) => {
+      const resolved = path.resolve(value);
+      return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    };
+    return normalize(left) === normalize(right);
+  };
+  const reject = (target: string): never => {
     throw new Error(t('unsafeIntermediateDir', { dir: target }));
+  };
+  const validate = (
+    target: string,
+    projectRoot: string,
+    home: string,
+    tmpRoot: string,
+  ) => {
+    // Reject each protected directory and all of its ancestors.
+    for (const protectedPath of [
+      path.parse(target).root,
+      projectRoot,
+      home,
+      tmpRoot,
+    ]) {
+      if (contains(target, protectedPath)) reject(target);
+    }
+    // Never allow build cleanup inside source-control metadata.
+    for (const metadata of ['.git', '.hg', '.svn']) {
+      if (contains(path.join(projectRoot, metadata), target)) reject(target);
+    }
+  };
+
+  validate(requested, lexicalCwd, lexicalHome, lexicalTmp);
+
+  // A final-component symlink is the direct dangerous case: emptyDirSync would
+  // enumerate and remove entries from its target rather than removing the link.
+  if (fs.existsSync(requested) && fs.lstatSync(requested).isSymbolicLink()) {
+    reject(requested);
   }
+
+  // emptyDirSync creates a missing directory too; create it first so it can be
+  // canonicalized and the exact validated path can be passed to deletion.
+  fs.ensureDirSync(requested);
+  const canonical = (value: string) => fs.realpathSync.native(value);
+  const target = canonical(requested);
+  const canonicalCwd = canonical(lexicalCwd);
+  const canonicalHome = canonical(lexicalHome);
+  const canonicalTmp = canonical(lexicalTmp);
+
+  validate(target, canonicalCwd, canonicalHome, canonicalTmp);
+
+  // Reject a symlink in any component below a known safe base. System aliases
+  // such as macOS /var -> /private/var remain valid because the base itself is
+  // canonicalized before the relative suffix is appended.
+  for (const [lexicalBase, canonicalBase] of [
+    [lexicalCwd, canonicalCwd],
+    [lexicalHome, canonicalHome],
+    [lexicalTmp, canonicalTmp],
+  ] as const) {
+    const relative = path.relative(lexicalBase, requested);
+    if (
+      relative === '' ||
+      (!relative.startsWith('..') && !path.isAbsolute(relative))
+    ) {
+      if (!samePath(path.resolve(canonicalBase, relative), target)) {
+        reject(target);
+      }
+      break;
+    }
+  }
+
+  return target;
 }
 
 /**
@@ -515,23 +583,75 @@ function reactNativeDefaultsToHermes(projectRoot: string): boolean {
   return major > 0 || minor >= 71;
 }
 
-/** Hermes on iOS: installed pod, Expo's engine property, or the lockfile. */
-export function detectIosHermes(projectRoot: string): boolean {
-  const ios = path.join(projectRoot, 'ios');
-  if (fs.existsSync(path.join(ios, 'Pods', 'hermes-engine'))) {
-    return true;
-  }
-  // Expo prebuild records the engine here, whether or not Pods are installed
+type IosJavaScriptEngine = 'hermes' | 'jsc';
+
+/**
+ * Read explicit iOS engine configuration. An explicit JSC/disabled-Hermes
+ * setting wins over installed pods because CocoaPods may still fetch the
+ * hermes-engine dependency for a JSC build.
+ */
+function configuredIosEngine(ios: string): IosJavaScriptEngine | undefined {
+  let expoEngine: IosJavaScriptEngine | undefined;
   try {
-    const engine = JSON.parse(
+    const value = JSON.parse(
       fs.readFileSync(path.join(ios, 'Podfile.properties.json'), 'utf8'),
     )?.['expo.jsEngine'];
-    if (engine === 'hermes') return true;
-    if (engine === 'jsc') return false;
+    if (value === 'hermes' || value === 'jsc') expoEngine = value;
   } catch {
     // no Expo properties file
   }
-  // no Pods checkout (CI without `pod install`): the lockfile still lists it
+
+  let podfile = '';
+  try {
+    podfile = fs.readFileSync(path.join(ios, 'Podfile'), 'utf8');
+  } catch {
+    // no Podfile
+  }
+  const envValue = (name: string) =>
+    new RegExp(
+      `ENV\\s*\\[\\s*['"]${name}['"]\\s*\\]\\s*(?:\\|\\|=|=)\\s*['"]([^'"]+)['"]`,
+      'i',
+    )
+      .exec(podfile)?.[1]
+      ?.toLowerCase();
+  const useHermes = envValue('USE_HERMES');
+  const useThirdPartyJsc = envValue('USE_THIRD_PARTY_JSC');
+  const hermesOption =
+    /(?:^|[,(]\s*)(?::hermes_enabled\s*=>|hermes_enabled\s*:)\s*(true|false)\b/im
+      .exec(podfile)?.[1]
+      ?.toLowerCase();
+
+  if (
+    useThirdPartyJsc === '1' ||
+    useThirdPartyJsc === 'true' ||
+    useHermes === '0' ||
+    useHermes === 'false' ||
+    hermesOption === 'false' ||
+    expoEngine === 'jsc'
+  ) {
+    return 'jsc';
+  }
+  if (
+    useHermes === '1' ||
+    useHermes === 'true' ||
+    hermesOption === 'true' ||
+    expoEngine === 'hermes'
+  ) {
+    return 'hermes';
+  }
+  return undefined;
+}
+
+/** Hermes on iOS: explicit configuration first, installed artifacts second. */
+export function detectIosHermes(projectRoot: string): boolean {
+  const ios = path.join(projectRoot, 'ios');
+  const configured = configuredIosEngine(ios);
+  if (configured) return configured === 'hermes';
+
+  if (fs.existsSync(path.join(ios, 'Pods', 'hermes-engine'))) {
+    return true;
+  }
+  // CI may not have run pod install, so use the lockfile only as weak evidence.
   try {
     const lock = fs.readFileSync(path.join(ios, 'Podfile.lock'), 'utf8');
     if (/^\s*-\s+hermes-engine\b/m.test(lock)) return true;

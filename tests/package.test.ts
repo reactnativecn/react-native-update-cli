@@ -309,10 +309,10 @@ describe('choosePackage', () => {
     global.NO_INTERACTIVE = true;
     const logSpy = spyOn(console, 'log').mockImplementation(() => {});
     try {
-      // `question` answers '' without a terminal, which matches no package id
       await expect(
         choosePackage('100', [{ id: 1, name: '1.0.0' }]),
       ).rejects.toThrow();
+      expect(logSpy).not.toHaveBeenCalled();
     } finally {
       logSpy.mockRestore();
     }

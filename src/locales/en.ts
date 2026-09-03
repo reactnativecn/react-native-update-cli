@@ -245,6 +245,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   bundleUnexpectedArgs:
     'bundle takes no positional arguments, got: {{- args}}. Boolean flags take no value; switch one off with --no-<flag> (e.g. --no-sourcemap).',
   unsafeIntermediateDir:
-    'Refusing to empty {{- dir}} as the intermediate directory: it is the project directory (or above it). Point --intermediaDir at a dedicated build directory.',
+    'Refusing to empty {{- dir}} as the intermediate directory: it resolves to a protected or symbolic-link location. Point --intermediaDir at a dedicated build directory.',
   errorStackHint: '(set RNU_DEBUG=1 to print the stack trace)',
 };

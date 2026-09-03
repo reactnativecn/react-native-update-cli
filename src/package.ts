@@ -253,12 +253,11 @@ export async function listPackage(appId: string, packages?: Package[]) {
 }
 
 export async function choosePackage(appId: string, packages?: Package[]) {
-  const list = await listPackage(appId, packages);
-  // without a terminal `question` answers '' and no package has that id: the
-  // loop below would never end
+  // Fail before fetching or rendering the package list when no prompt exists.
   if (isNonInteractive()) {
     throw new Error(t('packageIdRequired'));
   }
+  const list = await listPackage(appId, packages);
   const packageMap = new Map(list?.map((v) => [v.id.toString(), v]));
 
   while (true) {

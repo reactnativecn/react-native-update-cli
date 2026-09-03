@@ -24,6 +24,23 @@ import {
   versionCommands,
 } from '../src/versions';
 
+async function withInteractiveStdin<T>(task: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  Object.defineProperty(process.stdin, 'isTTY', {
+    configurable: true,
+    value: true,
+  });
+  try {
+    return await task();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', descriptor);
+    } else {
+      Reflect.deleteProperty(process.stdin, 'isTTY');
+    }
+  }
+}
+
 describe('bindVersionToPackages', () => {
   let consoleSpy: ReturnType<typeof spyOn>;
   let postSpy: ReturnType<typeof spyOn>;
@@ -192,10 +209,12 @@ describe('versionCommands.publish', () => {
   test('can bind after publish when called without object receiver', async () => {
     const publish = versionCommands.publish;
 
-    await publish({
-      args: ['bundle.ppk'],
-      options: { platform: 'android' },
-    });
+    await withInteractiveStdin(() =>
+      publish({
+        args: ['bundle.ppk'],
+        options: { platform: 'android' },
+      }),
+    );
 
     expect(updateSpy).toHaveBeenCalledWith({
       options: {

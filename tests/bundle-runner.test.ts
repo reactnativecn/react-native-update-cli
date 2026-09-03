@@ -502,21 +502,70 @@ describe('summarizeHermescStderr', () => {
 });
 
 describe('assertSafeToEmpty', () => {
-  const cwd = path.join(os.tmpdir(), 'rnu-project');
+  const roots: string[] = [];
 
-  test('allows a build directory inside or outside the project', () => {
-    expect(() => assertSafeToEmpty('.pushy/intermedia/ios', cwd)).not.toThrow();
-    expect(() =>
-      assertSafeToEmpty(path.join(os.tmpdir(), 'elsewhere', 'build'), cwd),
-    ).not.toThrow();
+  afterEach(() => {
+    for (const root of roots.splice(0)) {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 
-  test('refuses the project directory, its ancestors, home and the root', () => {
+  function directory(prefix: string): string {
+    const root = mkTempDir(prefix);
+    roots.push(root);
+    return root;
+  }
+
+  test('returns the canonical path for dedicated build directories', () => {
+    const cwd = directory('rnu-safe-project-');
+    const inside = path.join(cwd, '.pushy', 'intermedia', 'ios');
+    expect(assertSafeToEmpty(inside, cwd)).toBe(fs.realpathSync.native(inside));
+
+    const outsideRoot = directory('rnu-safe-outside-');
+    const outside = path.join(outsideRoot, 'build');
+    expect(assertSafeToEmpty(outside, cwd)).toBe(
+      fs.realpathSync.native(outside),
+    );
+  });
+
+  test('refuses protected roots and source-control metadata', () => {
+    const cwd = directory('rnu-safe-project-');
+    fs.mkdirSync(path.join(cwd, '.git'), { recursive: true });
+
     expect(() => assertSafeToEmpty('.', cwd)).toThrow();
     expect(() => assertSafeToEmpty('..', cwd)).toThrow();
     expect(() => assertSafeToEmpty(cwd, cwd)).toThrow();
     expect(() => assertSafeToEmpty(os.homedir(), cwd)).toThrow();
+    expect(() => assertSafeToEmpty(os.tmpdir(), cwd)).toThrow();
     expect(() => assertSafeToEmpty(path.parse(cwd).root, cwd)).toThrow();
+    expect(() => assertSafeToEmpty(path.join(cwd, '.git'), cwd)).toThrow();
+  });
+
+  test('refuses final and parent-directory symlink redirection', () => {
+    const cwd = directory('rnu-safe-project-');
+    const outside = directory('rnu-safe-target-');
+    _writeFile(path.join(outside, 'must-survive.txt'), 'important');
+
+    const directLink = path.join(cwd, 'direct-link');
+    fs.symlinkSync(
+      outside,
+      directLink,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    expect(() => assertSafeToEmpty(directLink, cwd)).toThrow();
+
+    const parentLink = path.join(cwd, 'parent-link');
+    fs.symlinkSync(
+      outside,
+      parentLink,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+    expect(() =>
+      assertSafeToEmpty(path.join(parentLink, 'build'), cwd),
+    ).toThrow();
+    expect(
+      fs.readFileSync(path.join(outside, 'must-survive.txt'), 'utf8'),
+    ).toBe('important');
   });
 });
 
@@ -615,8 +664,6 @@ describe('detectHermesEnabled', () => {
     expect(detectIosHermes(root)).toBe(true);
 
     const expoProperties = path.join(root, 'ios', 'Podfile.properties.json');
-    writeJson(expoProperties, { 'expo.jsEngine': 'jsc' });
-    expect(detectIosHermes(root)).toBe(false);
     writeJson(expoProperties, { 'expo.jsEngine': 'hermes' });
     fs.rmSync(lock);
     expect(detectIosHermes(root)).toBe(true);
@@ -627,6 +674,40 @@ describe('detectHermesEnabled', () => {
     });
     expect(detectIosHermes(root)).toBe(true);
     expect(await detectHermesEnabled('ios', undefined, {}, root)).toBe(true);
+  });
+
+  test('ios: explicit JSC configuration overrides Hermes dependency artifacts', () => {
+    const root = project();
+    const ios = path.join(root, 'ios');
+    fs.mkdirSync(path.join(ios, 'Pods', 'hermes-engine'), { recursive: true });
+    _writeFile(
+      path.join(ios, 'Podfile.lock'),
+      'PODS:\n  - hermes-engine (0.83.0)\n',
+    );
+
+    writeJson(path.join(ios, 'Podfile.properties.json'), {
+      'expo.jsEngine': 'jsc',
+    });
+    expect(detectIosHermes(root)).toBe(false);
+
+    fs.rmSync(path.join(ios, 'Podfile.properties.json'));
+    _writeFile(path.join(ios, 'Podfile'), "ENV['USE_HERMES'] = '0'\n");
+    expect(detectIosHermes(root)).toBe(false);
+
+    _writeFile(
+      path.join(ios, 'Podfile'),
+      "ENV['USE_THIRD_PARTY_JSC'] = '1'\nENV['USE_HERMES'] = '1'\n",
+    );
+    expect(detectIosHermes(root)).toBe(false);
+  });
+
+  test('ios: explicit Podfile Hermes configuration works without installed pods', () => {
+    const root = project();
+    _writeFile(
+      path.join(root, 'ios', 'Podfile'),
+      'use_react_native!(\n  :hermes_enabled => true\n)\n',
+    );
+    expect(detectIosHermes(root)).toBe(true);
   });
 
   test('forceHermes wins on every platform', async () => {

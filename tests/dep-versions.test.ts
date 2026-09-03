@@ -67,10 +67,50 @@ describe('depVersions utility', () => {
     expect(Object.keys(module.depVersions)).toEqual(['lazy']);
     expect({ ...module.depVersions }).toEqual({ lazy: '1.2.3' });
 
-    // memoized: a later cwd change does not re-resolve
-    const callsAfterFirst = cwdSpy.mock.calls.length;
+    // memoized while the project directory is unchanged
     expect(module.getDepVersions()).toBe(module.getDepVersions());
-    expect(cwdSpy.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  test('re-resolves the cache after the project cwd changes', async () => {
+    const secondDir = path.join(
+      os.tmpdir(),
+      `temp-test-dep-versions-second-${Date.now()}-${testCount}`,
+    );
+    fs.mkdirSync(secondDir, { recursive: true });
+    try {
+      for (const [root, name, version] of [
+        [testDir, 'first', '1.0.0'],
+        [secondDir, 'second', '2.0.0'],
+      ] as const) {
+        fs.writeFileSync(
+          path.join(root, 'package.json'),
+          JSON.stringify({ dependencies: { [name]: '*' } }),
+        );
+        const depDir = path.join(root, 'node_modules', name);
+        fs.mkdirSync(depDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(depDir, 'package.json'),
+          JSON.stringify({ version }),
+        );
+      }
+
+      const modulePath = path.join(
+        originalCwd,
+        'src',
+        'utils',
+        'dep-versions.ts',
+      );
+      const module = await import(
+        `${modulePath}?cwd=${Date.now()}_${testCount}`
+      );
+      expect(module.getDepVersions()).toEqual({ first: '1.0.0' });
+
+      cwdSpy.mockReturnValue(secondDir);
+      expect(module.getDepVersions()).toEqual({ second: '2.0.0' });
+      expect(module.getDepVersion('second')).toBe('2.0.0');
+    } finally {
+      fs.rmSync(secondDir, { recursive: true, force: true });
+    }
   });
 
   test('should return an empty object if no package.json is found', async () => {

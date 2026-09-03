@@ -12,6 +12,7 @@ type ProjectPackageJson = {
   devDependencies?: Record<string, string>;
 };
 
+let cachedCwd: string | undefined;
 let cached: Record<string, string> | undefined;
 
 function readProjectPackageJson(cwd: string): ProjectPackageJson | null {
@@ -63,9 +64,8 @@ function readInstalledVersion(dep: string, cwd: string): string | undefined {
   }
 }
 
-function readDepVersions(): Record<string, string> {
+function readDepVersions(cwd: string): Record<string, string> {
   const versions: Record<string, string> = {};
-  const cwd = process.cwd();
   const pkg = readProjectPackageJson(cwd);
   if (pkg) {
     for (const dep of directDependencyNames(pkg)) {
@@ -90,8 +90,10 @@ function readDepVersions(): Record<string, string> {
 
 /** Installed versions of the cwd project's dependencies, keys sorted. */
 export function getDepVersions(): Record<string, string> {
-  if (!cached) {
-    cached = readDepVersions();
+  const cwd = path.resolve(process.cwd());
+  if (!cached || cachedCwd !== cwd) {
+    cached = readDepVersions(cwd);
+    cachedCwd = cwd;
   }
   return cached;
 }
@@ -106,14 +108,15 @@ export function getDepVersion(
   name: string,
   cwd = process.cwd(),
 ): string | undefined {
-  if (cached && cwd === process.cwd()) {
+  const resolvedCwd = path.resolve(cwd);
+  if (cached && cachedCwd === resolvedCwd) {
     return cached[name];
   }
-  const pkg = readProjectPackageJson(cwd);
+  const pkg = readProjectPackageJson(resolvedCwd);
   if (!pkg || !directDependencyNames(pkg).includes(name)) {
     return undefined;
   }
-  return readInstalledVersion(name, cwd);
+  return readInstalledVersion(name, resolvedCwd);
 }
 
 /**

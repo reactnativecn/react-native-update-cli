@@ -95,6 +95,7 @@ export class CLIProviderImpl implements CLIProvider {
           hermes: options.hermes || false,
           hermesBase: options.hermesBase || 'auto',
           verifyHermesBase: options.verifyHermesBase ?? true,
+          resetCache: options.resetCache ?? true,
           sentryRelease: options.sentryRelease,
           sentryDist: options.sentryDist,
           appId: options.appId,
@@ -283,7 +284,7 @@ export class CLIProviderImpl implements CLIProvider {
     return this.session;
   }
 
-  async listPackages(appId?: string): Promise<CommandResult> {
+  async listPackages(appId: string): Promise<CommandResult> {
     return this.runDataCommand(async () => {
       if (!appId) {
         throw new Error(t('appIdRequired'));

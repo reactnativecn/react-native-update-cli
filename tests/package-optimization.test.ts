@@ -41,6 +41,23 @@ import * as api from '../src/api';
 import { choosePackage } from '../src/package';
 import * as utils from '../src/utils';
 
+async function withInteractiveStdin<T>(task: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+  Object.defineProperty(process.stdin, 'isTTY', {
+    configurable: true,
+    value: true,
+  });
+  try {
+    return await task();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(process.stdin, 'isTTY', descriptor);
+    } else {
+      Reflect.deleteProperty(process.stdin, 'isTTY');
+    }
+  }
+}
+
 describe('choosePackage optimization', () => {
   test('should return the correct package when a valid ID is entered', async () => {
     const mockPackages = [
@@ -54,7 +71,7 @@ describe('choosePackage optimization', () => {
     const questionSpy = spyOn(utils, 'question').mockResolvedValue('102');
     const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
 
-    const result = await choosePackage('app123');
+    const result = await withInteractiveStdin(() => choosePackage('app123'));
 
     expect(result).toEqual(mockPackages[1] as any);
     expect(getAllPackagesSpy).toHaveBeenCalledWith('app123');
@@ -82,7 +99,7 @@ describe('choosePackage optimization', () => {
     );
     const consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
 
-    const result = await choosePackage('app123');
+    const result = await withInteractiveStdin(() => choosePackage('app123'));
 
     expect(result).toEqual(mockPackages[0] as any);
     expect(questionMock).toHaveBeenCalledTimes(2);

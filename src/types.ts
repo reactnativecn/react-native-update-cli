@@ -144,7 +144,7 @@ export interface CLIProvider {
     versionId: string,
     updates: UpdateVersionOptions,
   ) => Promise<CommandResult>;
-  listPackages: (appId?: string) => Promise<CommandResult>;
+  listPackages: (appId: string) => Promise<CommandResult>;
 
   getPlatform: (platform?: Platform) => Promise<Platform>;
   loadSession: () => Promise<Session>;
