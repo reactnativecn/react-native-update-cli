@@ -25,6 +25,7 @@ jobs:
       - name: Apply reviewed fixes
         run: |
           python3 .github/pr81-fix.py
+          sed -i 's/appKey?: string;/appKey: string;/' src/app.ts
           rm .github/pr81-fix.py .github/workflows/pr81-autofix.yml
 
       - uses: oven-sh/setup-bun@v2
