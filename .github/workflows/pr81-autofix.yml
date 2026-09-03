@@ -26,6 +26,59 @@ jobs:
         run: |
           python3 .github/pr81-fix.py
           sed -i 's/appKey?: string;/appKey: string;/' src/app.ts
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one match, found {count}')
+              file.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          def replace_all(path: str, old: str, new: str, expected: int) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != expected:
+                  raise RuntimeError(f'{path}: expected {expected} matches, found {count}')
+              file.write_text(text.replace(old, new), encoding='utf-8')
+
+          # App IDs are opaque at API boundaries; strict numeric validation is
+          # limited to the selectApp/deleteApp CLI arguments that previously
+          # used parseInt and could silently select a different ID.
+          replace_once(
+              'src/app.ts',
+              "    const appId = String(parsePositiveIntegerId(String(options.appId)));\n",
+              "    const appId = String(options.appId);\n",
+          )
+
+          helper = """\nasync function withInteractiveStdin<T>(\n  task: () => Promise<T>,\n): Promise<T> {\n  const descriptor = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');\n  Object.defineProperty(process.stdin, 'isTTY', {\n    configurable: true,\n    value: true,\n  });\n  try {\n    return await task();\n  } finally {\n    if (descriptor) {\n      Object.defineProperty(process.stdin, 'isTTY', descriptor);\n    } else {\n      Reflect.deleteProperty(process.stdin, 'isTTY');\n    }\n  }\n}\n"""
+
+          replace_once(
+              'tests/package-optimization.test.ts',
+              "import * as utils from '../src/utils';\n",
+              "import * as utils from '../src/utils';\n" + helper,
+          )
+          replace_all(
+              'tests/package-optimization.test.ts',
+              "    const result = await choosePackage('app123');\n",
+              "    const result = await withInteractiveStdin(() =>\n      choosePackage('app123'),\n    );\n",
+              2,
+          )
+
+          replace_once(
+              'tests/versions.test.ts',
+              "} from '../src/versions';\n",
+              "} from '../src/versions';\n" + helper,
+          )
+          replace_once(
+              'tests/versions.test.ts',
+              """    await publish({\n      args: ['bundle.ppk'],\n      options: { platform: 'android' },\n    });\n""",
+              """    await withInteractiveStdin(() =>\n      publish({\n        args: ['bundle.ppk'],\n        options: { platform: 'android' },\n      }),\n    );\n""",
+          )
+          PY
           rm .github/pr81-fix.py .github/workflows/pr81-autofix.yml
 
       - uses: oven-sh/setup-bun@v2
