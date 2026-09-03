@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { doDelete, get, post } from './api';
 import type { Platform } from './types';
-import { loadTtyTable, question } from './utils';
+import { isNonInteractive, loadTtyTable, question } from './utils';
 import { updateJson } from './utils/constants';
 import { t } from './utils/i18n';
 
@@ -39,6 +39,15 @@ export function assertPlatform(platform: string): Platform {
     throw new Error(t('unsupportedPlatform', { platform }));
   }
   return platform as Platform;
+}
+
+/** Parse a complete positive integer ID without parseInt-style truncation. */
+function parsePositiveIntegerId(value: string): number {
+  const id = Number(value);
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(id)) {
+    throw new Error(t('invalidId', { id: value }));
+  }
+  return id;
 }
 
 /** Read the selected app for a platform from the requested config file. */
@@ -85,12 +94,16 @@ export async function getSelectedApp(
  * too (403/404) instead of after the expensive work.
  */
 async function assertAppPlatform(appId: string, platform: Platform) {
-  const app = (await get(`/app/${appId}`)) as { platform?: Platform };
+  const app = (await get(`/app/${appId}`)) as {
+    platform?: Platform;
+    appKey?: unknown;
+  };
   if (app.platform && app.platform !== platform) {
     throw new Error(
       t('appPlatformMismatch', { appId, appPlatform: app.platform, platform }),
     );
   }
+  return app;
 }
 
 /**
@@ -143,6 +156,10 @@ export async function listApp(platform: Platform | '' = '') {
 
 /** Prompt until the user chooses an app belonging to the target platform. */
 export async function chooseApp(platform: Platform) {
+  // Fail before a network request or table output when no prompt is possible.
+  if (isNonInteractive()) {
+    throw new Error(t('appIdRequired'));
+  }
   const list = await listApp(platform);
 
   while (true) {
@@ -164,8 +181,16 @@ async function selectApp({
 }) {
   const platform = await getPlatform(options.platform);
   const id = args[0]
-    ? Number.parseInt(args[0], 10)
+    ? parsePositiveIntegerId(args[0])
     : (await chooseApp(platform)).id;
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new Error(t('invalidId', { id: args[0] }));
+  }
+  const app = await assertAppPlatform(String(id), platform);
+  if (typeof app.appKey !== 'string' || !app.appKey) {
+    throw new Error(t('appKeyMissing', { appId: id }));
+  }
+  const appKey = app.appKey;
 
   const configPath = options.config || updateJson;
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
@@ -178,7 +203,6 @@ async function selectApp({
       throw e;
     }
   }
-  const { appKey } = await get(`/app/${id}`);
   updateInfo[platform] = {
     appId: id,
     appKey,
@@ -223,7 +247,9 @@ export function getAppCommands() {
       options: { platform: Platform };
     }) => {
       const { platform } = options;
-      const id = args[0] || (await chooseApp(platform)).id;
+      const id = args[0]
+        ? parsePositiveIntegerId(args[0])
+        : (await chooseApp(platform)).id;
       if (!id) {
         console.log(t('cancelled'));
         return;

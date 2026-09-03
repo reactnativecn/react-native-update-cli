@@ -12,6 +12,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -19,6 +22,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
 
@@ -43,6 +48,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
 
@@ -68,6 +75,33 @@ jobs:
           path: coverage
           if-no-files-found: error
 
+  node18-smoke:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install Dependency
+        run: bun install --frozen-lockfile
+
+      - name: Build package
+        run: bun run build
+
+      # Node 18 goes on PATH only after the build: typescript >= 7 ships an
+      # extensionless ESM bin/tsc that Node 18.17 cannot load.
+      - name: Set up the oldest supported Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '18.17.0'
+
+      - name: Load every built module and run the offline commands
+        run: node scripts/smoke-lib.js
+
   publish-dry-run:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
@@ -76,6 +110,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@v2
 

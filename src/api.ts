@@ -1,6 +1,9 @@
 import filesizeParser from 'filesize-parser';
 import fs from 'fs';
-import fetch from 'node-fetch';
+import type {
+  RequestInit as NodeFetchRequestInit,
+  Response as NodeFetchResponse,
+} from 'node-fetch';
 import path from 'path';
 import type ProgressBar from 'progress';
 import packageJson from '../package.json';
@@ -11,8 +14,10 @@ import { getBaseUrl } from './utils/http-helper';
 import { t } from './utils/i18n';
 import {
   measureTcpLatency,
+  proxyAgentFor,
   type RuntimeRequestInit,
   type RuntimeResponse,
+  resolveProxy,
   runtimeFetch,
 } from './utils/runtime';
 
@@ -83,6 +88,21 @@ export const closeSession = () => {
   session = undefined;
 };
 
+/** Remove credentials, query signatures and fragments before logging a URL. */
+export function redactRequestUrl(requestUrl: string): string {
+  try {
+    const parsed = new URL(requestUrl);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}${
+      parsed.search ? '?<redacted>' : ''
+    }`;
+  } catch {
+    const secretStart = requestUrl.search(/[?#]/);
+    return secretStart < 0
+      ? requestUrl
+      : `${requestUrl.slice(0, secretStart)}?<redacted>`;
+  }
+}
+
 function createRequestError(
   error: unknown,
   requestUrl: string,
@@ -94,7 +114,14 @@ function createRequestError(
       : error instanceof Error
         ? error.message
         : String(error);
-  const requestError = new Error(`${message}\nURL: ${requestUrl}`) as Error & {
+  const cause =
+    error instanceof Error || (typeof error === 'object' && error !== null)
+      ? error
+      : undefined;
+  const requestError = new Error(
+    `${message}\nURL: ${redactRequestUrl(requestUrl)}`,
+    cause === undefined ? undefined : { cause },
+  ) as Error & {
     status?: number;
   };
   requestError.status = status;
@@ -116,13 +143,23 @@ const PROXY_ERROR_PATTERNS = [
 ];
 
 function isProxyRelatedError(error: unknown): boolean {
-  const msg =
-    error instanceof Error
-      ? error.message
-      : typeof error === 'string'
-        ? error
-        : '';
-  const lower = msg.toLowerCase();
+  const seen = new Set<unknown>();
+  const parts: string[] = [];
+  let current = error;
+  while (current !== undefined && current !== null && !seen.has(current)) {
+    seen.add(current);
+    if (current instanceof Error) {
+      const code = (current as NodeJS.ErrnoException).code;
+      parts.push(`${current.name} ${code ?? ''} ${current.message}`);
+    } else {
+      parts.push(String(current));
+    }
+    current =
+      typeof current === 'object'
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  const lower = parts.join('\n').toLowerCase();
   return PROXY_ERROR_PATTERNS.some((p) => lower.includes(p.toLowerCase()));
 }
 
@@ -137,6 +174,7 @@ async function query(url: string, options: RuntimeRequestInit) {
     if (isProxyRelatedError(error)) {
       throw new Error(
         `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+        { cause: baseError },
       );
     }
     throw baseError;
@@ -249,10 +287,23 @@ export function isTransientUploadError(error: unknown): boolean {
 }
 
 class UploadTimeoutError extends Error {
+  readonly code = 'ETIMEDOUT';
+
   constructor(timeoutMs: number) {
     super(`Upload timed out after ${Math.round(timeoutMs / 1000)}s`);
     this.name = 'UploadTimeoutError';
   }
+}
+
+/**
+ * node-fetch is only needed for the streaming multipart / PUT upload below
+ * (the built-in fetch cannot stream a form-data body). Loading it eagerly
+ * pulled whatwg-url → punycode into every command, which Node ≥ 21 greets
+ * with a DEP0040 deprecation warning on stderr; so it is loaded on first use.
+ */
+function loadNodeFetch(): typeof import('node-fetch').default {
+  const mod = require('node-fetch');
+  return (mod.default ?? mod) as typeof import('node-fetch').default;
 }
 
 /**
@@ -265,9 +316,12 @@ async function sendUpload(
   realUrl: string,
   fileSize: number,
   bar: ProgressBar,
-  buildRequest: (fileStream: fs.ReadStream) => fetch.RequestInit,
-): Promise<fetch.Response> {
+  buildRequest: (fileStream: fs.ReadStream) => NodeFetchRequestInit,
+): Promise<NodeFetchResponse> {
   const timeoutMs = uploadTimeoutMs(fileSize);
+  const nodeFetch = loadNodeFetch();
+  // HTTP(S)_PROXY / NO_PROXY, like every other request of the CLI
+  const agent = proxyAgentFor(realUrl);
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
     let timedOut = false;
@@ -280,8 +334,9 @@ async function sendUpload(
       bar.tick(data.length);
     });
     try {
-      return await fetch(realUrl, {
+      return await nodeFetch(realUrl, {
         ...buildRequest(fileStream),
+        agent,
         signal: controller.signal,
       });
     } catch (rawError) {
@@ -317,7 +372,9 @@ export async function uploadFile(
   if (backupUrl) {
     if (global.USE_ACC_OSS) {
       realUrl = backupUrl;
-    } else {
+    } else if (!resolveProxy(url)) {
+      // a direct TCP probe says nothing about the path through a proxy (and
+      // usually cannot connect at all): the primary url stays in that case
       const latency = await measureTcpLatency(url, {
         attempts: 4,
         timeout: 1000,
@@ -350,18 +407,19 @@ export async function uploadFile(
   });
 
   const rethrowUploadError = (error: unknown): never => {
+    const baseError = createRequestError(error, realUrl);
     if (isProxyRelatedError(error)) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `${rawMessage}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+        `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+        { cause: baseError },
       );
     }
-    throw createRequestError(error, realUrl);
+    throw baseError;
   };
 
   // 自托管节点的 s3 直传:服务端下发预签名 PUT,字节直达用户的对象存储
   if (resp.method === 'PUT') {
-    let putRes: fetch.Response;
+    let putRes: NodeFetchResponse;
     try {
       putRes = await sendUpload(fn, realUrl, fileSize, bar, (fileStream) => ({
         method: 'PUT',
@@ -385,7 +443,7 @@ export async function uploadFile(
   }
 
   const FormData = require('form-data') as typeof import('form-data');
-  let res: fetch.Response;
+  let res: NodeFetchResponse;
   try {
     res = await sendUpload(fn, realUrl, fileSize, bar, (fileStream) => {
       const form = new FormData();
@@ -395,10 +453,10 @@ export async function uploadFile(
       if (key) {
         form.append('key', key);
       }
-      form.append('file', fileStream);
-      // form.append('file', fileStream, {
-      //   contentType: 'application/octet-stream',
-      // });
+      // With every part's length known node-fetch sends Content-Length instead
+      // of a chunked body: what object stores expect, and the only framing
+      // that survives http-proxy-agent's rewrite of the buffered request head.
+      form.append('file', fileStream, { knownLength: fileSize });
       return { method: 'POST', body: form };
     });
   } catch (error) {

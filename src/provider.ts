@@ -87,13 +87,15 @@ export class CLIProviderImpl implements CLIProvider {
           entryFile: options.entryFile || 'index.js',
           output: options.output || DEFAULT_BUNDLE_OUTPUT,
           'no-interactive': true,
-          sourcemap: options.sourcemap || false,
+          // on by default like the CLI: archived with the version for symbolicate
+          sourcemap: options.sourcemap ?? true,
           taro: options.taro || false,
           expo: options.expo || false,
           rncli: options.rncli || false,
           hermes: options.hermes || false,
           hermesBase: options.hermesBase || 'auto',
           verifyHermesBase: options.verifyHermesBase ?? true,
+          resetCache: options.resetCache ?? true,
           sentryRelease: options.sentryRelease,
           sentryDist: options.sentryDist,
           appId: options.appId,
@@ -282,7 +284,7 @@ export class CLIProviderImpl implements CLIProvider {
     return this.session;
   }
 
-  async listPackages(appId?: string): Promise<CommandResult> {
+  async listPackages(appId: string): Promise<CommandResult> {
     return this.runDataCommand(async () => {
       if (!appId) {
         throw new Error(t('appIdRequired'));

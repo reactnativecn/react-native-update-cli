@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import fs from 'fs';
 import * as api from '../src/api';
-import { assertPlatform, getAppCommands, getSelectedApp } from '../src/app';
+import {
+  assertPlatform,
+  chooseApp,
+  getAppCommands,
+  getSelectedApp,
+} from '../src/app';
 
 describe('assertPlatform', () => {
   test('accepts ios', () => {
@@ -162,5 +167,82 @@ describe('appCommands.createApp', () => {
       ),
       'utf8',
     );
+  });
+});
+
+describe('non-interactive guards', () => {
+  afterEach(() => {
+    global.NO_INTERACTIVE = undefined;
+  });
+
+  test('chooseApp fails instead of looping forever when nothing can answer', async () => {
+    global.NO_INTERACTIVE = true;
+    const getSpy = spyOn(api, 'get').mockResolvedValue({
+      data: [{ id: 1, name: 'DemoApp', platform: 'ios' }],
+    });
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await expect(chooseApp('ios')).rejects.toThrow();
+      expect(getSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
+  test('selectApp rejects malformed or non-positive app ids', async () => {
+    const getSpy = spyOn(api, 'get').mockRejectedValue(
+      new Error('must not reach the server'),
+    );
+    try {
+      for (const id of ['abc', '12abc', '1.5', '12e3', '0', '-1']) {
+        await expect(
+          getAppCommands().selectApp({
+            args: [id],
+            options: { platform: 'ios' },
+          }),
+        ).rejects.toThrow();
+      }
+      expect(getSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+    }
+  });
+
+  test('selectApp rejects a response without an app key', async () => {
+    const getSpy = spyOn(api, 'get').mockResolvedValue({ platform: 'ios' });
+    const writeFileSpy = spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    try {
+      await expect(
+        getAppCommands().selectApp({
+          args: ['12'],
+          options: { platform: 'ios' },
+        }),
+      ).rejects.toThrow();
+      expect(writeFileSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+      writeFileSpy.mockRestore();
+    }
+  });
+
+  test('selectApp rejects an app belonging to another platform', async () => {
+    const getSpy = spyOn(api, 'get').mockResolvedValue({
+      appKey: 'android-key',
+      platform: 'android',
+    });
+    const writeFileSpy = spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    try {
+      await expect(
+        getAppCommands().selectApp({
+          args: ['12'],
+          options: { platform: 'ios' },
+        }),
+      ).rejects.toThrow();
+      expect(writeFileSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+      writeFileSpy.mockRestore();
+    }
   });
 });

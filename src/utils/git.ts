@@ -50,17 +50,20 @@ async function getRemoteOrigin(cwd: string) {
 export async function getCommitInfo(): Promise<CommitInfo | undefined> {
   try {
     const gitRoot = await gitOutput(['rev-parse', '--show-toplevel']);
-    const [hash, message, author, timestamp, origin] = await Promise.all([
-      gitOutput(['rev-parse', 'HEAD'], gitRoot),
-      gitOutput(['log', '-1', '--format=%B'], gitRoot),
-      gitOutput(['log', '-1', '--format=%an'], gitRoot),
-      gitOutput(['log', '-1', '--format=%ct'], gitRoot),
+    // one `git log` for every commit field (NUL-separated, the multi-line
+    // message last) instead of one git process per field
+    const [log, origin] = await Promise.all([
+      gitOutput(['log', '-1', '--format=%H%x00%an%x00%ct%x00%B'], gitRoot),
       getRemoteOrigin(gitRoot),
     ]);
+    const [hash, author, timestamp, ...message] = log.split('\0');
+    if (!hash) {
+      return;
+    }
 
     return {
       hash,
-      message,
+      message: message.join('\0'),
       author,
       timestamp,
       origin,

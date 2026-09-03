@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import * as api from '../src/api';
+import { bundleCommands } from '../src/bundle';
 import { packageCommands } from '../src/package';
 import { CLIProviderImpl } from '../src/provider';
 import * as versions from '../src/versions';
@@ -7,6 +8,7 @@ import * as versions from '../src/versions';
 describe('CLIProviderImpl', () => {
   let provider: CLIProviderImpl;
   let consoleSpy: ReturnType<typeof spyOn>;
+  let bundleSpy: ReturnType<typeof spyOn>;
   let publishSpy: ReturnType<typeof spyOn>;
   let updateSpy: ReturnType<typeof spyOn>;
   let uploadApkSpy: ReturnType<typeof spyOn>;
@@ -20,6 +22,7 @@ describe('CLIProviderImpl', () => {
 
   afterEach(() => {
     consoleSpy.mockRestore();
+    bundleSpy?.mockRestore();
     publishSpy?.mockRestore();
     updateSpy?.mockRestore();
     uploadApkSpy?.mockRestore();
@@ -45,6 +48,27 @@ describe('CLIProviderImpl', () => {
 
     test('throws for invalid platform', async () => {
       await expect(provider.getPlatform('windows' as any)).rejects.toThrow();
+    });
+  });
+
+  test('bundle forwards resetCache and an explicit sourcemap opt-out', async () => {
+    bundleSpy = spyOn(bundleCommands, 'bundle').mockResolvedValue(undefined);
+
+    const result = await provider.bundle({
+      platform: 'android',
+      resetCache: false,
+      sourcemap: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(bundleSpy).toHaveBeenCalledWith({
+      args: [],
+      options: expect.objectContaining({
+        platform: 'android',
+        'no-interactive': true,
+        resetCache: false,
+        sourcemap: false,
+      }),
     });
   });
 

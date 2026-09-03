@@ -9,7 +9,7 @@ import pkg from '../../package.json';
 import type AppInfoParserType from './app-info-parser';
 import { checkPlugins } from './check-plugin';
 import { IS_CRESC } from './constants';
-import { getDepVersions } from './dep-versions';
+import { getDepVersion } from './dep-versions';
 import { t } from './i18n';
 
 // app-info-parser (and its zip/plist/protobuf stack) is only needed by the
@@ -100,10 +100,18 @@ type AabResourceTableObject = {
   package: AabResourcePackage[];
 };
 
-export function isNonInteractive() {
-  const envValue = process.env.NO_INTERACTIVE?.toLowerCase();
+/** True when prompts cannot or must not be shown. */
+export function isNonInteractive(
+  env: NodeJS.ProcessEnv = process.env,
+  stdinIsTTY: boolean | undefined = process.stdin.isTTY,
+  globalFlag: boolean | undefined = global.NO_INTERACTIVE,
+) {
+  const envValue = env.NO_INTERACTIVE?.toLowerCase();
   return (
-    global.NO_INTERACTIVE === true || envValue === 'true' || envValue === '1'
+    globalFlag === true ||
+    envValue === 'true' ||
+    envValue === '1' ||
+    stdinIsTTY !== true
   );
 }
 
@@ -585,7 +593,8 @@ export async function printVersionCommand({
 }: {
   wait?: boolean;
 } = {}): Promise<VersionCheck> {
-  const rnuVersion = getDepVersions()['react-native-update'];
+  // one dependency, not the whole map: this runs before every command
+  const rnuVersion = getDepVersion('react-native-update');
 
   let latest: Array<string | undefined> | undefined;
   const check = getLatestVersions(!wait).then((versions) => {

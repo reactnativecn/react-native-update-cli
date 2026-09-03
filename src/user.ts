@@ -3,6 +3,7 @@ import { closeSession, get, post, replaceSession, saveSession } from './api';
 import type { CommandContext } from './types';
 import { question } from './utils';
 import { addGitIgnore } from './utils/add-gitignore';
+import { scriptName } from './utils/constants';
 import { t } from './utils/i18n';
 
 function md5(str: string) {
@@ -13,6 +14,11 @@ export const userCommands = {
   login: async ({ args }: { args: string[] }) => {
     const email = args[0] || (await question('email:'));
     const pwd = args[1] || (await question('password:', true));
+    if (!email || !pwd) {
+      // without a terminal `question` answers '': fail here instead of
+      // sending empty credentials to the server
+      throw new Error(t('loginCredentialsRequired', { scriptName }));
+    }
     const { token, info } = await post('/user/login', {
       email,
       pwd: md5(pwd),

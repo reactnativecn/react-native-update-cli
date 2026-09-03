@@ -188,3 +188,21 @@ describe('userCommands.me', () => {
     }
   });
 });
+
+describe('userCommands.login without credentials', () => {
+  test('fails before calling the server when nothing can be prompted', async () => {
+    // non-interactive `question` answers '' for both prompts
+    const questionSpy = spyOn(utils, 'question').mockResolvedValue('');
+    const postSpy = spyOn(api, 'post').mockResolvedValue({
+      token: 'token',
+      info: { name: 'user' },
+    });
+    try {
+      await expect(userCommands.login({ args: [] })).rejects.toThrow(/login/);
+      expect(postSpy).not.toHaveBeenCalled();
+    } finally {
+      questionSpy.mockRestore();
+      postSpy.mockRestore();
+    }
+  });
+});

@@ -1,10 +1,10 @@
 import fs from 'fs';
-import fetch from 'node-fetch';
 import { SourceMapConsumer } from 'source-map';
 import { get } from './api';
 import { getPlatform, getSelectedApp } from './app';
 import type { Platform, Version } from './types';
 import { t } from './utils/i18n';
+import { webFetch } from './utils/runtime';
 import { unpackSourceMap } from './utils/slim-sourcemap';
 import { fetchVersions } from './versions';
 
@@ -84,6 +84,11 @@ async function findVersionByHash(
 
 async function readStack(source: string | undefined): Promise<string> {
   if (!source || source === '-') {
+    // No file and an interactive terminal: nothing is piped in, so waiting on
+    // stdin would just hang. `-` is an explicit request for stdin either way.
+    if (!source && process.stdin.isTTY) {
+      throw new Error(t('symbolicateUsage'));
+    }
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       process.stdin.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
@@ -134,7 +139,7 @@ export const symbolicateCommands = {
     if (!located?.url) {
       throw new Error(t('symbolicateNoSourceMap', { id: versionId }));
     }
-    const response = await fetch(located.url);
+    const response = await webFetch(located.url);
     if (!response.ok) {
       throw new Error(`Failed to download source map: HTTP ${response.status}`);
     }

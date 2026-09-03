@@ -51,17 +51,12 @@ export default {
   bundlingWithRN: 'Bundling with react-native: {{version}}',
   cancelled: 'Cancelled',
   composingSourceMap: 'Composing source map',
-  copyFileFailed: 'Failed to copy file: {{error}}',
-  copyHarmonyBundleError: 'Error copying Harmony bundle: {{error}}',
   copyingDebugId: 'Copying debugid',
   createAppSuccess: 'App created successfully (id: {{id}})',
   deleteFile: 'Delete {{- file}}',
-  deletingFile: 'Delete {{- file}}',
   enterAppIdQuestion: 'Enter AppId:',
   enterNativePackageId: 'Enter native package ID:',
-  errorInHarmonyApp: 'Error in getEntryFromHarmonyApp: {{error}}',
   expiredStatus: '(Expired)',
-  failedToParseIcon: '[Warning] failed to parse icon: {{error}}',
   failedToParseUpdateJson:
     'Failed to parse file `{{- configPath}}`. Try to remove it manually.',
   fileGenerated: '{{- file}} generated.',
@@ -71,7 +66,6 @@ export default {
   hermesEnabledCompiling: 'Hermes enabled, now compiling to hermes bytecode:\n',
   ipaUploadSuccess:
     'Successfully uploaded IPA native package (id: {{id}}, version: {{version}}, buildTime: {{buildTime}})',
-  keyStrings: 'Key strings:',
   latestVersionTag: '(latest: {{version}})',
   lockBestPractice: `
 Best practices for lock files:
@@ -125,15 +119,9 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   packing: 'Packing',
   pausedStatus: '(Paused)',
   platform: 'Platform',
-  platformPrompt: 'Platform (ios/android/harmony):',
   platformQuestion: 'Platform(ios/android/harmony):',
-  platformRequired: 'Platform must be specified.',
   pluginDetectionError: 'error while detecting {{name}} plugin: {{error}}',
   pluginDetected: 'detected {{name}} plugin',
-  ppkPackageGenerated: 'ppk package generated and saved to: {{- output}}',
-  processingError: 'Error processing file: {{error}}',
-  processingPackage: 'Processing the package {{count}} ...',
-  processingStringPool: 'Processing the string pool ...',
   publishUsage:
     'Usage: pushy publish <ppk file> --platform ios|android|harmony',
   sourceMapNotFound: 'Source map not found: {{path}}',
@@ -165,7 +153,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   sentryReleaseCreated: 'Sentry release created for version: {{version}}',
   totalApps: 'Total {{count}} {{platform}} apps',
   totalPackages: 'Total {{count}} packages',
-  typeStrings: 'Type strings:',
   unsupportedPlatform: 'Unsupported platform `{{platform}}`',
   uploadBundlePrompt: 'Upload this bundle now?(Y/N)',
   uploadingSourcemap: 'Uploading sourcemap',
@@ -176,7 +163,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'Usage: cresc extractApk <aab file> [--output <apk file>] [--includeAllSplits] [--splits <split names>]',
   usageParseApp: 'Usage: cresc parseApp <app file>',
   usageParseIpa: 'Usage: cresc parseIpa <ipa file>',
-  usageUnderDevelopment: 'Usage is under development now.',
   usageUploadApk: 'Usage: cresc uploadApk <apk file>',
   usageUploadAab:
     'Usage: cresc uploadAab <aab file> [--includeAllSplits] [--splits <split names>]',
@@ -254,4 +240,12 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
     'Hermes base: bytecode differs from a plain compile; dropping the base and recompiling',
   cacheCleaned: 'Removed {{count}} cached bundle(s)',
   cacheStats: 'Bundle cache: {{- dir}} — {{files}} file(s), {{mb}} MB',
+  loginCredentialsRequired:
+    'Email and password are required. Usage: {{scriptName}} login <email> <password>',
+  bundleUnexpectedArgs:
+    'bundle takes no positional arguments, got: {{- args}}. Boolean flags take no value; switch one off with --no-<flag> (e.g. --no-sourcemap).',
+  unsafeIntermediateDir:
+    'Refusing to empty {{- dir}} as the intermediate directory: it resolves to a protected or symbolic-link location. Point --intermediaDir at a dedicated build directory.',
+  appKeyMissing: 'App {{appId}} did not return a valid app key.',
+  errorStackHint: '(set RNU_DEBUG=1 to print the stack trace)',
 };

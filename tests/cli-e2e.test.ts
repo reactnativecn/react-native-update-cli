@@ -130,7 +130,12 @@ function runCli({
   env: NodeJS.ProcessEnv;
 }): Promise<CliResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, {
+    // The tests run the CLI with bun. Outside a project bun auto-installs any
+    // bare specifier a failed `require.resolve` asks for (@pnpm/npm-conf probes
+    // for `npm`, diff.ts for the optional node-hdiffpatch), hitting the mock
+    // registry and racing "error: GET .../registry/npm - 404" onto stderr.
+    // Node never does that, so switch the runtime feature off.
+    const child = spawn(process.execPath, ['--no-install', ...args], {
       cwd,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

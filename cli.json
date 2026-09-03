@@ -23,7 +23,13 @@
         }
       }
     },
-    "deleteApp": {},
+    "deleteApp": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        }
+      }
+    },
     "selectApp": {
       "options": {
         "platform": {

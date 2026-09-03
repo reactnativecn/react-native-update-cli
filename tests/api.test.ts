@@ -13,7 +13,9 @@ import {
   get,
   getApiToken,
   getSession,
+  isTransientUploadError,
   loadSession,
+  redactRequestUrl,
   replaceSession,
   saveSession,
   setApiToken,
@@ -196,6 +198,29 @@ describe('api.ts query API methods', () => {
     expect(error).toBeDefined();
     expect(error.message).toContain('Network disconnected');
     expect(error.message).toContain('URL:');
+    expect(error.cause).toBeInstanceOf(Error);
+  });
+
+  test('query preserves nested proxy failure causes', async () => {
+    const socketError = Object.assign(new Error('connection refused'), {
+      code: 'ECONNREFUSED',
+    });
+    const fetchError = new Error('fetch failed', { cause: socketError });
+    runtimeFetchSpy = spyOn(runtime, 'runtimeFetch').mockRejectedValue(
+      fetchError,
+    );
+
+    let error: any;
+    try {
+      await get('/test-endpoint');
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeDefined();
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(error.cause.cause).toBe(fetchError);
+    expect(fetchError.cause).toBe(socketError);
   });
 
   test('query throws on 200 status with non-JSON body', async () => {
@@ -242,5 +267,26 @@ describe('api.ts query API methods', () => {
     expect(error).toBeDefined();
     expect(error.message).toContain('Database failure');
     expect(error.status).toBe(500);
+  });
+});
+
+describe('api.ts error helpers', () => {
+  test('redacts signed query strings and URL credentials', () => {
+    const redacted = redactRequestUrl(
+      'https://alice:secret@example.com/upload?X-Amz-Signature=top-secret#fragment',
+    );
+    expect(redacted).toBe('https://example.com/upload?<redacted>');
+    expect(redacted).not.toContain('secret');
+    expect(redacted).not.toContain('alice');
+  });
+
+  test('treats an upload deadline as transient', () => {
+    expect(
+      isTransientUploadError({
+        name: 'UploadTimeoutError',
+        code: 'ETIMEDOUT',
+        message: 'Upload timed out',
+      }),
+    ).toBe(true);
   });
 });

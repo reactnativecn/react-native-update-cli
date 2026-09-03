@@ -4,6 +4,7 @@ import * as fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
 import { getHermesBase } from './api';
+import { getDepVersion } from './utils/dep-versions';
 import {
   classifyHermesCommand,
   type HermesBaseOption,
@@ -217,7 +218,7 @@ export async function runReactNativeBundleCommand({
 }: RunBundleCommandOptions): Promise<HermesCompileResult | null> {
   let gradleConfig: GradleConfig = {};
   if (platform === 'android') {
-    gradleConfig = await checkGradleConfig();
+    gradleConfig = await checkGradleConfig(process.cwd());
     if (gradleConfig.crunchPngs !== false) {
       console.warn(t('androidCrunchPngsWarning'));
     }
@@ -230,6 +231,7 @@ export async function runReactNativeBundleCommand({
     reactNativeBundleArgs.push(...envArgs.trim().split(/\s+/));
   }
 
+  outputFolder = assertSafeToEmpty(outputFolder);
   fs.emptyDirSync(outputFolder);
 
   let cliPath = '';
@@ -410,39 +412,284 @@ export async function runReactNativeBundleCommand({
   return hermesResult;
 }
 
-async function detectHermesEnabled(
+/**
+ * Validate the intermediate directory before it is emptied and return the
+ * canonical path that was validated. The caller must use this returned path:
+ * validating one spelling and deleting through another re-opens symlink
+ * redirection.
+ */
+export function assertSafeToEmpty(dir: string, cwd = process.cwd()): string {
+  const requested = path.resolve(cwd, dir);
+  const lexicalCwd = path.resolve(cwd);
+  const lexicalHome = path.resolve(os.homedir());
+  const lexicalTmp = path.resolve(os.tmpdir());
+
+  const contains = (parent: string, child: string) => {
+    const relative = path.relative(parent, child);
+    return (
+      relative === '' ||
+      (!relative.startsWith('..') && !path.isAbsolute(relative))
+    );
+  };
+  const samePath = (left: string, right: string) => {
+    const normalize = (value: string) => {
+      const resolved = path.resolve(value);
+      return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    };
+    return normalize(left) === normalize(right);
+  };
+  const reject = (target: string): never => {
+    throw new Error(t('unsafeIntermediateDir', { dir: target }));
+  };
+  const validate = (
+    target: string,
+    projectRoot: string,
+    home: string,
+    tmpRoot: string,
+  ) => {
+    // Reject each protected directory and all of its ancestors.
+    for (const protectedPath of [
+      path.parse(target).root,
+      projectRoot,
+      home,
+      tmpRoot,
+    ]) {
+      if (contains(target, protectedPath)) reject(target);
+    }
+    // Never allow build cleanup inside source-control metadata.
+    for (const metadata of ['.git', '.hg', '.svn']) {
+      if (contains(path.join(projectRoot, metadata), target)) reject(target);
+    }
+  };
+
+  validate(requested, lexicalCwd, lexicalHome, lexicalTmp);
+
+  // A final-component symlink is the direct dangerous case: emptyDirSync would
+  // enumerate and remove entries from its target rather than removing the link.
+  if (fs.existsSync(requested) && fs.lstatSync(requested).isSymbolicLink()) {
+    reject(requested);
+  }
+
+  // emptyDirSync creates a missing directory too; create it first so it can be
+  // canonicalized and the exact validated path can be passed to deletion.
+  fs.ensureDirSync(requested);
+  const canonical = (value: string) => fs.realpathSync.native(value);
+  const target = canonical(requested);
+  const canonicalCwd = canonical(lexicalCwd);
+  const canonicalHome = canonical(lexicalHome);
+  const canonicalTmp = canonical(lexicalTmp);
+
+  validate(target, canonicalCwd, canonicalHome, canonicalTmp);
+
+  // Reject a symlink in any component below a known safe base. System aliases
+  // such as macOS /var -> /private/var remain valid because the base itself is
+  // canonicalized before the relative suffix is appended.
+  for (const [lexicalBase, canonicalBase] of [
+    [lexicalCwd, canonicalCwd],
+    [lexicalHome, canonicalHome],
+    [lexicalTmp, canonicalTmp],
+  ] as const) {
+    const relative = path.relative(lexicalBase, requested);
+    if (
+      relative === '' ||
+      (!relative.startsWith('..') && !path.isAbsolute(relative))
+    ) {
+      if (!samePath(path.resolve(canonicalBase, relative), target)) {
+        reject(target);
+      }
+      break;
+    }
+  }
+
+  return target;
+}
+
+/**
+ * Whether the app runs Hermes, i.e. whether the bundle must be compiled to
+ * bytecode. A JS bundle shipped to a Hermes app still runs, but starts slower
+ * and cannot use the Hermes base delta, so false negatives are what this
+ * guards against.
+ *
+ * Android: `hermesEnabled` in gradle.properties wins; then the legacy
+ * `project.ext.react.enableHermes` of build.gradle; with neither, the React
+ * Native gradle plugin (0.71+) defaults to Hermes and older versions to JSC.
+ * iOS: an installed `Pods/hermes-engine`; when `pod install` has not run on
+ * this machine (CI), Expo's `Podfile.properties.json` or the pod listed in
+ * `Podfile.lock` tell the same.
+ */
+export async function detectHermesEnabled(
   platform: string,
   forceHermes: boolean | undefined,
   gradleConfig: GradleConfig,
+  projectRoot = process.cwd(),
 ): Promise<boolean> {
   if (forceHermes) {
     console.log(t('forceHermes'));
     return true;
   }
   if (platform === 'android') {
-    const gradleProperties = await new Promise<{ hermesEnabled?: boolean }>(
-      (resolve) => {
-        properties.parse(
-          './android/gradle.properties',
-          { path: true },
-          (error: Error | null, props: { hermesEnabled?: boolean } = {}) => {
-            if (error) {
-              console.error(error);
-              resolve({});
-              return;
-            }
-            resolve(props);
-          },
-        );
-      },
+    const gradleProperties = await readGradleProperties(
+      path.join(projectRoot, 'android', 'gradle.properties'),
     );
     if (typeof gradleProperties.hermesEnabled === 'boolean') {
       return gradleProperties.hermesEnabled;
     }
-    return Boolean(gradleConfig.enableHermes);
+    if (typeof gradleConfig.enableHermes === 'boolean') {
+      return gradleConfig.enableHermes;
+    }
+    return reactNativeDefaultsToHermes(projectRoot);
   }
-  if (platform === 'ios' && fs.existsSync('ios/Pods/hermes-engine')) {
+  if (platform === 'ios') {
+    return detectIosHermes(projectRoot);
+  }
+  return false;
+}
+
+/** parsed gradle.properties; a missing file is simply empty */
+function readGradleProperties(
+  file: string,
+): Promise<{ hermesEnabled?: boolean }> {
+  return new Promise((resolve) => {
+    properties.parse(
+      file,
+      { path: true },
+      (
+        error: (Error & { code?: string }) | null,
+        props: { hermesEnabled?: boolean } = {},
+      ) => {
+        if (error) {
+          if (error.code !== 'ENOENT') {
+            console.warn(`${file}: ${error.message ?? error}`);
+          }
+          resolve({});
+          return;
+        }
+        resolve(props);
+      },
+    );
+  });
+}
+
+/** React Native's gradle plugin (0.71+) enables Hermes unless a property says otherwise */
+function reactNativeDefaultsToHermes(projectRoot: string): boolean {
+  const version = getDepVersion('react-native', projectRoot);
+  // major.minor by hand: React Native is 0.x, and the check must not depend
+  // on a semver library (tests replace compare-versions wholesale)
+  const match = version ? /^(\d+)\.(\d+)\./.exec(version) : null;
+  if (!match) {
+    return false;
+  }
+  const [major, minor] = [Number(match[1]), Number(match[2])];
+  return major > 0 || minor >= 71;
+}
+
+type IosJavaScriptEngine = 'hermes' | 'jsc';
+
+/** Remove Ruby comments without treating a # inside a quoted string as one. */
+function stripRubyComments(source: string): string {
+  return source
+    .split(/\r?\n/)
+    .map((line) => {
+      let quote: "'" | '"' | undefined;
+      let escaped = false;
+      for (let index = 0; index < line.length; index++) {
+        const char = line[index];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (quote) {
+          if (char === '\\') {
+            escaped = true;
+          } else if (char === quote) {
+            quote = undefined;
+          }
+          continue;
+        }
+        if (char === "'" || char === '"') {
+          quote = char;
+        } else if (char === '#') {
+          return line.slice(0, index);
+        }
+      }
+      return line;
+    })
+    .join('\n');
+}
+
+/**
+ * Read explicit iOS engine configuration. An explicit JSC/disabled-Hermes
+ * setting wins over installed pods because CocoaPods may still fetch the
+ * hermes-engine dependency for a JSC build.
+ */
+function configuredIosEngine(ios: string): IosJavaScriptEngine | undefined {
+  let expoEngine: IosJavaScriptEngine | undefined;
+  try {
+    const value = JSON.parse(
+      fs.readFileSync(path.join(ios, 'Podfile.properties.json'), 'utf8'),
+    )?.['expo.jsEngine'];
+    if (value === 'hermes' || value === 'jsc') expoEngine = value;
+  } catch {
+    // no Expo properties file
+  }
+
+  let podfile = '';
+  try {
+    podfile = fs.readFileSync(path.join(ios, 'Podfile'), 'utf8');
+  } catch {
+    // no Podfile
+  }
+  const activePodfile = stripRubyComments(podfile);
+  const envValue = (name: string) =>
+    new RegExp(
+      `ENV\\s*\\[\\s*['"]${name}['"]\\s*\\]\\s*(?:\\|\\|=|=)\\s*['"]([^'"]+)['"]`,
+      'i',
+    )
+      .exec(activePodfile)?.[1]
+      ?.toLowerCase();
+  const useHermes = envValue('USE_HERMES');
+  const useThirdPartyJsc = envValue('USE_THIRD_PARTY_JSC');
+  const hermesOption =
+    /(?:^|[,(]\s*)(?::hermes_enabled\s*=>|hermes_enabled\s*:)\s*(true|false)\b/im
+      .exec(activePodfile)?.[1]
+      ?.toLowerCase();
+
+  if (
+    useThirdPartyJsc === '1' ||
+    useThirdPartyJsc === 'true' ||
+    useHermes === '0' ||
+    useHermes === 'false' ||
+    hermesOption === 'false' ||
+    expoEngine === 'jsc'
+  ) {
+    return 'jsc';
+  }
+  if (
+    useHermes === '1' ||
+    useHermes === 'true' ||
+    hermesOption === 'true' ||
+    expoEngine === 'hermes'
+  ) {
+    return 'hermes';
+  }
+  return undefined;
+}
+
+/** Hermes on iOS: explicit configuration first, installed artifacts second. */
+export function detectIosHermes(projectRoot: string): boolean {
+  const ios = path.join(projectRoot, 'ios');
+  const configured = configuredIosEngine(ios);
+  if (configured) return configured === 'hermes';
+
+  if (fs.existsSync(path.join(ios, 'Pods', 'hermes-engine'))) {
     return true;
+  }
+  // CI may not have run pod install, so use the lockfile only as weak evidence.
+  try {
+    const lock = fs.readFileSync(path.join(ios, 'Podfile.lock'), 'utf8');
+    if (/^\s*-\s+hermes-engine\b/m.test(lock)) return true;
+  } catch {
+    // no lockfile either
   }
   return false;
 }
@@ -547,20 +794,21 @@ export function resolveHermesCommand(projectRoot = process.cwd()): string {
   );
 }
 
-async function checkGradleConfig(): Promise<GradleConfig> {
-  let enableHermes = false;
+async function checkGradleConfig(projectRoot: string): Promise<GradleConfig> {
+  // undefined when build.gradle does not mention Hermes at all (React Native
+  // 0.71+ moved the switch to gradle.properties; see detectHermesEnabled)
+  let enableHermes: boolean | undefined;
   let crunchPngs: boolean | undefined;
   try {
-    const gradleConfig = await g2js.parseFile('android/app/build.gradle');
+    const gradleConfig = await g2js.parseFile(
+      path.join(projectRoot, 'android', 'app', 'build.gradle'),
+    );
     crunchPngs = gradleConfig.android.buildTypes.release.crunchPngs;
     const projectConfig = gradleConfig['project.ext.react'];
     if (projectConfig) {
       for (const packagerConfig of projectConfig) {
-        if (
-          packagerConfig.includes('enableHermes') &&
-          packagerConfig.includes('true')
-        ) {
-          enableHermes = true;
+        if (packagerConfig.includes('enableHermes')) {
+          enableHermes = packagerConfig.includes('true');
           break;
         }
       }
@@ -803,7 +1051,7 @@ export async function compileHermesByteCode({
   shouldCleanSourcemap,
   baseRequest,
   pendingBase,
-  hermesCommand = resolveHermesCommand(),
+  hermesCommand,
 }: CompileHermesOptions): Promise<HermesCompileResult> {
   console.log(t('hermesEnabledCompiling'));
 
@@ -822,6 +1070,8 @@ export async function compileHermesByteCode({
     console.log(t('hermesSourcemapKept', { file: hermesMap }));
   }
 
+  // the selection already resolved hermesc while Metro ran; only look it up
+  // again when there was no selection (or it could not find the binary)
   let selection = pendingBase ? await awaitPendingBase(pendingBase) : null;
   const command =
     hermesCommand ?? selection?.hermesCommand ?? resolveHermesCommand();

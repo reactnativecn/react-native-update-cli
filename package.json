@@ -27,7 +27,6 @@
   },
   "files": [
     "lib",
-    "src",
     "proto",
     "cli.json"
   ],
@@ -39,6 +38,7 @@
     "lint": "bun run typecheck && biome check .",
     "lint:fix": "bun run typecheck && biome check --write .",
     "test": "bun test",
+    "smoke": "node scripts/smoke-lib.js",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov",
     "benchmark:diff-stream": "bun scripts/benchmark-diff-stream.ts"
   },
@@ -71,6 +71,7 @@
     "fs-extra": "^11.4.0",
     "global-dirs": "^4.0.0",
     "gradle-to-js": "^2.0.1",
+    "https-proxy-agent": "^7.0.6",
     "i18next": "^26.4.0",
     "node-fetch": "^2.6.1",
     "plist": "^5.0.0",
@@ -81,6 +82,7 @@
     "registry-auth-token": "^5.1.1",
     "source-map": "0.6.1",
     "tty-table": "5.0",
+    "undici": "^6.28.0",
     "yauzl": "^3.4.0",
     "yazl": "3.3.1"
   },

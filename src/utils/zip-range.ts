@@ -16,6 +16,7 @@ import {
   type ZipFile,
 } from 'yauzl';
 import { inflateRawSync } from 'zlib';
+import { webFetch } from './runtime';
 import { readEntry } from './zip-entries';
 
 export const ZIP_STORED = 0;
@@ -269,7 +270,7 @@ async function fetchRange(
   if (options.ifRange) headers['If-Range'] = options.ifRange;
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await webFetch(url, {
       headers,
       signal: AbortSignal.timeout(options.timeoutMs),
     });
@@ -629,7 +630,7 @@ export async function openRemoteZip(
   const timeoutMs = timeoutFor(TAIL_BYTES, options);
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await webFetch(url, {
       headers: { Range: `bytes=-${TAIL_BYTES}`, 'Accept-Encoding': 'identity' },
       signal: AbortSignal.timeout(timeoutMs),
     });
