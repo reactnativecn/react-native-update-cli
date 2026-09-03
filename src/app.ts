@@ -96,7 +96,7 @@ export async function getSelectedApp(
 async function assertAppPlatform(appId: string, platform: Platform) {
   const app = (await get(`/app/${appId}`)) as {
     platform?: Platform;
-    appKey: string;
+    appKey?: unknown;
   };
   if (app.platform && app.platform !== platform) {
     throw new Error(
@@ -186,7 +186,11 @@ async function selectApp({
   if (!Number.isSafeInteger(id) || id <= 0) {
     throw new Error(t('invalidId', { id: args[0] }));
   }
-  const { appKey } = await assertAppPlatform(String(id), platform);
+  const app = await assertAppPlatform(String(id), platform);
+  if (typeof app.appKey !== 'string' || !app.appKey) {
+    throw new Error(t('appKeyMissing', { appId: id }));
+  }
+  const appKey = app.appKey;
 
   const configPath = options.config || updateJson;
   let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =

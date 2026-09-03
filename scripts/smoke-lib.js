@@ -40,6 +40,8 @@ console.log(
   `smoke: loaded ${loaded} modules from lib/ on node ${process.version}`,
 );
 
+const CLI_TIMEOUT_MS = 10_000;
+
 function runCli(args) {
   const result = spawnSync(
     process.execPath,
@@ -47,9 +49,18 @@ function runCli(args) {
     {
       encoding: 'utf8',
       env: { ...process.env, NO_INTERACTIVE: 'true', RNU_AUTO_UPDATE: '0' },
+      timeout: CLI_TIMEOUT_MS,
     },
   );
   const command = `pushy ${args.join(' ')}`;
+  if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') {
+      throw new Error(
+        `${command} timed out after ${CLI_TIMEOUT_MS / 1000} seconds`,
+      );
+    }
+    throw result.error;
+  }
   if (result.status !== 0) {
     console.error(result.stdout);
     console.error(result.stderr);

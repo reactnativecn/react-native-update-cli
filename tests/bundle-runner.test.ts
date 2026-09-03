@@ -701,6 +701,30 @@ describe('detectHermesEnabled', () => {
     expect(detectIosHermes(root)).toBe(false);
   });
 
+  test('ios: ignores commented-out Podfile engine settings', () => {
+    const root = project();
+    const ios = path.join(root, 'ios');
+    fs.mkdirSync(path.join(ios, 'Pods', 'hermes-engine'), { recursive: true });
+    _writeFile(
+      path.join(ios, 'Podfile'),
+      [
+        "# ENV['USE_HERMES'] = '0'",
+        "# ENV['USE_THIRD_PARTY_JSC'] = '1'",
+        '# use_react_native!(:hermes_enabled => false)',
+        'source "https://example.com/#pods"',
+      ].join('\n'),
+    );
+    expect(detectIosHermes(root)).toBe(true);
+
+    _writeFile(
+      path.join(ios, 'Podfile'),
+      ["ENV['USE_HERMES'] = '1'", "# ENV['USE_THIRD_PARTY_JSC'] = '1'"].join(
+        '\n',
+      ),
+    );
+    expect(detectIosHermes(root)).toBe(true);
+  });
+
   test('ios: explicit Podfile Hermes configuration works without installed pods', () => {
     const root = project();
     _writeFile(

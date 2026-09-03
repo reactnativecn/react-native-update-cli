@@ -585,6 +585,38 @@ function reactNativeDefaultsToHermes(projectRoot: string): boolean {
 
 type IosJavaScriptEngine = 'hermes' | 'jsc';
 
+/** Remove Ruby comments without treating a # inside a quoted string as one. */
+function stripRubyComments(source: string): string {
+  return source
+    .split(/\r?\n/)
+    .map((line) => {
+      let quote: "'" | '"' | undefined;
+      let escaped = false;
+      for (let index = 0; index < line.length; index++) {
+        const char = line[index];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (quote) {
+          if (char === '\\') {
+            escaped = true;
+          } else if (char === quote) {
+            quote = undefined;
+          }
+          continue;
+        }
+        if (char === "'" || char === '"') {
+          quote = char;
+        } else if (char === '#') {
+          return line.slice(0, index);
+        }
+      }
+      return line;
+    })
+    .join('\n');
+}
+
 /**
  * Read explicit iOS engine configuration. An explicit JSC/disabled-Hermes
  * setting wins over installed pods because CocoaPods may still fetch the
@@ -607,18 +639,19 @@ function configuredIosEngine(ios: string): IosJavaScriptEngine | undefined {
   } catch {
     // no Podfile
   }
+  const activePodfile = stripRubyComments(podfile);
   const envValue = (name: string) =>
     new RegExp(
       `ENV\\s*\\[\\s*['"]${name}['"]\\s*\\]\\s*(?:\\|\\|=|=)\\s*['"]([^'"]+)['"]`,
       'i',
     )
-      .exec(podfile)?.[1]
+      .exec(activePodfile)?.[1]
       ?.toLowerCase();
   const useHermes = envValue('USE_HERMES');
   const useThirdPartyJsc = envValue('USE_THIRD_PARTY_JSC');
   const hermesOption =
     /(?:^|[,(]\s*)(?::hermes_enabled\s*=>|hermes_enabled\s*:)\s*(true|false)\b/im
-      .exec(podfile)?.[1]
+      .exec(activePodfile)?.[1]
       ?.toLowerCase();
 
   if (

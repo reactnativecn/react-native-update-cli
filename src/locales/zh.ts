@@ -224,5 +224,6 @@ export default {
     'bundle 不接受位置参数，收到：{{- args}}。布尔选项不带值，关闭请使用 --no-<选项>（例如 --no-sourcemap）。',
   unsafeIntermediateDir:
     '拒绝清空中间目录 {{- dir}}：该路径指向受保护目录或包含符号链接。请用 --intermediaDir 指定一个专用的构建目录。',
+  appKeyMissing: '应用 {{appId}} 未返回有效的 appKey。',
   errorStackHint: '（设置 RNU_DEBUG=1 可打印完整堆栈）',
 };

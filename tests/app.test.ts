@@ -209,6 +209,23 @@ describe('non-interactive guards', () => {
     }
   });
 
+  test('selectApp rejects a response without an app key', async () => {
+    const getSpy = spyOn(api, 'get').mockResolvedValue({ platform: 'ios' });
+    const writeFileSpy = spyOn(fs.promises, 'writeFile').mockResolvedValue();
+    try {
+      await expect(
+        getAppCommands().selectApp({
+          args: ['12'],
+          options: { platform: 'ios' },
+        }),
+      ).rejects.toThrow();
+      expect(writeFileSpy).not.toHaveBeenCalled();
+    } finally {
+      getSpy.mockRestore();
+      writeFileSpy.mockRestore();
+    }
+  });
+
   test('selectApp rejects an app belonging to another platform', async () => {
     const getSpy = spyOn(api, 'get').mockResolvedValue({
       appKey: 'android-key',
