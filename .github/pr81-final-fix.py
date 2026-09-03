@@ -110,10 +110,23 @@ replace_once(
       t('appPlatformMismatch', { appId, appPlatform: app.platform, platform }),
     );
   }
+  return app;
+""",
+)
+
+replace_once(
+    "src/app.ts",
+    """  const { appKey } = await assertAppPlatform(String(id), platform);
+
+  const configPath = options.config || updateJson;
+""",
+    """  const app = await assertAppPlatform(String(id), platform);
   if (typeof app.appKey !== 'string' || !app.appKey) {
-    throw new Error(t('appKeyMissing', { appId }));
+    throw new Error(t('appKeyMissing', { appId: id }));
   }
-  return { ...app, appKey: app.appKey };
+  const appKey = app.appKey;
+
+  const configPath = options.config || updateJson;
 """,
 )
 
