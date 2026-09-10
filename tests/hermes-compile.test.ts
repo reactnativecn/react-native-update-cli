@@ -140,6 +140,65 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     expect(leftovers()).toEqual([]);
   });
 
+  test('a failed verification compile drops the base instead of shipping it unverified', async () => {
+    // A wrapper that logs every invocation, fails only the plain compile into
+    // `plain/` (the one the check needs) and defers everything else to the
+    // real hermesc. It sits under a react-native/sdks/hermesc path because
+    // the selection gates on the command's location.
+    const wrapperDir = path.join(
+      dir,
+      'node_modules/react-native/sdks/hermesc/linux64-bin',
+    );
+    fs.ensureDirSync(wrapperDir);
+    const wrapper = path.join(wrapperDir, 'hermesc');
+    const calls = path.join(dir, 'hermesc-calls.log');
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh
+echo "$*" >> "${calls}"
+case "$*" in *"/plain/"*) echo "simulated plain compile failure" >&2; exit 3;; esac
+exec "${hermesc}" "$@"
+`,
+      { mode: 0o755 },
+    );
+    const result = await compileHermesByteCode({
+      bundleName,
+      outputFolder,
+      sourcemapOutput: '',
+      shouldCleanSourcemap: true,
+      baseRequest: { option: baseHbc, verify: true },
+      hermesCommand: wrapper,
+    });
+    // same policy as a dump that could not be read: base dropped, plain shipped
+    expect(result.base).toBeNull();
+    expect(result.verified).toBeUndefined();
+    expect(result.outcome).toBe('dump-failed');
+    expect(result.outcomeDetail).toBe('plain compile failed: exit 3');
+    const out = fs.readFileSync(path.join(outputFolder, bundleName));
+    expect(getHbcVersion(out)).toBe(probeHbcVersion(hermesc!)!);
+    // three compiles: with the base, the failed check compile, and the plain
+    // recompile that replaced the base output (no dump ever ran); the HBC
+    // version probe compiles too, but into the temp dir
+    const compiles = fs
+      .readFileSync(calls, 'utf8')
+      .trim()
+      .split('\n')
+      .filter(
+        (line) => line.includes('-emit-binary') && line.includes(outputFolder),
+      );
+    expect(compiles).toHaveLength(3);
+    // the first two run concurrently (either order); the recompile is last
+    const concurrent = compiles.slice(0, 2);
+    expect(concurrent.filter((c) => c.includes('-base-bytecode=')).length).toBe(
+      1,
+    );
+    expect(concurrent.filter((c) => c.includes('/plain/')).length).toBe(1);
+    expect(compiles[2]).not.toContain('-base-bytecode=');
+    expect(compiles[2]).not.toContain('/plain/');
+    expect(fs.readFileSync(calls, 'utf8')).not.toContain('-dump-bytecode');
+    expect(leftovers()).toEqual([]);
+  });
+
   test('a selection started ahead of time is consumed by the compile', async () => {
     const pending = startHermesBaseSelection({
       option: baseHbc,

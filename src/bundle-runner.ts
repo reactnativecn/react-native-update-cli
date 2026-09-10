@@ -1155,14 +1155,19 @@ export async function compileHermesByteCode({
         : null;
     if (usedBase && wantPlain) {
       if (!plainOk) {
-        // the check could not run; that is not a verification failure
-        console.warn(
-          t('hermesBasePlainCompileFailed', {
-            reason:
-              (plain?.error && String(plain.error.message ?? plain.error)) ||
-              `exit ${plain?.status}`,
-          }),
-        );
+        // The check could not run. That is not evidence against the base,
+        // but verification was asked for and did not happen, so the base is
+        // dropped exactly like a dump that could not be read: never ship
+        // unverified when asked to verify. The plain compile is simply
+        // repeated below (compilePlain), which surfaces a real compiler
+        // failure as the build error it is.
+        const reason =
+          (plain?.error && String(plain.error.message ?? plain.error)) ||
+          `exit ${plain?.status}`;
+        console.warn(t('hermesBasePlainCompileFailed', { reason }));
+        result.outcome = 'dump-failed';
+        result.outcomeDetail = `plain compile failed: ${reason}`;
+        usedBase = false;
       } else {
         const dumpTo = hermesBaseDumpPaths(outputFolder);
         let outcome: HermesEquivalenceResult;

@@ -233,7 +233,7 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   hermesBaseCompileFailedLog:
     'Hermes base: full compiler output written to {{- file}}',
   hermesBasePlainCompileFailed:
-    'Hermes base: the plain compile used for verification failed ({{- reason}}); keeping the base compile unverified',
+    'Hermes base: the plain compile used for verification failed ({{- reason}}); dropping the base and compiling again without it',
   hermesBaseVerified:
     'Hermes base: bytecode verified equivalent to a plain compile ({{functions}} functions)',
   hermesBaseVerifyFailed:

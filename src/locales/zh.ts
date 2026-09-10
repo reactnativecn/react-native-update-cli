@@ -212,7 +212,7 @@ export default {
     'Hermes base 编译失败（{{- reason}}），改为不带 -base-bytecode 重编',
   hermesBaseCompileFailedLog: 'Hermes base：完整编译错误已写入 {{- file}}',
   hermesBasePlainCompileFailed:
-    'Hermes base：用于校验的普通编译失败（{{- reason}}），保留 base 编译结果但未校验',
+    'Hermes base：用于校验的普通编译失败（{{- reason}}），放弃 base，不带 base 重新编译',
   hermesBaseVerified:
     'Hermes base：字节码与普通编译等价，校验通过（{{functions}} 个函数）',
   hermesBaseVerifyFailed:
