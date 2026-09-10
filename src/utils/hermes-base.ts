@@ -17,6 +17,11 @@ import { PassThrough, Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { tempDir } from './constants';
 import { getHbcVersion } from './hbcTransform';
+import {
+  type LiteralBuffers,
+  LiteralResolver,
+  readLiteralBuffers,
+} from './hermes-literals';
 import { t } from './i18n';
 import { webFetch } from './runtime';
 import { enumZipEntries, readEntry } from './zip-entries';
@@ -998,9 +1003,42 @@ const STRING_TABLE_LINE = /^\s*[is](\d+)\[[^\]]*\](?: #[0-9A-F]+)?: (.*)$/;
  * buffers are laid out differently (offsets, short/long variants), and jump
  * distances follow instruction widths. Everything else must match exactly.
  */
+/** separates rendered literal entries inside one normalized line */
+export const LITERAL_SEPARATOR = '\u001f';
+
+/**
+ * `NewArrayWithBuffer rX, sizeHint, count, offset` and
+ * `NewObjectWithBuffer rX, sizeHint, count, keyOffset, valueOffset` with the
+ * literals decoded from the binary buffers at those offsets, so two builds
+ * that lay their buffers out differently still compare by what each
+ * instruction builds. Null when the operands do not fit the shape; an offset
+ * that cannot be decoded is spelled out (and so never equals a decoded one).
+ */
+function renderBufferInstruction(
+  opcode: string,
+  operands: number[],
+  literals: LiteralResolver,
+): string | null {
+  const [sizeHint, count] = operands;
+  if (opcode.startsWith('NewArray')) {
+    if (operands.length < 3) return null;
+    const entries = literals.array(operands[2], count);
+    return `size=${sizeHint} n=${count} [${entries ? entries.join(LITERAL_SEPARATOR) : `<undecodable@${operands[2]}>`}]`;
+  }
+  if (operands.length < 4) return null;
+  const keys = literals.objectKeys(operands[2], count);
+  const values = literals.objectValues(operands[3], count);
+  if (!keys || !values) {
+    return `size=${sizeHint} n=${count} {<undecodable@${operands[2]}/${operands[3]}>}`;
+  }
+  const pairs = keys.map((k, i) => `${k}: ${values[i]}`);
+  return `size=${sizeHint} n=${count} {${pairs.join(LITERAL_SEPARATOR)}}`;
+}
+
 export function normalizeDisassemblyLine(
   line: string,
   strings: Map<number, string>,
+  literals?: LiteralResolver,
 ): string | null {
   // Cheap dispatch on the opcode before touching any regex: dumps run to
   // millions of lines and only a handful of instructions need rewriting.
@@ -1020,6 +1058,16 @@ export function normalizeDisassemblyLine(
       );
     if (m) {
       const nums = m[3].match(/\d+/g) ?? [];
+      if (literals) {
+        const rendered = renderBufferInstruction(
+          m[1].trim(),
+          nums.map(Number),
+          literals,
+        );
+        if (rendered) return `${m[1]} ${m[2]} ${rendered}`;
+      }
+      // no binary buffers: only the size hint survives; the buffer content
+      // is compared as a whole instead (compareBuffers)
       return `${m[1]} ${m[2]} sizes=${nums.slice(0, 1).join(',')}`;
     }
   }
@@ -1112,6 +1160,12 @@ export interface HermesEquivalenceResult {
   detail?: string;
   /** functions compared on both sides */
   functions: number;
+  /**
+   * `instruction`: literals decoded from the binary buffers at each
+   * New*WithBuffer instruction (HBC v87–96); `buffer`: the dumped buffers
+   * compared as a whole (unknown layout, e.g. v98)
+   */
+  literals?: 'instruction' | 'buffer';
 }
 
 export interface HermesEquivalenceOptions {
@@ -1164,10 +1218,17 @@ class DumpReader {
   private inFunctions = false;
   private finished = false;
 
+  /** set when the binary literal buffers of this side could be read */
+  private readonly literals?: LiteralResolver;
+
   constructor(
     readonly proc: ReturnType<typeof spawn>,
     dumpTo?: string,
+    buffers?: LiteralBuffers | null,
   ) {
+    // the string table is filled while the preamble streams by, before the
+    // first instruction needs it
+    if (buffers) this.literals = new LiteralResolver(buffers, this.strings);
     const pass = new PassThrough();
     proc.stdout!.pipe(pass);
     if (dumpTo) proc.stdout!.pipe(fs.createWriteStream(dumpTo));
@@ -1251,7 +1312,11 @@ class DumpReader {
         break;
       }
       if (line.trim() === '') continue;
-      const normalized = normalizeDisassemblyLine(line, this.strings);
+      const normalized = normalizeDisassemblyLine(
+        line,
+        this.strings,
+        this.literals,
+      );
       if (normalized !== null) lines.push(normalized);
     }
     return { header, lines };
@@ -1277,8 +1342,28 @@ function describeExit(exit: ProcessExit): string {
 }
 
 function clip(line: string): string {
-  const s = line.trim();
+  const s = line.trim().split(LITERAL_SEPARATOR).join(', ');
   return s.length > DETAIL_LINE_MAX ? `${s.slice(0, DETAIL_LINE_MAX - 1)}…` : s;
+}
+
+/**
+ * For two New*WithBuffer lines that differ, the first literal that differs
+ * (the whole line would be clipped before the difference for long literals).
+ */
+function literalDifference(a: string, b: string): string | null {
+  const open = /^(\s*New\w+WithBuffer r\d+ size=\d+ n=\d+ [[{])/;
+  const ma = open.exec(a);
+  const mb = open.exec(b);
+  if (!ma || !mb) return null;
+  const ea = a.slice(ma[1].length, -1).split(LITERAL_SEPARATOR);
+  const eb = b.slice(mb[1].length, -1).split(LITERAL_SEPARATOR);
+  const n = Math.min(ea.length, eb.length);
+  for (let i = 0; i < n; i++) {
+    if (ea[i] !== eb[i]) {
+      return `${clip(ma[1].slice(0, -1))} entry ${i}: ${clip(ea[i])} vs ${clip(eb[i])}`;
+    }
+  }
+  return null;
 }
 
 function compareBuffers(
@@ -1308,7 +1393,10 @@ function compareFunctions(a: DumpFunction, b: DumpFunction): string | null {
   const n = Math.min(a.lines.length, b.lines.length);
   for (let i = 0; i < n; i++) {
     if (a.lines[i] !== b.lines[i]) {
-      return `${clip(a.header)} +${i + 1}: ${clip(a.lines[i])} vs ${clip(b.lines[i])}`;
+      const literal = literalDifference(a.lines[i], b.lines[i]);
+      return literal
+        ? `${clip(a.header)} +${i + 1}: ${literal}`
+        : `${clip(a.header)} +${i + 1}: ${clip(a.lines[i])} vs ${clip(b.lines[i])}`;
     }
   }
   if (a.lines.length !== b.lines.length) {
@@ -1339,13 +1427,32 @@ export async function compareHermesBytecode(
       ['-b', '-dump-bytecode', '-pretty-disassemble', file],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
-  const a = new DumpReader(spawnDump(withBase), options.dumpTo?.withBase);
-  const b = new DumpReader(spawnDump(plain), options.dumpTo?.plain);
+  // The literal buffers are read from both files up front (header + three
+  // byte ranges). Only when both sides can be read do the instructions
+  // compare decoded literals; otherwise both fall back to the dumped buffers
+  // as a whole, so the two sides always normalize the same way.
+  const [buffersA, buffersB] = await Promise.all([
+    readLiteralBuffers(withBase).catch(() => null),
+    readLiteralBuffers(plain).catch(() => null),
+  ]);
+  const binary = buffersA && buffersB && buffersA.version === buffersB.version;
+  const literals = binary ? 'instruction' : 'buffer';
+  const a = new DumpReader(
+    spawnDump(withBase),
+    options.dumpTo?.withBase,
+    binary ? buffersA : null,
+  );
+  const b = new DumpReader(
+    spawnDump(plain),
+    options.dumpTo?.plain,
+    binary ? buffersB : null,
+  );
   let functions = 0;
   const different = (detail: string): HermesEquivalenceResult => ({
     status: 'different',
     detail,
     functions,
+    literals,
   });
   const dumpFailed = (
     side: string,
@@ -1354,6 +1461,7 @@ export async function compareHermesBytecode(
     status: 'dump-failed',
     detail: `${side} dump: ${describeExit(exit)}`,
     functions,
+    literals,
   });
   try {
     for (;;) {
@@ -1379,12 +1487,16 @@ export async function compareHermesBytecode(
             status: 'dump-failed',
             detail: 'no functions in the disassembly',
             functions,
+            literals,
           };
         }
-        return { status: 'equivalent', functions };
+        return { status: 'equivalent', functions, literals };
       }
-      if (functions === 0) {
-        // buffers precede the functions, so both are complete by now
+      if (functions === 0 && !binary) {
+        // buffers precede the functions, so both are complete by now. This
+        // whole-buffer comparison is the fallback: the builder overlaps and
+        // deduplicates serialized literals, so a delta build may lay the same
+        // literals out differently and this can reject a good build.
         const detail = compareBuffers(a.buffers, b.buffers);
         if (detail) return different(detail);
       }

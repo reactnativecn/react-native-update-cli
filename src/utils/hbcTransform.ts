@@ -372,6 +372,35 @@ function resolveSectionsFromHeader(
   return resolved;
 }
 
+/** Byte range of one section of an HBC file (see resolveHbcSections). */
+export type HbcSectionRange = { start: number; size: number };
+
+/**
+ * Section byte ranges of an HBC file from its 128-byte header and total
+ * length, keyed by section name (arrayBuffer, objKeyBuffer, ... for v87–96;
+ * literalValueBuffer, objShapeTable, ... for v98). Null when no known layout
+ * fits, which callers treat as "cannot read this file structurally".
+ */
+export function resolveHbcSections(
+  header: Buffer,
+  fileLength: number,
+): { version: number; sections: Map<string, HbcSectionRange> } | null {
+  const version = getHbcVersion(header);
+  if (version === null) return null;
+  for (const layout of findLayouts(version)) {
+    const resolved = resolveSectionsFromHeader(header, fileLength, layout);
+    if (resolved) {
+      return {
+        version,
+        sections: new Map(
+          resolved.map((s) => [s.desc.name, { start: s.start, size: s.size }]),
+        ),
+      };
+    }
+  }
+  return null;
+}
+
 function applyDelta(
   out: Buffer,
   section: ResolvedSection,

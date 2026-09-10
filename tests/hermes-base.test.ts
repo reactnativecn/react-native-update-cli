@@ -1086,7 +1086,12 @@ describe.if(os.platform() !== 'win32')(
         write('delta.hbc', DELTA_DUMP),
         write('plain.hbc', PLAIN_DUMP),
       );
-      expect(result).toEqual({ status: 'equivalent', functions: 2 });
+      // fake dumps without HBC files behind them: buffers compared as a whole
+      expect(result).toEqual({
+        status: 'equivalent',
+        functions: 2,
+        literals: 'buffer',
+      });
       expect(
         await verifyHermesBaseEquivalence(
           fakeHermesc,
@@ -1205,6 +1210,7 @@ describe.if(os.platform() !== 'win32')(
         status: 'dump-failed',
         detail: 'no functions in the disassembly',
         functions: 0,
+        literals: 'buffer',
       });
     });
 
@@ -1297,11 +1303,14 @@ describe.if(hasHermesc)('compareHermesBytecode with a real hermesc', () => {
     const ok = await compareHermesBytecode(hermesc!, deltaHbc, plainHbc);
     expect(ok.status).toBe('equivalent');
     expect(ok.functions).toBeGreaterThanOrEqual(5);
+    // real files: literals decoded at each instruction, not the dumped buffer
+    expect(ok.literals).toBe('instruction');
 
     const bad = await compareHermesBytecode(hermesc!, wrongHbc, plainHbc);
     expect(bad.status).toBe('different');
-    expect(bad.detail).toBe(
-      'Array Buffer entry 51: [String "ba7x"] vs [String "ba7"]',
+    // the detail names the instruction and the entry, resolved to text
+    expect(bad.detail).toMatch(
+      /^Function<global>\(.*\): \+\d+: NewArrayWithBuffer r\d+ size=\d+ n=\d+ entry \d+: \[String "ba7x"\] vs \[String "ba7"\]$/,
     );
   });
 });
