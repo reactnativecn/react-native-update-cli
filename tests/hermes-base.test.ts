@@ -22,6 +22,7 @@ import {
   resolveHermesBase,
   sha256Hex,
   tmpDir,
+  truncateHermesBaseDetail,
   verifyHermesBaseEquivalence,
 } from '../src/utils/hermes-base';
 import { locateZipEntry } from '../src/utils/zip-range';
@@ -605,6 +606,48 @@ describe('helpers', () => {
     ).toEqual({ bytecodeVersion: 98, baseVersionId: 3, baseHash: 'k' });
   });
 
+  test('hermesBaseMeta carries the check outcome without ever writing null', () => {
+    // base dropped: the chain fields say "no base", the outcome says why
+    const rejected = hermesBaseMeta(null, 98, {
+      outcome: 'rejected',
+      detail: 'Function<f>  line 3:\n  a\n  b',
+    });
+    expect(rejected).toEqual({
+      bytecodeVersion: 98,
+      baseVersionId: null,
+      baseHash: null,
+      hermesBaseOutcome: 'rejected',
+      hermesBaseDetail: 'Function<f> line 3: a b',
+    });
+    // no detail → no key (the server rejects JSON null, and '' is noise)
+    expect(hermesBaseMeta(null, 98, { outcome: 'none' })).toEqual({
+      bytecodeVersion: 98,
+      baseVersionId: null,
+      baseHash: null,
+      hermesBaseOutcome: 'none',
+    });
+    expect(hermesBaseMeta(null, 98, { outcome: 'used', detail: '  ' })).toEqual(
+      {
+        bytecodeVersion: 98,
+        baseVersionId: null,
+        baseHash: null,
+        hermesBaseOutcome: 'used',
+      },
+    );
+    // no check at all (hermesc never ran): the keys are absent
+    expect('hermesBaseOutcome' in hermesBaseMeta(null, null)).toBe(false);
+  });
+
+  test('truncateHermesBaseDetail caps by code point, not by UTF-16 unit', () => {
+    expect(truncateHermesBaseDetail(undefined)).toBe('');
+    expect(truncateHermesBaseDetail('a'.repeat(500))).toHaveLength(500);
+    expect(truncateHermesBaseDetail('a'.repeat(501))).toHaveLength(500);
+    const astral = '😀'.repeat(600);
+    const cut = truncateHermesBaseDetail(astral);
+    expect(Array.from(cut)).toHaveLength(500);
+    expect(cut).toBe('😀'.repeat(500));
+  });
+
   test('normalizeDisassemblyLine hides representation-only differences', () => {
     const strings = new Map([[11591, 'foo']]);
     expect(
@@ -754,6 +797,28 @@ describe('publish metadata never sends JSON null', () => {
       });
       expect(withBase.baseVersionId).toBe(7);
       expect(withBase.baseHash).toBe('objkey');
+      expect('hermesBaseOutcome' in withBase).toBe(false);
+      expect('hermesBaseDetail' in withBase).toBe(false);
+      // the check result rides along only when known, detail only when non-empty
+      const rejected = await describePpkBundleForTests(ppk, {
+        bytecodeVersion: 98,
+        baseVersionId: null,
+        baseHash: null,
+        hermesBaseOutcome: 'rejected',
+        hermesBaseDetail: `Function<f> line 3: ${'x'.repeat(600)}`,
+      });
+      expect(rejected.hermesBaseOutcome).toBe('rejected');
+      expect(Array.from(rejected.hermesBaseDetail as string)).toHaveLength(500);
+      expect('baseVersionId' in rejected).toBe(false);
+      expect(Object.values(rejected).some((v) => v === null)).toBe(false);
+      const used = await describePpkBundleForTests(ppk, {
+        bytecodeVersion: 98,
+        baseVersionId: 7,
+        baseHash: 'objkey',
+        hermesBaseOutcome: 'used',
+      });
+      expect(used.hermesBaseOutcome).toBe('used');
+      expect('hermesBaseDetail' in used).toBe(false);
       // plain JS bundle: no bytecodeVersion at all rather than null
       const js = path.join(dir, 'js.ppk');
       await writeZip(js, { 'index.bundlejs': Buffer.from('var a = 1;') });

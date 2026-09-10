@@ -9,6 +9,7 @@ import {
   classifyHermesCommand,
   compareHermesBytecode,
   type HermesBaseOption,
+  type HermesBaseOutcome,
   type HermesBaseSelection,
   type HermesEquivalenceResult,
   hermescArgsWithBase,
@@ -60,6 +61,14 @@ export interface HermesCompileResult {
   base: HermesBaseSelection | null;
   /** true when --verifyHermesBase ran and passed; false when it failed (base dropped) */
   verified?: boolean;
+  /**
+   * What became of the base, for version/create. Kept apart from `base`
+   * (null whenever nothing shipped with a base) so a rejected base and "no
+   * base found" stay distinguishable on the server.
+   */
+  outcome: HermesBaseOutcome;
+  /** first difference / failure reason behind `outcome`, when there is one */
+  outcomeDetail?: string;
 }
 
 /** Outcome of picking a base: what to compile with, plus the log lines. */
@@ -1083,6 +1092,7 @@ export async function compileHermesByteCode({
   const result: HermesCompileResult = {
     bytecodeVersion: selection.bytecodeVersion,
     base: null,
+    outcome: 'none',
   };
   const base = selection.base;
   // the packager + hermes maps merged into sourcemapOutput
@@ -1125,6 +1135,7 @@ export async function compileHermesByteCode({
           reason: reason || `exit ${attempt.status}`,
         }),
       );
+      result.outcomeDetail = `base compile failed: ${reason || `exit ${attempt.status}`}`;
       if (fullStderr.trim()) {
         // the summary drops noise; keep everything for bug reports — next to
         // the intermediate dir, never inside it (its content is packed)
@@ -1172,6 +1183,11 @@ export async function compileHermesByteCode({
           };
         }
         result.verified = outcome.status === 'equivalent';
+        if (outcome.status !== 'equivalent') {
+          result.outcome =
+            outcome.status === 'different' ? 'rejected' : 'dump-failed';
+          result.outcomeDetail = outcome.detail;
+        }
         if (outcome.status === 'equivalent') {
           console.log(
             t('hermesBaseVerified', { functions: outcome.functions }),
@@ -1219,6 +1235,7 @@ export async function compileHermesByteCode({
     }
     fs.removeSync(workDir);
     result.base = usedBase ? base : null;
+    if (usedBase) result.outcome = 'used';
   }
   if (sourcemapOutput && !composed) {
     await composeSourceMaps(packagerMap, hermesMap, sourcemapOutput);

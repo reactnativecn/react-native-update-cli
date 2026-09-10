@@ -17,6 +17,7 @@ import {
   extractBundleFromArchive,
   type HermesBaseMeta,
   sha256Hex,
+  truncateHermesBaseDetail,
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getBooleanOption, getStringListOption } from './utils/options';
@@ -506,6 +507,12 @@ async function describePpkBundle(
   }
   if (base?.baseVersionId != null) meta.baseVersionId = base.baseVersionId;
   if (base?.baseHash) meta.baseHash = base.baseHash;
+  // equivalence-check result: the server tells a rejected base from "no base"
+  // only through these; a server without the columns ignores the keys
+  if (base?.hermesBaseOutcome) meta.hermesBaseOutcome = base.hermesBaseOutcome;
+  if (base?.hermesBaseDetail) {
+    meta.hermesBaseDetail = truncateHermesBaseDetail(base.hermesBaseDetail);
+  }
   return meta;
 }
 

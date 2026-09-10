@@ -321,7 +321,10 @@ export const bundleCommands = {
       normalized.bundleName,
     );
     const baseMeta = hermesResult
-      ? hermesBaseMeta(hermesResult.base, hermesResult.bytecodeVersion)
+      ? hermesBaseMeta(hermesResult.base, hermesResult.bytecodeVersion, {
+          outcome: hermesResult.outcome,
+          detail: hermesResult.outcomeDetail,
+        })
       : undefined;
 
     if (normalized.name) {

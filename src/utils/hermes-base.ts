@@ -64,11 +64,29 @@ export interface HermesBaseSelection {
   source: 'cache' | 'download' | 'local' | 'latest-version' | 'native-package';
 }
 
+/**
+ * What became of the base for this build, as reported to the server:
+ * - `used`: compiled with -base-bytecode (and, when verification was on,
+ *   the disassembly matched a plain compile)
+ * - `rejected`: the disassembly differed from a plain compile; base dropped
+ * - `dump-failed`: the check could not run (dump or plain compile failed);
+ *   base dropped
+ * - `none`: no base (none selected, disabled, or the base compile failed)
+ */
+export type HermesBaseOutcome = 'used' | 'rejected' | 'dump-failed' | 'none';
+
+/** the server column is VARCHAR(500); it truncates too, this just saves bytes */
+export const HERMES_BASE_DETAIL_MAX_CHARS = 500;
+
 /** Metadata attached to version/create so the server can track the chain. */
 export interface HermesBaseMeta {
   bytecodeVersion: number | null;
   baseVersionId: number | null;
   baseHash: string | null;
+  /** absent (never null) when the bundle step did not run hermesc */
+  hermesBaseOutcome?: HermesBaseOutcome;
+  /** first difference / failure reason; absent when there is none */
+  hermesBaseDetail?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -944,12 +962,28 @@ export function hermescArgsWithBase(
 export function hermesBaseMeta(
   selection: HermesBaseSelection | null,
   bytecodeVersion: number | null,
+  check?: { outcome: HermesBaseOutcome; detail?: string },
 ): HermesBaseMeta {
-  return {
+  const meta: HermesBaseMeta = {
     bytecodeVersion,
     baseVersionId: selection?.versionId ?? null,
     baseHash: selection?.hash ?? null,
   };
+  if (check) {
+    meta.hermesBaseOutcome = check.outcome;
+    const detail = truncateHermesBaseDetail(check.detail);
+    if (detail) meta.hermesBaseDetail = detail;
+  }
+  return meta;
+}
+
+/** one line, at most HERMES_BASE_DETAIL_MAX_CHARS code points; '' when empty */
+export function truncateHermesBaseDetail(detail: string | undefined): string {
+  const compact = (detail ?? '').replace(/\s+/g, ' ').trim();
+  const chars = Array.from(compact);
+  return chars.length <= HERMES_BASE_DETAIL_MAX_CHARS
+    ? compact
+    : chars.slice(0, HERMES_BASE_DETAIL_MAX_CHARS).join('');
 }
 
 // ---------------------------------------------------------------------------

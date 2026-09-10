@@ -75,6 +75,8 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     });
     expect(result.base?.source).toBe('local');
     expect(result.verified).toBe(true);
+    expect(result.outcome).toBe('used');
+    expect(result.outcomeDetail).toBeUndefined();
     const out = fs.readFileSync(path.join(outputFolder, bundleName));
     expect(getHbcVersion(out)).toBe(result.bytecodeVersion);
     expect(fs.existsSync(path.join(outputFolder, `${bundleName}.map`))).toBe(
@@ -94,6 +96,8 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     });
     expect(result.base?.source).toBe('local');
     expect(result.verified).toBeUndefined();
+    // unverified but shipped with the base: still 'used'
+    expect(result.outcome).toBe('used');
     expect(
       getHbcVersion(fs.readFileSync(path.join(outputFolder, bundleName))),
     ).toBe(result.bytecodeVersion);
@@ -119,6 +123,9 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     });
     expect(result.base).toBeNull();
     expect(result.verified).toBeUndefined();
+    // the base compile itself failed: no base at all, with the reason
+    expect(result.outcome).toBe('none');
+    expect(result.outcomeDetail).toMatch(/^base compile failed: /);
     const out = fs.readFileSync(path.join(outputFolder, bundleName));
     expect(getHbcVersion(out)).toBe(version);
     // the plain compile's sourcemap took the real bundle's place
@@ -156,6 +163,7 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     });
     expect(result.base?.source).toBe('local');
     expect(result.verified).toBe(true);
+    expect(result.outcome).toBe('used');
     await pending;
   });
 });
