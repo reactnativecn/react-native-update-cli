@@ -1063,76 +1063,313 @@ async function* streamLines(
   if (rest) yield rest;
 }
 
-class DumpReader {
-  private iterator: AsyncIterator<string>;
-  readonly strings = new Map<number, string>();
-  private inFunctions = false;
-  private finished = false;
-  constructor(readonly proc: ReturnType<typeof spawn>) {
-    this.iterator = streamLines(proc.stdout!);
-  }
-  /** next normalized function-body line, or null at end */
-  async next(): Promise<string | null> {
-    if (this.finished) return null;
-    for (;;) {
-      const { value, done } = await this.iterator.next();
-      if (done) {
-        this.finished = true;
-        return null;
-      }
-      const line = value as string;
-      if (!this.inFunctions) {
-        if (line.startsWith('Function<')) {
-          this.inFunctions = true;
-        } else {
-          const m = STRING_TABLE_LINE.exec(line);
-          if (m) this.strings.set(Number(m[1]), m[2]);
-          continue;
-        }
-      }
-      if (line.trim() === '') continue;
-      const normalized = normalizeDisassemblyLine(line, this.strings);
-      if (normalized !== null) return normalized;
-    }
-  }
+/** How an equivalence check ended. */
+export type HermesEquivalenceStatus =
+  | 'equivalent'
+  | 'different'
+  | 'dump-failed';
+
+export interface HermesEquivalenceResult {
+  status: HermesEquivalenceStatus;
+  /**
+   * one line for the log: where the first difference is (function, line,
+   * both sides) or why a dump could not be read
+   */
+  detail?: string;
+  /** functions compared on both sides */
+  functions: number;
+}
+
+export interface HermesEquivalenceOptions {
+  /** write each side's raw disassembly here (bug reports) */
+  dumpTo?: { withBase: string; plain: string };
+}
+
+interface DumpFunction {
+  header: string;
+  lines: string[];
+}
+
+interface ProcessExit {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  error?: Error;
+  stderr: string;
+}
+
+/** `Array Buffer:`, `Object Key Buffer:`, `Debug filename table:`, ... */
+const SECTION_HEADER = /^([A-Z][A-Za-z ]*):$/;
+/** literal buffer entry that refers to the string table by id */
+const BUFFER_STRING_ENTRY = /^\[String (\d+)\]$/;
+/** sections after the functions that only serve debuggers and profilers */
+const TRAILER_SECTION = /^(?:Debug |Textified callees table)/;
+/** stderr kept from a dump process */
+const DUMP_STDERR_KEEP = 4 * 1024;
+/** a diagnostic line is cut to this many characters */
+const DETAIL_LINE_MAX = 120;
+
+function isFunctionHeader(line: string): boolean {
+  return line.startsWith('Function<') || line.startsWith('NCFunction<');
 }
 
 /**
- * Compare two HBC files by disassembly (see normalizeDisassemblyLine). `-b`
- * forces hermesc to treat inputs as bytecode whatever their extension. Both
- * hermesc dumps are consumed as streams so the ~100 MB of text never touches
- * the disk. Resolves true when equivalent.
+ * Structured reader over one `hermesc -dump-bytecode -pretty-disassemble`
+ * stream. Everything before the functions is either the string table (kept
+ * to resolve ids), a literal buffer (kept, with string ids resolved to text,
+ * so buffer *content* is compared) or ignored; the functions come out one at
+ * a time, normalized; the debug tables after them are drained and ignored.
  */
+class DumpReader {
+  private iterator: AsyncIterator<string>;
+  readonly strings = new Map<number, string>();
+  /** literal buffers by section name, entries with string ids resolved */
+  readonly buffers = new Map<string, string[]>();
+  readonly exit: Promise<ProcessExit>;
+  private section: string | null = null;
+  private pending: string | null = null;
+  private inFunctions = false;
+  private finished = false;
+
+  constructor(
+    readonly proc: ReturnType<typeof spawn>,
+    dumpTo?: string,
+  ) {
+    const pass = new PassThrough();
+    proc.stdout!.pipe(pass);
+    if (dumpTo) proc.stdout!.pipe(fs.createWriteStream(dumpTo));
+    this.iterator = streamLines(pass);
+    let stderr = '';
+    proc.stderr?.on('data', (chunk: Buffer | string) => {
+      stderr = (stderr + chunk.toString()).slice(-DUMP_STDERR_KEEP);
+    });
+    this.exit = new Promise((resolve) => {
+      // a spawn failure (ENOENT) may leave stdout open and never 'close'
+      proc.on('error', (error) => {
+        pass.end();
+        resolve({ code: null, signal: null, error, stderr });
+      });
+      proc.on('close', (code, signal) => resolve({ code, signal, stderr }));
+    });
+  }
+
+  private async nextLine(): Promise<string | null> {
+    if (this.pending !== null) {
+      const line = this.pending;
+      this.pending = null;
+      return line;
+    }
+    if (this.finished) return null;
+    const { value, done } = await this.iterator.next();
+    if (done) {
+      this.finished = true;
+      return null;
+    }
+    return value as string;
+  }
+
+  /** consume the preamble up to (and returning) the first function header */
+  private async skipPreamble(): Promise<string | null> {
+    for (;;) {
+      const line = await this.nextLine();
+      if (line === null) return null;
+      if (isFunctionHeader(line)) {
+        this.inFunctions = true;
+        return line;
+      }
+      const header = SECTION_HEADER.exec(line);
+      if (header) {
+        this.section = header[1];
+        if (this.section.endsWith('Buffer')) this.buffers.set(this.section, []);
+        continue;
+      }
+      if (this.section === 'Global String Table') {
+        const m = STRING_TABLE_LINE.exec(line);
+        if (m) this.strings.set(Number(m[1]), m[2]);
+      } else if (this.section?.endsWith('Buffer') && line.trim() !== '') {
+        const entry = line.trim();
+        const ref = BUFFER_STRING_ENTRY.exec(entry);
+        const text = ref ? this.strings.get(Number(ref[1])) : undefined;
+        this.buffers
+          .get(this.section)!
+          .push(
+            ref
+              ? `[String ${text === undefined ? `?${ref[1]}` : JSON.stringify(text)}]`
+              : entry,
+          );
+      }
+    }
+  }
+
+  /** next function (header + normalized body), or null after the last one */
+  async nextFunction(): Promise<DumpFunction | null> {
+    const header = this.inFunctions
+      ? await this.nextLine()
+      : await this.skipPreamble();
+    if (header === null) return null;
+    // a non-function header here is a trailer section: no more functions
+    if (!isFunctionHeader(header)) return null;
+    const lines: string[] = [];
+    for (;;) {
+      const line = await this.nextLine();
+      if (line === null) break;
+      if (isFunctionHeader(line) || TRAILER_SECTION.test(line)) {
+        this.pending = line;
+        break;
+      }
+      if (line.trim() === '') continue;
+      const normalized = normalizeDisassemblyLine(line, this.strings);
+      if (normalized !== null) lines.push(normalized);
+    }
+    return { header, lines };
+  }
+
+  /** drain whatever is left and report how the process ended */
+  async finish(): Promise<ProcessExit> {
+    while ((await this.nextLine()) !== null) {}
+    return this.exit;
+  }
+
+  kill() {
+    this.proc.kill();
+  }
+}
+
+function describeExit(exit: ProcessExit): string {
+  if (exit.error) return exit.error.message;
+  const how =
+    exit.signal !== null ? `signal ${exit.signal}` : `exit ${exit.code}`;
+  const stderr = exit.stderr.trim().split('\n').pop()?.trim();
+  return stderr ? `${how}: ${stderr}` : how;
+}
+
+function clip(line: string): string {
+  const s = line.trim();
+  return s.length > DETAIL_LINE_MAX ? `${s.slice(0, DETAIL_LINE_MAX - 1)}…` : s;
+}
+
+function compareBuffers(
+  a: Map<string, string[]>,
+  b: Map<string, string[]>,
+): string | null {
+  for (const name of new Set([...a.keys(), ...b.keys()])) {
+    const ea = a.get(name) ?? [];
+    const eb = b.get(name) ?? [];
+    const n = Math.min(ea.length, eb.length);
+    for (let i = 0; i < n; i++) {
+      if (ea[i] !== eb[i]) {
+        return `${name} entry ${i}: ${clip(ea[i])} vs ${clip(eb[i])}`;
+      }
+    }
+    if (ea.length !== eb.length) {
+      return `${name}: ${ea.length} vs ${eb.length} entries`;
+    }
+  }
+  return null;
+}
+
+function compareFunctions(a: DumpFunction, b: DumpFunction): string | null {
+  if (a.header !== b.header) {
+    return `${clip(a.header)} vs ${clip(b.header)}`;
+  }
+  const n = Math.min(a.lines.length, b.lines.length);
+  for (let i = 0; i < n; i++) {
+    if (a.lines[i] !== b.lines[i]) {
+      return `${clip(a.header)} +${i + 1}: ${clip(a.lines[i])} vs ${clip(b.lines[i])}`;
+    }
+  }
+  if (a.lines.length !== b.lines.length) {
+    return `${clip(a.header)}: ${a.lines.length} vs ${b.lines.length} lines`;
+  }
+  return null;
+}
+
+/**
+ * Compare two HBC files by disassembly (see normalizeDisassemblyLine): the
+ * literal buffers by content, then function by function. `-b` forces hermesc
+ * to treat inputs as bytecode whatever their extension. Both dumps are
+ * consumed as streams so the ~100 MB of text never touches the disk (unless
+ * `dumpTo` asks for it). A dump process that fails or ends early is reported
+ * as `dump-failed`, never as a difference: the two cases need different
+ * follow-ups. The detail names the first difference so a rejected base can be
+ * turned into a normalization rule or a bug report.
+ */
+export async function compareHermesBytecode(
+  hermesCommand: string,
+  withBase: string,
+  plain: string,
+  options: HermesEquivalenceOptions = {},
+): Promise<HermesEquivalenceResult> {
+  const spawnDump = (file: string) =>
+    spawn(
+      hermesCommand,
+      ['-b', '-dump-bytecode', '-pretty-disassemble', file],
+      { stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+  const a = new DumpReader(spawnDump(withBase), options.dumpTo?.withBase);
+  const b = new DumpReader(spawnDump(plain), options.dumpTo?.plain);
+  let functions = 0;
+  const different = (detail: string): HermesEquivalenceResult => ({
+    status: 'different',
+    detail,
+    functions,
+  });
+  const dumpFailed = (
+    side: string,
+    exit: ProcessExit,
+  ): HermesEquivalenceResult => ({
+    status: 'dump-failed',
+    detail: `${side} dump: ${describeExit(exit)}`,
+    functions,
+  });
+  try {
+    for (;;) {
+      const [fa, fb] = await Promise.all([a.nextFunction(), b.nextFunction()]);
+      if (fa === null || fb === null) {
+        // whoever ended: was that the end of a good dump or a failure?
+        if (fa === null) {
+          const exit = await a.finish();
+          if (exit.error || exit.code !== 0) return dumpFailed('base', exit);
+        }
+        if (fb === null) {
+          const exit = await b.finish();
+          if (exit.error || exit.code !== 0) return dumpFailed('plain', exit);
+        }
+        if (fa !== null || fb !== null) {
+          const extra = fa ?? fb;
+          return different(
+            `function count: ${clip(extra!.header)} only in the ${fa ? 'base' : 'plain'} compile`,
+          );
+        }
+        if (functions === 0) {
+          return {
+            status: 'dump-failed',
+            detail: 'no functions in the disassembly',
+            functions,
+          };
+        }
+        return { status: 'equivalent', functions };
+      }
+      if (functions === 0) {
+        // buffers precede the functions, so both are complete by now
+        const detail = compareBuffers(a.buffers, b.buffers);
+        if (detail) return different(detail);
+      }
+      const detail = compareFunctions(fa, fb);
+      if (detail) return different(detail);
+      functions++;
+    }
+  } finally {
+    a.kill();
+    b.kill();
+  }
+}
+
+/** Resolves true when equivalent; see compareHermesBytecode for the details. */
 export async function verifyHermesBaseEquivalence(
   hermesCommand: string,
   withBase: string,
   plain: string,
 ): Promise<boolean> {
-  const spawnDump = (file: string) =>
-    spawn(
-      hermesCommand,
-      ['-b', '-dump-bytecode', '-pretty-disassemble', file],
-      {
-        stdio: ['ignore', 'pipe', 'ignore'],
-      },
-    );
-  const a = new DumpReader(spawnDump(withBase));
-  const b = new DumpReader(spawnDump(plain));
-  let equal = true;
-  let lines = 0;
-  try {
-    for (;;) {
-      const [la, lb] = await Promise.all([a.next(), b.next()]);
-      if (la === null && lb === null) break;
-      if (la !== lb) {
-        equal = false;
-        break;
-      }
-      lines++;
-    }
-  } finally {
-    a.proc.kill();
-    b.proc.kill();
-  }
-  return equal && lines > 0;
+  const result = await compareHermesBytecode(hermesCommand, withBase, plain);
+  return result.status === 'equivalent';
 }

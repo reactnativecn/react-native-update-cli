@@ -7,12 +7,13 @@ import { getHermesBase } from './api';
 import { getDepVersion } from './utils/dep-versions';
 import {
   classifyHermesCommand,
+  compareHermesBytecode,
   type HermesBaseOption,
   type HermesBaseSelection,
+  type HermesEquivalenceResult,
   hermescArgsWithBase,
   probeHbcVersion,
   resolveHermesBase,
-  verifyHermesBaseEquivalence,
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
 import {
@@ -1152,21 +1153,49 @@ export async function compileHermesByteCode({
           }),
         );
       } else {
-        let ok: boolean;
+        const dumpTo = hermesBaseDumpPaths(outputFolder);
+        let outcome: HermesEquivalenceResult;
         try {
-          ok = await verifyHermesBaseEquivalence(
+          outcome = await compareHermesBytecode(
             command,
             bundlePath,
             plainPath,
+            {
+              dumpTo,
+            },
           );
-        } catch {
-          ok = false;
+        } catch (error: any) {
+          outcome = {
+            status: 'dump-failed',
+            detail: String(error?.message ?? error),
+            functions: 0,
+          };
         }
-        result.verified = ok;
-        if (ok) {
-          console.log(t('hermesBaseVerified'));
+        result.verified = outcome.status === 'equivalent';
+        if (outcome.status === 'equivalent') {
+          console.log(
+            t('hermesBaseVerified', { functions: outcome.functions }),
+          );
         } else {
-          console.warn(t('hermesBaseVerifyFailed'));
+          // a dump that could not be read is not evidence either way; the
+          // base is still dropped (never ship unverified when asked to
+          // verify), but the log says which case this is
+          console.warn(
+            t(
+              outcome.status === 'different'
+                ? 'hermesBaseVerifyFailed'
+                : 'hermesBaseVerifyDumpFailed',
+              { detail: outcome.detail ?? '' },
+            ),
+          );
+          if (dumpTo) {
+            console.warn(
+              t('hermesBaseVerifyDumpsWritten', {
+                withBase: dumpTo.withBase,
+                plain: dumpTo.plain,
+              }),
+            );
+          }
           usedBase = false;
         }
       }
@@ -1206,6 +1235,24 @@ export function hermesBaseErrorLogPath(outputFolder: string): string {
     path.dirname(path.resolve(outputFolder)),
     'hermes-base-error.log',
   );
+}
+
+/**
+ * With PUSHY_HERMES_BASE_DEBUG set, both disassemblies of the equivalence
+ * check are kept next to the intermediate directory (never packed) so a
+ * rejected base can be reported with the exact difference.
+ */
+export function hermesBaseDumpPaths(
+  outputFolder: string,
+  env: NodeJS.ProcessEnv = process.env,
+): { withBase: string; plain: string } | undefined {
+  const flag = env.PUSHY_HERMES_BASE_DEBUG?.trim().toLowerCase();
+  if (!flag || flag === '0' || flag === 'false') return undefined;
+  const dir = path.dirname(path.resolve(outputFolder));
+  return {
+    withBase: path.join(dir, 'hermes-base-dump-base.txt'),
+    plain: path.join(dir, 'hermes-base-dump-plain.txt'),
+  };
 }
 
 /**

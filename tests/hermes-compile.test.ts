@@ -11,7 +11,7 @@ import {
 import { getHbcVersion } from '../src/utils/hbcTransform';
 import { probeHbcVersion } from '../src/utils/hermes-base';
 
-// Same discovery as hermes-base.test.ts: a real hermesc from the SDK repo.
+// Same discovery as hermes-base.test.ts: HERMESC env or the SDK repo's hermesc.
 const HERMESC_CANDIDATES = [
   path.resolve(
     __dirname,
@@ -22,8 +22,9 @@ const HERMESC_CANDIDATES = [
     '../../react-native-update/.e2e-rn077-oldarch/AwesomeProject/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
   ),
 ];
-const hermesc = HERMESC_CANDIDATES.find((p) => fs.existsSync(p));
-const hasHermesc = Boolean(hermesc) && os.platform() === 'darwin';
+const hermesc =
+  process.env.HERMESC || HERMESC_CANDIDATES.find((p) => fs.existsSync(p));
+const hasHermesc = Boolean(hermesc) && fs.existsSync(hermesc!);
 
 const BASE_SRC = "var s = 'foo'; print(s, 'bar', 'baz'); var t = 'qux';\n";
 const NEXT_SRC = `${BASE_SRC}var o = {}; o.foo = 1; o.bar = 2; print(o.foo, o.bar, o.qux, [1, 'new1', 'new2']);\n`;
@@ -156,5 +157,34 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     expect(result.base?.source).toBe('local');
     expect(result.verified).toBe(true);
     await pending;
+  });
+});
+
+describe('hermesBaseDumpPaths', () => {
+  test('is off unless PUSHY_HERMES_BASE_DEBUG is set to something truthy', async () => {
+    const { hermesBaseDumpPaths } = await import('../src/bundle-runner');
+    const out = path.join(os.tmpdir(), 'rnu-dump', 'intermedia', 'android');
+    expect(hermesBaseDumpPaths(out, {})).toBeUndefined();
+    expect(
+      hermesBaseDumpPaths(out, { PUSHY_HERMES_BASE_DEBUG: '0' }),
+    ).toBeUndefined();
+    expect(
+      hermesBaseDumpPaths(out, { PUSHY_HERMES_BASE_DEBUG: 'false' }),
+    ).toBeUndefined();
+    // next to the intermediate dir, never inside it (its content is packed)
+    expect(hermesBaseDumpPaths(out, { PUSHY_HERMES_BASE_DEBUG: '1' })).toEqual({
+      withBase: path.join(
+        os.tmpdir(),
+        'rnu-dump',
+        'intermedia',
+        'hermes-base-dump-base.txt',
+      ),
+      plain: path.join(
+        os.tmpdir(),
+        'rnu-dump',
+        'intermedia',
+        'hermes-base-dump-plain.txt',
+      ),
+    });
   });
 });

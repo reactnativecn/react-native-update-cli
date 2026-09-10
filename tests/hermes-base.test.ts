@@ -12,6 +12,7 @@ import {
   classifyHermesCommand,
   cleanCache,
   cleanStaleTmp,
+  compareHermesBytecode,
   enforceCacheLimits,
   extractBundleFromArchive,
   hermesBaseMeta,
@@ -25,8 +26,9 @@ import {
 } from '../src/utils/hermes-base';
 import { locateZipEntry } from '../src/utils/zip-range';
 
-// A real hermesc when the workspace has one (Example app of the SDK repo);
-// the compile-dependent tests are skipped otherwise.
+// A real hermesc: `HERMESC=/path/to/hermesc bun test`, or one from the SDK
+// repo's Example app next to this checkout; the compile-dependent tests are
+// skipped otherwise.
 const HERMESC_CANDIDATES = [
   path.resolve(
     __dirname,
@@ -37,8 +39,9 @@ const HERMESC_CANDIDATES = [
     '../../react-native-update/.e2e-rn077-oldarch/AwesomeProject/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
   ),
 ];
-const hermesc = HERMESC_CANDIDATES.find((p) => fs.existsSync(p));
-const hasHermesc = Boolean(hermesc) && os.platform() === 'darwin';
+const hermesc =
+  process.env.HERMESC || HERMESC_CANDIDATES.find((p) => fs.existsSync(p));
+const hasHermesc = Boolean(hermesc) && fs.existsSync(hermesc!);
 
 function mkTemp(prefix: string) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -904,4 +907,336 @@ describe('probeHbcVersion cache', () => {
       expect(fs.readdirSync(cacheDir())).toEqual(['hbc-versions.json']);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// compareHermesBytecode over synthetic dumps: a fake hermesc that prints the
+// "bytecode" file it is given, so every branch runs without a real compiler
+// ---------------------------------------------------------------------------
+
+const PLAIN_DUMP = `Bytecode File Information:
+  Bytecode version number: 96
+  Function count: 2
+
+Global String Table:
+i0[ASCII, 0..2] #AAAA: foo
+s1[ASCII, 3..5] #BBBB: bar
+i2[ASCII, 6..8]: baz
+
+Array Buffer:
+[int 1]
+[String 1]
+Object Key Buffer:
+[String 0]
+Object Value Buffer:
+[String 2]
+Function<global>(1 params, 3 registers, 0 symbols):
+Offset in debug table: source 0x0000, lexical 0x0000
+    LoadConstString   r0, "bar"
+    NewArrayWithBuffer r1, 2, 2, 0
+    GetByIdShort      r2, r1, 1, "foo"
+    DefineOwnById     r1, r0, 1, 0
+    Ret               r0
+
+Function<f>(2 params, 2 registers, 0 symbols):
+    LoadParam         r1, 1
+    JmpTrue           L1, r1
+L1:
+    Ret               r1
+
+Debug filename table:
+  (none)
+
+Debug source table:
+  0x0000  end of debug source table
+`;
+
+// the same program compiled against a foreign base: dead base strings keep
+// their ids, new strings get large ids, buffers and jumps move accordingly
+const DELTA_DUMP = `Bytecode File Information:
+  Bytecode version number: 96
+  Function count: 2
+
+Global String Table:
+i0[ASCII, 0..3] #1111: dead
+i1[ASCII, 4..7] #2222: old
+s2[ASCII, 3..5] #BBBB: bar
+i3[ASCII, 6..8]: baz
+i4[ASCII, 0..2] #AAAA: foo
+
+Array Buffer:
+[int 1]
+[String 2]
+Object Key Buffer:
+[String 4]
+Object Value Buffer:
+[String 3]
+Function<global>(1 params, 3 registers, 0 symbols):
+Offset in debug table: source 0x0040, lexical 0x0010
+    LoadConstStringLongIndex r0, "bar"
+    NewArrayWithBufferLong r1, 2, 2, 300
+    GetById           r2, r1, 1, "foo"
+    DefineOwnByIdLong r1, r0, 1, 4
+    Ret               r0
+
+Function<f>(2 params, 2 registers, 0 symbols):
+    LoadParam         r1, 1
+    JmpTrueLong       L1, r1
+L1:
+    Ret               r1
+
+Debug filename table:
+  0: other.js
+
+Debug source table:
+  0x0000  function idx 0, starts at line 1 col 1
+  0x0010  end of debug source table
+`;
+
+describe.if(os.platform() !== 'win32')(
+  'compareHermesBytecode (fake hermesc)',
+  () => {
+    let dir: string;
+    let fakeHermesc: string;
+    const write = (name: string, dump: string) => {
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, dump);
+      return file;
+    };
+    beforeEach(() => {
+      dir = mkTemp('rnu-hermes-cmp-');
+      // prints the file named by the last argument; fails for *fail* files
+      fakeHermesc = path.join(dir, 'hermesc');
+      fs.writeFileSync(
+        fakeHermesc,
+        '#!/bin/sh\nfor f; do :; done\ncase "$f" in *fail*) echo "boom: $f" >&2; exit 3;; esac\ncat "$f"\n',
+      );
+      fs.chmodSync(fakeHermesc, 0o755);
+    });
+    afterEach(() => fs.removeSync(dir));
+
+    test('a foreign-base compile is equivalent: ids, widths, buffers and debug tables differ only in representation', async () => {
+      const result = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta.hbc', DELTA_DUMP),
+        write('plain.hbc', PLAIN_DUMP),
+      );
+      expect(result).toEqual({ status: 'equivalent', functions: 2 });
+      expect(
+        await verifyHermesBaseEquivalence(
+          fakeHermesc,
+          write('d2.hbc', DELTA_DUMP),
+          write('p2.hbc', PLAIN_DUMP),
+        ),
+      ).toBe(true);
+    });
+
+    test("literal buffer content is compared through each side's string table", async () => {
+      // same shape, but the array literal holds a different string
+      const wrong = DELTA_DUMP.replace(
+        'Array Buffer:\n[int 1]\n[String 2]',
+        'Array Buffer:\n[int 1]\n[String 3]',
+      );
+      const result = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta.hbc', wrong),
+        write('plain.hbc', PLAIN_DUMP),
+      );
+      expect(result.status).toBe('different');
+      expect(result.detail).toBe(
+        'Array Buffer entry 1: [String "baz"] vs [String "bar"]',
+      );
+      expect(result.functions).toBe(0);
+    });
+
+    test('a resolved property name that differs is a difference, wherever the ids point', async () => {
+      const wrong = DELTA_DUMP.replace(
+        'DefineOwnByIdLong r1, r0, 1, 4',
+        'DefineOwnByIdLong r1, r0, 1, 3',
+      );
+      const result = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta.hbc', wrong),
+        write('plain.hbc', PLAIN_DUMP),
+      );
+      expect(result.status).toBe('different');
+      expect(result.detail).toBe(
+        'Function<global>(1 params, 3 registers, 0 symbols): +4: DefineOwnById r1, r0, 1, "baz" vs DefineOwnById r1, r0, 1, "foo"',
+      );
+    });
+
+    test('an extra instruction names the function and the line counts', async () => {
+      const wrong = DELTA_DUMP.replace(
+        'L1:\n    Ret               r1',
+        'L1:\n    Mov               r0, r1\n    Ret               r1',
+      );
+      const result = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta.hbc', wrong),
+        write('plain.hbc', PLAIN_DUMP),
+      );
+      expect(result.status).toBe('different');
+      expect(result.detail).toBe(
+        'Function<f>(2 params, 2 registers, 0 symbols): +4: Mov r0, r1 vs Ret r1',
+      );
+      expect(result.functions).toBe(1);
+    });
+
+    test('a missing or extra function is reported as a count difference, not as a desync', async () => {
+      const fewer = DELTA_DUMP.slice(0, DELTA_DUMP.indexOf('Function<f>'));
+      const result = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta.hbc', `${fewer}Debug filename table:\n  (none)\n`),
+        write('plain.hbc', PLAIN_DUMP),
+      );
+      expect(result.status).toBe('different');
+      expect(result.detail).toBe(
+        'function count: Function<f>(2 params, 2 registers, 0 symbols): only in the plain compile',
+      );
+    });
+
+    test("a dump that fails is dump-failed with the compiler's message, never a difference", async () => {
+      const result = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta-fail.hbc', DELTA_DUMP),
+        write('plain.hbc', PLAIN_DUMP),
+      );
+      expect(result.status).toBe('dump-failed');
+      expect(result.detail).toMatch(
+        /^base dump: exit 3: boom: .*delta-fail\.hbc$/,
+      );
+      const plainSide = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta.hbc', DELTA_DUMP),
+        write('plain-fail.hbc', PLAIN_DUMP),
+      );
+      expect(plainSide.status).toBe('dump-failed');
+      expect(plainSide.detail).toStartWith('plain dump: exit 3');
+      // a compiler that cannot be started at all
+      const missing = await compareHermesBytecode(
+        path.join(dir, 'no-such-hermesc'),
+        write('d.hbc', DELTA_DUMP),
+        write('p.hbc', PLAIN_DUMP),
+      );
+      expect(missing.status).toBe('dump-failed');
+      expect(missing.detail).toContain('ENOENT');
+      // a dump that succeeds but lists no function is a real difference on
+      // one side and nothing to compare on both
+      const empty = await compareHermesBytecode(
+        fakeHermesc,
+        write('empty.hbc', 'Bytecode File Information:\n'),
+        write('plain.hbc', PLAIN_DUMP),
+      );
+      expect(empty.status).toBe('different');
+      expect(empty.detail).toBe(
+        'function count: Function<global>(1 params, 3 registers, 0 symbols): only in the plain compile',
+      );
+      const bothEmpty = await compareHermesBytecode(
+        fakeHermesc,
+        write('e1.hbc', 'Bytecode File Information:\n'),
+        write('e2.hbc', 'Bytecode File Information:\n'),
+      );
+      expect(bothEmpty).toEqual({
+        status: 'dump-failed',
+        detail: 'no functions in the disassembly',
+        functions: 0,
+      });
+    });
+
+    test('dumpTo keeps both raw disassemblies for bug reports', async () => {
+      const dumpTo = {
+        withBase: path.join(dir, 'out', 'base.txt'),
+        plain: path.join(dir, 'out', 'plain.txt'),
+      };
+      fs.ensureDirSync(path.dirname(dumpTo.withBase));
+      const result = await compareHermesBytecode(
+        fakeHermesc,
+        write('delta.hbc', DELTA_DUMP),
+        write('plain.hbc', PLAIN_DUMP),
+        { dumpTo },
+      );
+      expect(result.status).toBe('equivalent');
+      // the tee streams close on their own once the processes exit
+      await new Promise((r) => setTimeout(r, 100));
+      expect(fs.readFileSync(dumpTo.withBase, 'utf8')).toBe(DELTA_DUMP);
+      expect(fs.readFileSync(dumpTo.plain, 'utf8')).toBe(PLAIN_DUMP);
+    });
+  },
+);
+
+describe.if(hasHermesc)('compareHermesBytecode with a real hermesc', () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkTemp('rnu-hermes-real-cmp-');
+  });
+  afterEach(() => fs.removeSync(dir));
+
+  // enough identifiers and literals that the delta build has to use the
+  // wide operand forms (Long/LongIndex) and re-lay the literal buffers
+  const program = (prefix: string, count: number, tail: string) => {
+    let src = 'var o = {};\n';
+    for (let i = 0; i < count; i++) {
+      src += `o.${prefix}${i} = ${i}; print(o.${prefix}${i}, "${prefix}s${i}");\n`;
+    }
+    src += `var arr = [${Array.from({ length: 40 }, (_, i) => `"${prefix}a${i}"`).join(', ')}, 1, 2.5, true, null];\n`;
+    src += `var obj = {${Array.from({ length: 30 }, (_, i) => `k${i}: "${prefix}v${i}"`).join(', ')}};\n`;
+    src +=
+      'function f(x) { switch (x) { case 1: return "one"; case 2: return "two"; case 3: return "three"; default: return arr[x] || obj.k1; } }\n';
+    src +=
+      'function g(x) { switch (x) { case "a": return 1; case "b": return 2; case "c": return 3; default: return 0; } }\n';
+    return `${src}print(f(1), g("a"), ${tail});\n`;
+  };
+  const compile = (input: string, out: string, extra: string[] = []) =>
+    spawnSync(
+      hermesc!,
+      ['-emit-binary', '-out', out, input, '-O', '-w', ...extra],
+      { stdio: 'ignore' },
+    ).status;
+
+  test('a large foreign base compiles equivalent; a one-literal change is caught with its location', async () => {
+    const base = path.join(dir, 'base.js');
+    const next = path.join(dir, 'next.js');
+    const wrong = path.join(dir, 'wrong.js');
+    fs.writeFileSync(base, program('a', 400, '"end"'));
+    fs.writeFileSync(
+      next,
+      program('a', 150, '"end"') +
+        program('b', 500, '"end2"')
+          .replace(/\bo\b/g, 'o2')
+          .replace(/\barr\b/g, 'arr2')
+          .replace(/\bobj\b/g, 'obj2')
+          .replace(/function ([fg])\(/g, 'function $12('),
+    );
+    // identical to next except one string inside an array literal
+    fs.writeFileSync(
+      wrong,
+      fs.readFileSync(next, 'utf8').replace('"ba7"', '"ba7x"'),
+    );
+    const baseHbc = path.join(dir, 'base.hbc');
+    const plainHbc = path.join(dir, 'next.plain.hbc');
+    const deltaHbc = path.join(dir, 'next.delta.hbc');
+    const wrongHbc = path.join(dir, 'wrong.hbc');
+    expect(compile(base, baseHbc)).toBe(0);
+    expect(compile(next, plainHbc)).toBe(0);
+    expect(compile(next, deltaHbc, [`-base-bytecode=${baseHbc}`])).toBe(0);
+    expect(compile(wrong, wrongHbc, [`-base-bytecode=${baseHbc}`])).toBe(0);
+    // the delta build really did take the wide forms
+    const dump = spawnSync(
+      hermesc!,
+      ['-b', '-dump-bytecode', '-pretty-disassemble', deltaHbc],
+      { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    ).stdout;
+    expect(dump).toMatch(/GetById\s+r/);
+    expect(dump).toMatch(/GetByIdShort\s+r/);
+
+    const ok = await compareHermesBytecode(hermesc!, deltaHbc, plainHbc);
+    expect(ok.status).toBe('equivalent');
+    expect(ok.functions).toBeGreaterThanOrEqual(5);
+
+    const bad = await compareHermesBytecode(hermesc!, wrongHbc, plainHbc);
+    expect(bad.status).toBe('different');
+    expect(bad.detail).toBe(
+      'Array Buffer entry 51: [String "ba7x"] vs [String "ba7"]',
+    );
+  });
 });

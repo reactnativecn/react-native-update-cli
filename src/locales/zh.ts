@@ -213,9 +213,14 @@ export default {
   hermesBaseCompileFailedLog: 'Hermes base：完整编译错误已写入 {{- file}}',
   hermesBasePlainCompileFailed:
     'Hermes base：用于校验的普通编译失败（{{- reason}}），保留 base 编译结果但未校验',
-  hermesBaseVerified: 'Hermes base：字节码与普通编译等价，校验通过',
+  hermesBaseVerified:
+    'Hermes base：字节码与普通编译等价，校验通过（{{functions}} 个函数）',
   hermesBaseVerifyFailed:
-    'Hermes base：字节码与普通编译不等价，放弃 base 重新编译',
+    'Hermes base：字节码与普通编译不等价（{{- detail}}），放弃 base',
+  hermesBaseVerifyDumpFailed:
+    'Hermes base：无法比对字节码（{{- detail}}），放弃 base',
+  hermesBaseVerifyDumpsWritten:
+    'Hermes base：两份反汇编已写入 {{- withBase}} 与 {{- plain}}',
   cacheCleaned: '已清理 {{count}} 个缓存 bundle',
   cacheStats: 'bundle 缓存：{{- dir}} — {{files}} 个文件，{{mb}} MB',
   loginCredentialsRequired:

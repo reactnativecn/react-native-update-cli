@@ -235,9 +235,13 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   hermesBasePlainCompileFailed:
     'Hermes base: the plain compile used for verification failed ({{- reason}}); keeping the base compile unverified',
   hermesBaseVerified:
-    'Hermes base: bytecode verified equivalent to a plain compile',
+    'Hermes base: bytecode verified equivalent to a plain compile ({{functions}} functions)',
   hermesBaseVerifyFailed:
-    'Hermes base: bytecode differs from a plain compile; dropping the base and recompiling',
+    'Hermes base: bytecode differs from a plain compile ({{- detail}}); dropping the base',
+  hermesBaseVerifyDumpFailed:
+    'Hermes base: could not compare the bytecode ({{- detail}}); dropping the base',
+  hermesBaseVerifyDumpsWritten:
+    'Hermes base: disassemblies written to {{- withBase}} and {{- plain}}',
   cacheCleaned: 'Removed {{count}} cached bundle(s)',
   cacheStats: 'Bundle cache: {{- dir}} — {{files}} file(s), {{mb}} MB',
   loginCredentialsRequired:
