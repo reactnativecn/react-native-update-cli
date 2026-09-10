@@ -40,7 +40,8 @@
     "test": "bun test",
     "smoke": "node scripts/smoke-lib.js",
     "test:coverage": "bun test --coverage --coverage-reporter=text --coverage-reporter=lcov",
-    "benchmark:diff-stream": "bun scripts/benchmark-diff-stream.ts"
+    "benchmark:diff-stream": "bun scripts/benchmark-diff-stream.ts",
+    "fuzz:hermes-base": "bun scripts/fuzz-hermes-base.ts"
   },
   "repository": {
     "type": "git",
