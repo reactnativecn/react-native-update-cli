@@ -305,7 +305,9 @@ class Gen {
       case 3:
         return `(${leaf()})[${this.numberLiteral()}]`;
       case 4:
-        return `\`${this.rng.pick(WORDS)} \${${this.expr(scope, depth - 1)}} ${this.rng.pick(WORDS)} \${${leaf()}}\``;
+        // parenthesized: hermesc's lexer reads a `/` right after a template
+        // literal as the start of a regex (a hermesc quirk, not a check result)
+        return `(\`${this.rng.pick(WORDS)} \${${this.expr(scope, depth - 1)}} ${this.rng.pick(WORDS)} \${${leaf()}}\`)`;
       case 5:
         return `/${this.rng.pick(['[a-z]+', '\\d{2,4}', '^foo(bar)?$', '(?:a|b)*c', '[\\u4e00-\\u9fa5]+', 'x*y+'])}/${this.rng.pick(['', 'g', 'i', 'gi', 'u', 'm'])}.test(String(${leaf()}))`;
       case 6:
@@ -469,9 +471,14 @@ class Gen {
           break;
         }
         case 1: {
-          // change one string literal
-          const m = /"([^"\\]{1,40})"/.exec(text);
-          if (m) text = text.replace(m[0], `"${m[1]}~"`);
+          // change one string literal (a real literal: quote, body without
+          // an unescaped quote or backslash, same quote — never the gap
+          // between two literals)
+          const literals = [...text.matchAll(/(["'])([^"'\\\n]{1,40})\1/g)];
+          if (literals.length > 0) {
+            const m = this.rng.pick(literals);
+            text = `${text.slice(0, m.index)}${m[1]}${m[2]}~${m[1]}${text.slice((m.index ?? 0) + m[0].length)}`;
+          }
           break;
         }
         case 2: {
