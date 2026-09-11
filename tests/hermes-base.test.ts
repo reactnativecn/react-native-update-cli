@@ -837,12 +837,13 @@ function legacyNormalize(
 ): string | null {
   if (/^Offset in debug table/.test(line)) return null;
   let m =
-    /^(\s*New(?:Array|Object)WithBuffer)(?:Long)?(?:AndParent)?\s+(r\d+)(.*)$/.exec(
+    /^(\s*New(?:Array|Object)WithBuffer)(?:Long)?(AndParent)?\s+(r\d+)(?:, (r\d+))?(.*)$/.exec(
       line,
     );
   if (m) {
-    const nums = m[3].match(/\d+/g) ?? [];
-    return `${m[1]} ${m[2]} sizes=${nums.slice(0, 1).join(',')}`;
+    const nums = m[5].match(/\d+/g) ?? [];
+    const regs = m[4] ? `${m[3]} ${m[4]}` : m[3];
+    return `${m[1]}${m[2] ?? ''} ${regs} sizes=${nums.slice(0, 1).join(',')}`;
   }
   m = /^(\s*J[A-Za-z]+?)(Long)?\s+(L\d+|\d+)(.*)$/.exec(line);
   if (m) return `${m[1]} <tgt>${m[4]}`;
@@ -870,7 +871,8 @@ describe('normalizeDisassemblyLine fast path', () => {
       '    NewArrayWithBufferLong r1, 300, 300, 65540',
       '    NewObjectWithBuffer r2, 2, 2, 0, 0',
       '    NewObjectWithBufferLong r2, 2, 2, 70000, 70000',
-      '    NewObjectWithBufferAndParent r2, r3, 2, 2, 0, 0',
+      '    NewObjectWithBufferAndParent r2, r3, 0, 0',
+      '    NewObjectWithBuffer r2, 1, 19',
       '    Jmp L5',
       '    JmpLong L5',
       '    JNotEqual L3, r1, r2',

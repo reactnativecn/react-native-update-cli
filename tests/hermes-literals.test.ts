@@ -14,19 +14,22 @@ import {
   renderLiteral,
 } from '../src/utils/hermes-literals';
 
+// Every hermesc found runs the real-build tests, so a checkout with both the
+// classic compiler (HBC 96) and hermes-compiler (HBC 98) covers both layouts.
 const HERMESC_CANDIDATES = [
-  path.resolve(
-    __dirname,
-    '../../react-native-update/node_modules/react-native/sdks/hermesc/linux64-bin/hermesc',
-  ),
-  path.resolve(
-    __dirname,
-    '../../react-native-update/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
-  ),
-];
-const hermesc =
-  process.env.HERMESC || HERMESC_CANDIDATES.find((p) => fs.existsSync(p));
-const hasHermesc = Boolean(hermesc) && fs.existsSync(hermesc!);
+  '../../react-native-update/node_modules/react-native/sdks/hermesc/linux64-bin/hermesc',
+  '../../react-native-update/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
+  '../../react-native-update/Example/testHotUpdate/node_modules/hermes-compiler/hermesc/osx-bin/hermesc',
+  '../../react-native-update/.e2e-rn077-oldarch/AwesomeProject/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
+].map((p) => path.resolve(__dirname, p));
+const hermescs = (
+  process.env.HERMESC
+    ? [process.env.HERMESC]
+    : HERMESC_CANDIDATES.filter((p) => fs.existsSync(p))
+).filter(
+  // a linux64 binary can sit next to the osx one; keep only what runs here
+  (p) => fs.existsSync(p) && spawnSync(p, ['-version']).status === 0,
+);
 
 /** tag byte: type | length (≤ 15) */
 const tag = (type: number, length: number) => type | length;
@@ -173,7 +176,13 @@ describe('normalizeDisassemblyLine with binary literals', () => {
   const keys = Buffer.from([tag(BYTE_STRING, 1), 3]);
   const values = Buffer.from([tag(TRUE, 1)]);
   const resolver = new LiteralResolver(
-    { version: 96, array, objectKeys: keys, objectValues: values },
+    {
+      layout: 'split',
+      version: 96,
+      array,
+      objectKeys: keys,
+      objectValues: values,
+    },
     strings,
   );
 
@@ -224,6 +233,123 @@ describe('normalizeDisassemblyLine with binary literals', () => {
   });
 });
 
+describe('normalizeDisassemblyLine with v98 shaped literals', () => {
+  const strings = new Map([
+    [1, 'a'],
+    [3, 'k'],
+    [4, 'm'],
+  ]);
+  // one value buffer for arrays and objects; the object at 0 overlaps the
+  // array at 1, as hermesc lays them out
+  const values = Buffer.from([
+    tag(TRUE, 1),
+    tag(SHORT_STRING, 1),
+    ...u16(1),
+    tag(INTEGER, 1),
+    ...i32(7),
+  ]);
+  // v98 has no 1-byte string ids
+  const keys = Buffer.from([tag(SHORT_STRING, 2), ...u16(3), ...u16(4)]);
+  // shape 0: keys at 0, 2 props; shape 1: keys at 99 (out of range)
+  const shapes = Buffer.from([0, 0, 0, 0, 2, 0, 0, 0, 99, 0, 0, 0, 1, 0, 0, 0]);
+  const resolver = new LiteralResolver(
+    { layout: 'shaped', version: 98, values, objectKeys: keys, shapes },
+    strings,
+  );
+
+  test('arrays and objects read the shared value buffer, keys through the shape', () => {
+    expect(
+      normalizeDisassemblyLine(
+        '    NewArrayWithBuffer r2, 2, 2, 1',
+        strings,
+        resolver,
+      ),
+    ).toBe(
+      `    NewArrayWithBuffer r2 size=2 n=2 [[String "a"]${LITERAL_SEPARATOR}[int 7]]`,
+    );
+    expect(
+      normalizeDisassemblyLine(
+        '    NewObjectWithBufferLong r2, 0, 0',
+        strings,
+        resolver,
+      ),
+    ).toBe(
+      `    NewObjectWithBuffer r2 n=2 {[String "k"]: true${LITERAL_SEPARATOR}[String "m"]: [String "a"]}`,
+    );
+  });
+
+  test('type 6 is undefined in v98 (no value bytes), a 1-byte string id before', () => {
+    const buf = Buffer.from([tag(BYTE_STRING, 2), tag(INTEGER, 1), ...i32(4)]);
+    expect(decodeSerializedLiterals(buf, 0, 3, 'shaped')).toEqual([
+      { kind: 'undefined' },
+      { kind: 'undefined' },
+      { kind: 'int', value: 4 },
+    ]);
+    // the same bytes in the split layout: two string ids, 0x71 and 0x04
+    expect(decodeSerializedLiterals(buf, 0, 2, 'split')).toEqual([
+      { kind: 'string', id: 0x71 },
+      { kind: 'string', id: 4 },
+    ]);
+    expect(renderLiteral({ kind: 'undefined' }, strings)).toBe('undefined');
+  });
+
+  test('the parent register of AndParent stays; it is not a buffer operand', () => {
+    expect(
+      normalizeDisassemblyLine(
+        '    NewObjectWithBufferAndParent r3, r1, 0, 0',
+        strings,
+        resolver,
+      ),
+    ).toBe(
+      `    NewObjectWithBufferAndParent r3 r1 n=2 {[String "k"]: true${LITERAL_SEPARATOR}[String "m"]: [String "a"]}`,
+    );
+  });
+
+  test('a shape or key offset out of range is spelled out', () => {
+    expect(
+      normalizeDisassemblyLine(
+        '    NewObjectWithBuffer r2, 5, 0',
+        strings,
+        resolver,
+      ),
+    ).toBe('    NewObjectWithBuffer r2 n=? {<undecodable@shape5/0>}');
+    expect(
+      normalizeDisassemblyLine(
+        '    NewObjectWithBuffer r2, 1, 0',
+        strings,
+        resolver,
+      ),
+    ).toBe('    NewObjectWithBuffer r2 n=1 {<undecodable@shape1/0>}');
+  });
+
+  test('the shape index itself is not compared, only what it points at', () => {
+    const twin = new LiteralResolver(
+      {
+        layout: 'shaped',
+        version: 98,
+        values,
+        objectKeys: keys,
+        // same shape as index 1 instead of 0
+        shapes: Buffer.from([9, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0]),
+      },
+      strings,
+    );
+    expect(
+      normalizeDisassemblyLine(
+        '    NewObjectWithBuffer r2, 1, 0',
+        strings,
+        twin,
+      ),
+    ).toBe(
+      normalizeDisassemblyLine(
+        '    NewObjectWithBuffer r2, 0, 0',
+        strings,
+        resolver,
+      ),
+    );
+  });
+});
+
 describe('readLiteralBuffers', () => {
   test('a file without a known layout is null', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-literals-'));
@@ -241,9 +367,8 @@ describe('readLiteralBuffers', () => {
     }
   });
 
-  test.if(hasHermesc)(
-    'decodes what each instruction of a real build refers to',
-    async () => {
+  for (const hermesc of hermescs) {
+    test(`decodes what each instruction of a real build refers to (${path.relative(path.resolve(__dirname, '../..'), hermesc)})`, async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-literals-real-'));
       try {
         const js = path.join(dir, 'a.js');
@@ -253,12 +378,12 @@ describe('readLiteralBuffers', () => {
           'var a = ["color", 1, null, 2.5]; var b = {k: true, m: "color"}; print(a, b);\n',
         );
         expect(
-          spawnSync(hermesc!, ['-emit-binary', '-out', hbc, js, '-O', '-w'], {
+          spawnSync(hermesc, ['-emit-binary', '-out', hbc, js, '-O', '-w'], {
             stdio: 'ignore',
           }).status,
         ).toBe(0);
         const dump = spawnSync(
-          hermesc!,
+          hermesc,
           ['-b', '-dump-bytecode', '-pretty-disassemble', hbc],
           { encoding: 'utf8' },
         ).stdout;
@@ -269,6 +394,9 @@ describe('readLiteralBuffers', () => {
         }
         const buffers = await readLiteralBuffers(hbc);
         expect(buffers).not.toBeNull();
+        // the dump's own version decides which layout must have been read
+        const version = Number(/Bytecode version number: (\d+)/.exec(dump)![1]);
+        expect(buffers!.layout).toBe(version >= 98 ? 'shaped' : 'split');
         const resolver = new LiteralResolver(buffers!, strings);
         const array = /NewArrayWithBuffer\w*\s+r\d+, \d+, (\d+), (\d+)/.exec(
           dump,
@@ -279,17 +407,29 @@ describe('readLiteralBuffers', () => {
           'null',
           expect.stringMatching(/^\[double 2\.5#/),
         ]);
-        const object =
-          /NewObjectWithBuffer\w*\s+r\d+, \d+, (\d+), (\d+), (\d+)/.exec(dump)!;
-        expect(
-          resolver.objectKeys(Number(object[2]), Number(object[1])),
-        ).toEqual(['[String "k"]', '[String "m"]']);
-        expect(
-          resolver.objectValues(Number(object[3]), Number(object[1])),
-        ).toEqual(['true', '[String "color"]']);
+        let keys: string[] | null;
+        let values: string[] | null;
+        if (buffers!.layout === 'shaped') {
+          const object = /NewObjectWithBuffer\w*\s+r\d+, (\d+), (\d+)$/m.exec(
+            dump,
+          )!;
+          const shape = resolver.shape(Number(object[1]))!;
+          expect(shape.count).toBe(2);
+          keys = resolver.objectKeys(shape.keyOffset, shape.count);
+          values = resolver.objectValues(Number(object[2]), shape.count);
+        } else {
+          const object =
+            /NewObjectWithBuffer\w*\s+r\d+, \d+, (\d+), (\d+), (\d+)/.exec(
+              dump,
+            )!;
+          keys = resolver.objectKeys(Number(object[2]), Number(object[1]));
+          values = resolver.objectValues(Number(object[3]), Number(object[1]));
+        }
+        expect(keys).toEqual(['[String "k"]', '[String "m"]']);
+        expect(values).toEqual(['true', '[String "color"]']);
       } finally {
         fs.removeSync(dir);
       }
-    },
-  );
+    });
+  }
 });

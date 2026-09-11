@@ -508,13 +508,18 @@ class Gen {
   }
 
   /** identical to `source` except one string literal value — must be caught */
-  plantDifference(source: string): string | null {
+  /** `marker`: the new string, to tell whether it survived the optimizer */
+  plantDifference(source: string): { source: string; marker: string } | null {
     const literals = [...source.matchAll(/(["'])([A-Za-z]{3,20})\1/g)];
     if (literals.length === 0) return null;
     const target = this.rng.pick(literals);
     const before = source.slice(0, target.index);
     const after = source.slice((target.index ?? 0) + target[0].length);
-    return `${before}${target[1]}${target[2]}Z${target[1]}${after}`;
+    const marker = `${target[2]}Z`;
+    return {
+      source: `${before}${target[1]}${marker}${target[1]}${after}`,
+      marker,
+    };
   }
 }
 
@@ -568,6 +573,7 @@ async function main() {
   let compileErrors = 0;
   let planted = 0;
   let plantedMissed = 0;
+  let plantedFolded = 0;
   const started = Date.now();
 
   for (let round = 0; round < ROUNDS; round++) {
@@ -632,26 +638,40 @@ async function main() {
     if (round % 10 === 9) {
       const wrong = gen.plantDifference(next);
       if (wrong) {
-        planted++;
         const wrongJs = path.join(dir, 'wrong.js');
         const wrongHbc = path.join(dir, 'wrong.delta.hbc');
-        fs.writeFileSync(wrongJs, wrong);
+        fs.writeFileSync(wrongJs, wrong.source);
         if (!compile(wrongJs, wrongHbc, [`-base-bytecode=${baseHbc}`])) {
-          const caught = await compareHermesBytecode(
-            hermesc!,
-            wrongHbc,
-            plainHbc,
-          );
-          if (caught.status !== 'different') {
-            plantedMissed++;
-            keep = true;
-            console.log(
-              `round ${round}: PLANTED DIFFERENCE MISSED (${caught.status})`,
+          // The literal may sit in code the optimizer removes or folds
+          // (`!'x'`, an unreachable switch case — Static Hermes folds far more
+          // than classic hermesc). Then both builds are really equivalent and
+          // the round tests nothing; the string storage tells, independently
+          // of the check under test (ASCII strings are stored as is).
+          if (!fs.readFileSync(wrongHbc).includes(wrong.marker)) {
+            plantedFolded++;
+            if (VERBOSE) {
+              console.log(
+                `round ${round}: planted "${wrong.marker}" optimized away`,
+              );
+            }
+          } else {
+            planted++;
+            const caught = await compareHermesBytecode(
+              hermesc!,
+              wrongHbc,
+              plainHbc,
             );
-          } else if (VERBOSE) {
-            console.log(
-              `round ${round}: planted difference caught — ${caught.detail}`,
-            );
+            if (caught.status !== 'different') {
+              plantedMissed++;
+              keep = true;
+              console.log(
+                `round ${round}: PLANTED DIFFERENCE MISSED (${caught.status})`,
+              );
+            } else if (VERBOSE) {
+              console.log(
+                `round ${round}: planted difference caught — ${caught.detail}`,
+              );
+            }
           }
         }
       }
@@ -669,7 +689,9 @@ async function main() {
   );
   console.log(`dump failed: ${dumpFailed}`);
   console.log(`compile errors (generator): ${compileErrors}`);
-  console.log(`planted differences: ${planted}, missed: ${plantedMissed}`);
+  console.log(
+    `planted differences: ${planted}, missed: ${plantedMissed} (${plantedFolded} more optimized away, not counted)`,
+  );
   if (findings.size > 0) {
     console.log('');
     console.log('unique differences (first occurrence, reproduction dir):');

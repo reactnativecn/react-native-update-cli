@@ -16,7 +16,19 @@
  * the next byte", bits 3..0 = low 4 bits of the run length (high 8 bits in
  * the next byte when bit 7 is set). Values follow the tag, fixed width per
  * type: none (null/true/false), 8-byte little-endian double, 4/2/1-byte
- * string id, 4-byte little-endian int32.
+ * string id, 4-byte little-endian int32. HBC v98 reuses type 6 (the 1-byte
+ * string id before) for `undefined`, which takes no value bytes; string ids
+ * there are always 2 or 4 bytes wide.
+ *
+ * Two file layouts use that format:
+ * - HBC v87–96 (`split`): arrayBuffer, objKeyBuffer, objValueBuffer.
+ *   `NewArrayWithBuffer dst, sizeHint, count, arrayOffset`;
+ *   `NewObjectWithBuffer dst, sizeHint, count, keyOffset, valueOffset`.
+ * - HBC v98 (`shaped`): literalValueBuffer (array elements and object values
+ *   alike), objKeyBuffer, objShapeTable (8-byte entries: keyOffset u32,
+ *   numProps u32). `NewArrayWithBuffer dst, sizeHint, count, valueOffset`;
+ *   `NewObjectWithBuffer dst, shapeIndex, valueOffset` and
+ *   `NewObjectWithBufferAndParent dst, parent, shapeIndex, valueOffset`.
  */
 import { open as openFile } from 'node:fs/promises';
 import { resolveHbcSections } from './hbcTransform';
@@ -34,28 +46,39 @@ enum Tag {
   Number = 0x30,
   LongString = 0x40,
   ShortString = 0x50,
-  ByteString = 0x60,
+  /** HBC ≤96: 1-byte string id; HBC v98: `undefined` */
+  ByteStringOrUndefined = 0x60,
   Integer = 0x70,
 }
 
 export type LiteralValue =
-  | { kind: 'null' | 'true' | 'false' }
+  | { kind: 'null' | 'true' | 'false' | 'undefined' }
   | { kind: 'number'; value: number }
   | { kind: 'int'; value: number }
   | { kind: 'string'; id: number };
 
-/** The three literal buffers of an HBC v87–96 file. */
-export interface LiteralBuffers {
-  version: number;
-  array: Buffer;
-  objectKeys: Buffer;
-  objectValues: Buffer;
-}
+/** The literal buffers of an HBC file, in one of the two layouts. */
+export type LiteralBuffers =
+  | {
+      layout: 'split';
+      version: number;
+      array: Buffer;
+      objectKeys: Buffer;
+      objectValues: Buffer;
+    }
+  | {
+      layout: 'shaped';
+      version: number;
+      values: Buffer;
+      objectKeys: Buffer;
+      shapes: Buffer;
+    };
+
+const SHAPE_ENTRY_SIZE = 8;
 
 /**
  * Read only the literal buffers of an HBC file (header + three byte ranges,
- * never the whole file). Null for a file whose layout is unknown, including
- * HBC v98 (literalValueBuffer + objShapeTable, not decoded yet): the caller
+ * never the whole file). Null for a file whose layout is unknown: the caller
  * then falls back to comparing the dumped buffers as a whole.
  */
 export async function readLiteralBuffers(
@@ -70,29 +93,38 @@ export async function readLiteralBuffers(
     if (read.bytesRead !== HBC_HEADER_SIZE) return null;
     const resolved = resolveHbcSections(header, size);
     if (!resolved) return null;
-    const range = (name: string) => resolved.sections.get(name);
-    const array = range('arrayBuffer');
-    const objectKeys = range('objKeyBuffer');
-    const objectValues = range('objValueBuffer');
-    if (!array || !objectKeys || !objectValues) return null;
-    const readRange = async (r: { start: number; size: number }) => {
-      const buf = Buffer.alloc(r.size);
-      if (r.size === 0) return buf;
-      const { bytesRead } = await handle.read(buf, 0, r.size, r.start);
-      return bytesRead === r.size ? buf : null;
+    const readRanges = async (names: string[]) => {
+      const ranges = names.map((name) => resolved.sections.get(name));
+      if (ranges.some((r) => !r)) return null;
+      const bufs = await Promise.all(
+        ranges.map(async (r) => {
+          const buf = Buffer.alloc(r!.size);
+          if (r!.size === 0) return buf;
+          const { bytesRead } = await handle.read(buf, 0, r!.size, r!.start);
+          return bytesRead === r!.size ? buf : null;
+        }),
+      );
+      return bufs.some((b) => !b) ? null : (bufs as Buffer[]);
     };
-    const [a, k, v] = await Promise.all([
-      readRange(array),
-      readRange(objectKeys),
-      readRange(objectValues),
+    const { version } = resolved;
+    if (resolved.sections.has('objShapeTable')) {
+      const bufs = await readRanges([
+        'literalValueBuffer',
+        'objKeyBuffer',
+        'objShapeTable',
+      ]);
+      if (!bufs) return null;
+      const [values, objectKeys, shapes] = bufs;
+      return { layout: 'shaped', version, values, objectKeys, shapes };
+    }
+    const bufs = await readRanges([
+      'arrayBuffer',
+      'objKeyBuffer',
+      'objValueBuffer',
     ]);
-    if (!a || !k || !v) return null;
-    return {
-      version: resolved.version,
-      array: a,
-      objectKeys: k,
-      objectValues: v,
-    };
+    if (!bufs) return null;
+    const [array, objectKeys, objectValues] = bufs;
+    return { layout: 'split', version, array, objectKeys, objectValues };
   } finally {
     await handle.close();
   }
@@ -101,12 +133,14 @@ export async function readLiteralBuffers(
 /**
  * Decode `count` literal values starting at byte `offset`. Null when the
  * offset or a run reaches outside the buffer or a tag type is unknown; the
- * caller reports that as a difference rather than guessing.
+ * caller reports that as a difference rather than guessing. `layout` decides
+ * what type 6 means (see the file comment).
  */
 export function decodeSerializedLiterals(
   buffer: Buffer,
   offset: number,
   count: number,
+  layout: LiteralBuffers['layout'] = 'split',
 ): LiteralValue[] | null {
   const values: LiteralValue[] = [];
   let pos = offset;
@@ -145,7 +179,11 @@ export function decodeSerializedLiterals(
           values.push({ kind: 'string', id: buffer.readUInt16LE(pos) });
           pos += 2;
           break;
-        case Tag.ByteString:
+        case Tag.ByteStringOrUndefined:
+          if (layout === 'shaped') {
+            values.push({ kind: 'undefined' });
+            break;
+          }
           if (pos + 1 > buffer.length) return null;
           values.push({ kind: 'string', id: buffer[pos] });
           pos += 1;
@@ -176,6 +214,7 @@ export function renderLiteral(
     case 'null':
     case 'true':
     case 'false':
+    case 'undefined':
       return value.kind;
     case 'int':
       return `[int ${value.value}]`;
@@ -206,12 +245,26 @@ export class LiteralResolver {
     offset: number,
     count: number,
   ): string[] | null {
-    const values = decodeSerializedLiterals(buffer, offset, count);
+    const values = decodeSerializedLiterals(
+      buffer,
+      offset,
+      count,
+      this.buffers.layout,
+    );
     return values ? values.map((v) => renderLiteral(v, this.strings)) : null;
   }
 
+  get layout(): LiteralBuffers['layout'] {
+    return this.buffers.layout;
+  }
+
   array(offset: number, count: number): string[] | null {
-    return this.decode(this.buffers.array, offset, count);
+    const b = this.buffers;
+    return this.decode(
+      b.layout === 'split' ? b.array : b.values,
+      offset,
+      count,
+    );
   }
 
   objectKeys(offset: number, count: number): string[] | null {
@@ -219,6 +272,23 @@ export class LiteralResolver {
   }
 
   objectValues(offset: number, count: number): string[] | null {
-    return this.decode(this.buffers.objectValues, offset, count);
+    const b = this.buffers;
+    return this.decode(
+      b.layout === 'split' ? b.objectValues : b.values,
+      offset,
+      count,
+    );
+  }
+
+  /** Shape table entry (HBC v98); null out of range or in the split layout. */
+  shape(index: number): { keyOffset: number; count: number } | null {
+    const b = this.buffers;
+    if (b.layout !== 'shaped' || index < 0) return null;
+    const at = index * SHAPE_ENTRY_SIZE;
+    if (at + SHAPE_ENTRY_SIZE > b.shapes.length) return null;
+    return {
+      keyOffset: b.shapes.readUInt32LE(at),
+      count: b.shapes.readUInt32LE(at + 4),
+    };
   }
 }

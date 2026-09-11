@@ -1008,11 +1008,14 @@ export const LITERAL_SEPARATOR = '\u001f';
 
 /**
  * `NewArrayWithBuffer rX, sizeHint, count, offset` and
- * `NewObjectWithBuffer rX, sizeHint, count, keyOffset, valueOffset` with the
- * literals decoded from the binary buffers at those offsets, so two builds
- * that lay their buffers out differently still compare by what each
- * instruction builds. Null when the operands do not fit the shape; an offset
- * that cannot be decoded is spelled out (and so never equals a decoded one).
+ * `NewObjectWithBuffer rX, sizeHint, count, keyOffset, valueOffset` (HBC
+ * v87–96) or `NewObjectWithBuffer[AndParent] rX, [rP,] shapeIndex,
+ * valueOffset` (v98) with the literals decoded from the binary buffers at
+ * those offsets, so two builds that lay their buffers out differently still
+ * compare by what each instruction builds. The shape index is dropped like an
+ * offset: it only locates the keys. Null when the operands do not fit the
+ * layout; an offset that cannot be decoded is spelled out (and so never
+ * equals a decoded one).
  */
 function renderBufferInstruction(
   opcode: string,
@@ -1021,11 +1024,23 @@ function renderBufferInstruction(
 ): string | null {
   const [sizeHint, count] = operands;
   if (opcode.startsWith('NewArray')) {
-    if (operands.length < 3) return null;
+    if (operands.length !== 3) return null;
     const entries = literals.array(operands[2], count);
     return `size=${sizeHint} n=${count} [${entries ? entries.join(LITERAL_SEPARATOR) : `<undecodable@${operands[2]}>`}]`;
   }
-  if (operands.length < 4) return null;
+  if (literals.layout === 'shaped') {
+    if (operands.length !== 2) return null;
+    const [shapeIndex, valueOffset] = operands;
+    const shape = literals.shape(shapeIndex);
+    const keys = shape && literals.objectKeys(shape.keyOffset, shape.count);
+    const values = shape && literals.objectValues(valueOffset, shape.count);
+    if (!shape || !keys || !values) {
+      return `n=${shape?.count ?? '?'} {<undecodable@shape${shapeIndex}/${valueOffset}>}`;
+    }
+    const pairs = keys.map((k, i) => `${k}: ${values[i]}`);
+    return `n=${shape.count} {${pairs.join(LITERAL_SEPARATOR)}}`;
+  }
+  if (operands.length !== 4) return null;
   const keys = literals.objectKeys(operands[2], count);
   const values = literals.objectValues(operands[3], count);
   if (!keys || !values) {
@@ -1052,23 +1067,27 @@ export function normalizeDisassemblyLine(
   }
   let m: RegExpExecArray | null;
   if (opcode.startsWith('New') && opcode.includes('WithBuffer')) {
+    // v98's AndParent form takes the parent object in a second register,
+    // which is compared as is (it is not a buffer operand)
     m =
-      /^(\s*New(?:Array|Object)WithBuffer)(?:Long)?(?:AndParent)?\s+(r\d+)(.*)$/.exec(
+      /^(\s*New(?:Array|Object)WithBuffer)(?:Long)?(AndParent)?\s+(r\d+)(?:, (r\d+))?(.*)$/.exec(
         line,
       );
     if (m) {
-      const nums = m[3].match(/\d+/g) ?? [];
+      const op = `${m[1]}${m[2] ?? ''}`;
+      const regs = m[4] ? `${m[3]} ${m[4]}` : m[3];
+      const nums = m[5].match(/\d+/g) ?? [];
       if (literals) {
         const rendered = renderBufferInstruction(
           m[1].trim(),
           nums.map(Number),
           literals,
         );
-        if (rendered) return `${m[1]} ${m[2]} ${rendered}`;
+        if (rendered) return `${op} ${regs} ${rendered}`;
       }
       // no binary buffers: only the size hint survives; the buffer content
       // is compared as a whole instead (compareBuffers)
-      return `${m[1]} ${m[2]} sizes=${nums.slice(0, 1).join(',')}`;
+      return `${op} ${regs} sizes=${nums.slice(0, 1).join(',')}`;
     }
   }
   if (opcode.charCodeAt(0) === 0x4a /* J */) {
@@ -1162,8 +1181,8 @@ export interface HermesEquivalenceResult {
   functions: number;
   /**
    * `instruction`: literals decoded from the binary buffers at each
-   * New*WithBuffer instruction (HBC v87–96); `buffer`: the dumped buffers
-   * compared as a whole (unknown layout, e.g. v98)
+   * New*WithBuffer instruction (HBC v87–96 and v98); `buffer`: the dumped
+   * buffers compared as a whole (unknown layout)
    */
   literals?: 'instruction' | 'buffer';
 }
@@ -1351,7 +1370,8 @@ function clip(line: string): string {
  * (the whole line would be clipped before the difference for long literals).
  */
 function literalDifference(a: string, b: string): string | null {
-  const open = /^(\s*New\w+WithBuffer r\d+ size=\d+ n=\d+ [[{])/;
+  const open =
+    /^(\s*New\w+WithBuffer(?:AndParent)? r\d+(?: r\d+)?(?: size=\d+)? n=\d+ [[{])/;
   const ma = open.exec(a);
   const mb = open.exec(b);
   if (!ma || !mb) return null;
