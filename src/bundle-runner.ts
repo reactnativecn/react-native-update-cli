@@ -16,6 +16,7 @@ import {
   probeHbcVersion,
   resolveHermesBase,
 } from './utils/hermes-base';
+import { hermesTimeout } from './utils/hermes-timeout';
 import { t } from './utils/i18n';
 import {
   getJavaScriptRuntime,
@@ -906,6 +907,11 @@ function runProcess(
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       stdio: ['ignore', 'ignore', captureStderr ? 'pipe' : 'ignore'],
+      timeout: hermesTimeout(
+        process.env.PUSHY_HERMES_COMPILE_TIMEOUT_MS,
+        300_000,
+      ),
+      killSignal: 'SIGKILL',
     });
     // hermesc echoes whole (minified) source lines per diagnostic: keep the
     // head and the tail, never an unbounded transcript
@@ -971,8 +977,10 @@ const HERMES_BASE_WAIT_MS = 60_000;
 async function awaitPendingBase(
   pending: Promise<HermesBaseSelectionResult>,
 ): Promise<HermesBaseSelectionResult> {
-  const waitMs =
-    Number(process.env.PUSHY_HERMES_BASE_WAIT_MS) || HERMES_BASE_WAIT_MS;
+  const waitMs = hermesTimeout(
+    process.env.PUSHY_HERMES_BASE_WAIT_MS,
+    HERMES_BASE_WAIT_MS,
+  );
   let timer: NodeJS.Timeout | undefined;
   const gaveUp = new Promise<HermesBaseSelectionResult>((resolve) => {
     timer = setTimeout(
@@ -1129,7 +1137,11 @@ export async function compileHermesByteCode({
       const fullStderr = attempt.error
         ? String(attempt.error.message ?? attempt.error)
         : attempt.stderr;
-      const reason = summarizeHermescStderr(fullStderr);
+      const reason =
+        summarizeHermescStderr(fullStderr) ||
+        (attempt.signal
+          ? `signal ${attempt.signal} (compiler deadline or external termination)`
+          : '');
       console.warn(
         t('hermesBaseCompileFailed', {
           reason: reason || `exit ${attempt.status}`,
@@ -1151,7 +1163,10 @@ export async function compileHermesByteCode({
     // redone from the plain map in the rare case the base is rejected
     const speculativeCompose =
       usedBase && sourcemapOutput
-        ? composeSourceMaps(packagerMap, hermesMap, sourcemapOutput)
+        ? composeSourceMaps(packagerMap, hermesMap, sourcemapOutput).then(
+            (value) => ({ ok: true as const, value }),
+            (error: unknown) => ({ ok: false as const, error }),
+          )
         : null;
     if (usedBase && wantPlain) {
       if (!plainOk) {
@@ -1222,11 +1237,9 @@ export async function compileHermesByteCode({
       }
     }
     if (speculativeCompose) {
-      const done = await speculativeCompose.catch((error) => {
-        if (usedBase) throw error;
-        return false;
-      });
-      composed = usedBase && done;
+      const done = await speculativeCompose;
+      if (!done.ok && usedBase) throw done.error;
+      composed = usedBase && done.ok && done.value;
     }
     if (!usedBase) {
       if (plainOk) {

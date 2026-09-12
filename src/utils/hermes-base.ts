@@ -8,6 +8,8 @@
 // server lookup, a sha256-named local cache, download + verification, and the
 // optional disassembly equivalence check. Every failure degrades to the plain
 // compile — nothing here may block a release.
+
+import { StringDecoder } from 'node:string_decoder';
 import { spawn, spawnSync } from 'child_process';
 import { createHash } from 'crypto';
 import fs from 'fs-extra';
@@ -22,6 +24,8 @@ import {
   LiteralResolver,
   readLiteralBuffers,
 } from './hermes-literals';
+import { auditRawHermesBytecode, readHermesSemanticData } from './hermes-raw';
+import { hermesTimeout } from './hermes-timeout';
 import { t } from './i18n';
 import { webFetch } from './runtime';
 import { enumZipEntries, readEntry } from './zip-entries';
@@ -288,7 +292,14 @@ function compileProbe(hermesCommand: string): number | null {
     const result = spawnSync(
       hermesCommand,
       ['-emit-binary', '-out', output, input, '-O', '-w'],
-      { stdio: 'ignore' },
+      {
+        stdio: 'ignore',
+        timeout: hermesTimeout(
+          process.env.PUSHY_HERMES_PROBE_TIMEOUT_MS,
+          30_000,
+        ),
+        killSignal: 'SIGKILL',
+      },
     );
     if (result.status !== 0 || !fs.existsSync(output)) {
       return null;
@@ -1014,8 +1025,7 @@ export const LITERAL_SEPARATOR = '\u001f';
  * those offsets, so two builds that lay their buffers out differently still
  * compare by what each instruction builds. The shape index is dropped like an
  * offset: it only locates the keys. Null when the operands do not fit the
- * layout; an offset that cannot be decoded is spelled out (and so never
- * equals a decoded one).
+ * layout; an offset or reference that cannot be decoded fails closed.
  */
 function renderBufferInstruction(
   opcode: string,
@@ -1026,7 +1036,9 @@ function renderBufferInstruction(
   if (opcode.startsWith('NewArray')) {
     if (operands.length !== 3) return null;
     const entries = literals.array(operands[2], count);
-    return `size=${sizeHint} n=${count} [${entries ? entries.join(LITERAL_SEPARATOR) : `<undecodable@${operands[2]}>`}]`;
+    if (!entries)
+      throw new Error(`undecodable array literal at ${operands[2]}`);
+    return `size=${sizeHint} n=${count} [${entries.join(LITERAL_SEPARATOR)}]`;
   }
   if (literals.layout === 'shaped') {
     if (operands.length !== 2) return null;
@@ -1035,7 +1047,9 @@ function renderBufferInstruction(
     const keys = shape && literals.objectKeys(shape.keyOffset, shape.count);
     const values = shape && literals.objectValues(valueOffset, shape.count);
     if (!shape || !keys || !values) {
-      return `n=${shape?.count ?? '?'} {<undecodable@shape${shapeIndex}/${valueOffset}>}`;
+      throw new Error(
+        `undecodable object literal at shape ${shapeIndex}/${valueOffset}`,
+      );
     }
     const pairs = keys.map((k, i) => `${k}: ${values[i]}`);
     return `n=${shape.count} {${pairs.join(LITERAL_SEPARATOR)}}`;
@@ -1044,7 +1058,9 @@ function renderBufferInstruction(
   const keys = literals.objectKeys(operands[2], count);
   const values = literals.objectValues(operands[3], count);
   if (!keys || !values) {
-    return `size=${sizeHint} n=${count} {<undecodable@${operands[2]}/${operands[3]}>}`;
+    throw new Error(
+      `undecodable object literal at ${operands[2]}/${operands[3]}`,
+    );
   }
   const pairs = keys.map((k, i) => `${k}: ${values[i]}`);
   return `size=${sizeHint} n=${count} {${pairs.join(LITERAL_SEPARATOR)}}`;
@@ -1084,19 +1100,24 @@ export function normalizeDisassemblyLine(
           literals,
         );
         if (rendered) return `${op} ${regs} ${rendered}`;
+        throw new Error(`unsupported literal operands: ${line.trim()}`);
       }
       // no binary buffers: only the size hint survives; the buffer content
-      // is compared as a whole instead (compareBuffers)
+      // is compared as a whole for diagnostics only (never accepted as equivalent)
       return `${op} ${regs} sizes=${nums.slice(0, 1).join(',')}`;
     }
   }
   if (opcode.charCodeAt(0) === 0x4a /* J */) {
     m = /^(\s*J[A-Za-z]+?)(Long)?\s+(L\d+|\d+)(.*)$/.exec(line);
-    if (m) return `${m[1]} <tgt>${m[4]}`;
+    if (m) return `${m[1]} ${m[3]}${normalizeOperandSpacing(m[4])}`;
   }
   if (opcode.startsWith('DefineOwnById')) {
     m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)$/.exec(line);
-    if (m) line = `${m[1]}"${strings.get(Number(m[2])) ?? `?${m[2]}`}"`;
+    if (m) {
+      const text = strings.get(Number(m[2]));
+      if (text === undefined) throw new Error(`unresolved string id ${m[2]}`);
+      line = `${m[1]}${JSON.stringify(text)}`;
+    }
   }
   // Operand-width variants of one instruction (GetByIdShort/GetById/GetByIdLong,
   // LoadConstString/LoadConstStringLongIndex, ...) only differ by how wide a
@@ -1108,7 +1129,7 @@ export function normalizeDisassemblyLine(
     (opEnd === line.length || isSpace(line.charCodeAt(opEnd)))
   ) {
     const folded = foldWidthSuffix(opcode);
-    line = `${line.slice(0, indent)}${folded}${line.slice(opEnd).replace(/\s+/g, ' ')}`;
+    line = `${line.slice(0, indent)}${folded}${normalizeOperandSpacing(line.slice(opEnd))}`;
     // Switch jump tables sit after the instructions; their relative offset (and
     // the table header hermesc prints for them) moves with instruction widths.
     // The two switch instructions carry that offset in different operands:
@@ -1127,6 +1148,32 @@ export function normalizeDisassemblyLine(
     }
   }
   return line;
+}
+
+/** Only formatting outside quoted operands may be collapsed. */
+function normalizeOperandSpacing(text: string): string {
+  let result = '';
+  let quoted = false;
+  let escaped = false;
+  let spacing = false;
+  for (const char of text) {
+    if (quoted) {
+      result += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (!spacing) result += ' ';
+      spacing = true;
+    } else {
+      result += char;
+      spacing = false;
+      if (char === '"') quoted = true;
+    }
+  }
+  return result;
 }
 
 function isSpace(code: number): boolean {
@@ -1151,9 +1198,10 @@ function foldWidthSuffix(opcode: string): string {
 async function* streamLines(
   stream: NodeJS.ReadableStream,
 ): AsyncGenerator<string> {
+  const decoder = new StringDecoder('utf8');
   let rest = '';
   for await (const chunk of stream as AsyncIterable<Buffer | string>) {
-    rest += typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    rest += typeof chunk === 'string' ? chunk : decoder.write(chunk);
     let index = rest.indexOf('\n');
     while (index >= 0) {
       yield rest.slice(0, index);
@@ -1161,6 +1209,7 @@ async function* streamLines(
       index = rest.indexOf('\n');
     }
   }
+  rest += decoder.end();
   if (rest) yield rest;
 }
 
@@ -1190,6 +1239,9 @@ export interface HermesEquivalenceResult {
 export interface HermesEquivalenceOptions {
   /** write each side's raw disassembly here (bug reports) */
   dumpTo?: { withBase: string; plain: string };
+  /** Total deadline for both verification passes. */
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 interface DumpFunction {
@@ -1216,7 +1268,7 @@ const DUMP_STDERR_KEEP = 4 * 1024;
 const DETAIL_LINE_MAX = 120;
 
 function isFunctionHeader(line: string): boolean {
-  return line.startsWith('Function<') || line.startsWith('NCFunction<');
+  return /^(?:Function|NCFunction|Constructor)</.test(line);
 }
 
 /**
@@ -1239,30 +1291,55 @@ class DumpReader {
 
   /** set when the binary literal buffers of this side could be read */
   private readonly literals?: LiteralResolver;
+  private dumpError?: Error;
+  private debugOutput?: ReturnType<typeof fs.createWriteStream>;
+  private debugFinished: Promise<void> = Promise.resolve();
+  private readonly pass: PassThrough;
 
   constructor(
     readonly proc: ReturnType<typeof spawn>,
     dumpTo?: string,
     buffers?: LiteralBuffers | null,
+    private readonly binaryStrings?: Map<number, string>,
   ) {
     // the string table is filled while the preamble streams by, before the
     // first instruction needs it
+    if (binaryStrings) {
+      for (const [id, value] of binaryStrings) this.strings.set(id, value);
+    }
     if (buffers) this.literals = new LiteralResolver(buffers, this.strings);
-    const pass = new PassThrough();
+    const pass = (this.pass = new PassThrough());
     proc.stdout!.pipe(pass);
-    if (dumpTo) proc.stdout!.pipe(fs.createWriteStream(dumpTo));
+    if (dumpTo) {
+      const output = (this.debugOutput = fs.createWriteStream(dumpTo));
+      this.debugFinished = new Promise<void>((resolve) => {
+        output.once('finish', resolve);
+        output.once('error', (error) => {
+          this.dumpError = error;
+          proc.kill('SIGKILL');
+          resolve();
+        });
+      });
+      proc.stdout!.pipe(output);
+    }
     this.iterator = streamLines(pass);
     let stderr = '';
     proc.stderr?.on('data', (chunk: Buffer | string) => {
       stderr = (stderr + chunk.toString()).slice(-DUMP_STDERR_KEEP);
     });
     this.exit = new Promise((resolve) => {
+      let processError: Error | undefined;
       // a spawn failure (ENOENT) may leave stdout open and never 'close'
       proc.on('error', (error) => {
+        proc.stdout?.unpipe(pass);
+        proc.stdout?.destroy();
         pass.end();
-        resolve({ code: null, signal: null, error, stderr });
+        processError = error;
+        if (!proc.pid) resolve({ code: null, signal: null, error, stderr });
       });
-      proc.on('close', (code, signal) => resolve({ code, signal, stderr }));
+      proc.on('close', (code, signal) =>
+        resolve({ code, signal, error: processError, stderr }),
+      );
     });
   }
 
@@ -1298,8 +1375,12 @@ class DumpReader {
       }
       if (this.section === 'Global String Table') {
         const m = STRING_TABLE_LINE.exec(line);
-        if (m) this.strings.set(Number(m[1]), m[2]);
-      } else if (this.section?.endsWith('Buffer') && line.trim() !== '') {
+        if (m && !this.binaryStrings) this.strings.set(Number(m[1]), m[2]);
+      } else if (
+        !this.literals &&
+        this.section?.endsWith('Buffer') &&
+        line.trim() !== ''
+      ) {
         const entry = line.trim();
         const ref = BUFFER_STRING_ENTRY.exec(entry);
         const text = ref ? this.strings.get(Number(ref[1])) : undefined;
@@ -1344,11 +1425,18 @@ class DumpReader {
   /** drain whatever is left and report how the process ended */
   async finish(): Promise<ProcessExit> {
     while ((await this.nextLine()) !== null) {}
-    return this.exit;
+    const exit = await this.exit;
+    await this.debugFinished;
+    return this.dumpError ? { ...exit, error: this.dumpError } : exit;
   }
 
-  kill() {
-    this.proc.kill();
+  async kill() {
+    this.proc.stdout?.unpipe();
+    this.pass.destroy();
+    this.proc.stdout?.destroy();
+    this.proc.kill('SIGKILL');
+    this.debugOutput?.end();
+    await Promise.all([this.exit, this.debugFinished]);
   }
 }
 
@@ -1426,8 +1514,8 @@ function compareFunctions(a: DumpFunction, b: DumpFunction): string | null {
 }
 
 /**
- * Compare two HBC files by disassembly (see normalizeDisassemblyLine): the
- * literal buffers by content, then function by function. `-b` forces hermesc
+ * Compare two HBC files by pretty disassembly, then audit the raw operands
+ * against full binary strings, literals, function identities and addresses. `-b` forces hermesc
  * to treat inputs as bytecode whatever their extension. Both dumps are
  * consumed as streams so the ~100 MB of text never touches the disk (unless
  * `dumpTo` asks for it). A dump process that fails or ends early is reported
@@ -1441,19 +1529,41 @@ export async function compareHermesBytecode(
   plain: string,
   options: HermesEquivalenceOptions = {},
 ): Promise<HermesEquivalenceResult> {
+  const controller = new AbortController();
+  const timeoutMs = hermesTimeout(
+    options.timeoutMs ?? process.env.PUSHY_HERMES_VERIFY_TIMEOUT_MS,
+    120_000,
+  );
+  const abort = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) abort();
+  else options.signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(
+    () =>
+      controller.abort(
+        new Error(`Hermes verification timed out after ${timeoutMs}ms`),
+      ),
+    timeoutMs,
+  );
+  timer.unref();
   const spawnDump = (file: string) =>
     spawn(
       hermesCommand,
       ['-b', '-dump-bytecode', '-pretty-disassemble', file],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        signal: controller.signal,
+        killSignal: 'SIGKILL',
+      },
     );
   // The literal buffers are read from both files up front (header + three
   // byte ranges). Only when both sides can be read do the instructions
   // compare decoded literals; otherwise both fall back to the dumped buffers
   // as a whole, so the two sides always normalize the same way.
-  const [buffersA, buffersB] = await Promise.all([
+  const [buffersA, buffersB, dataA, dataB] = await Promise.all([
     readLiteralBuffers(withBase).catch(() => null),
     readLiteralBuffers(plain).catch(() => null),
+    readHermesSemanticData(withBase).catch(() => null),
+    readHermesSemanticData(plain).catch(() => null),
   ]);
   const binary = buffersA && buffersB && buffersA.version === buffersB.version;
   const literals = binary ? 'instruction' : 'buffer';
@@ -1461,11 +1571,13 @@ export async function compareHermesBytecode(
     spawnDump(withBase),
     options.dumpTo?.withBase,
     binary ? buffersA : null,
+    dataA?.strings,
   );
   const b = new DumpReader(
     spawnDump(plain),
     options.dumpTo?.plain,
     binary ? buffersB : null,
+    dataB?.strings,
   );
   let functions = 0;
   const different = (detail: string): HermesEquivalenceResult => ({
@@ -1510,7 +1622,23 @@ export async function compareHermesBytecode(
             literals,
           };
         }
-        return { status: 'equivalent', functions, literals };
+        if (!binary || !dataA || !dataB) {
+          return {
+            status: 'dump-failed',
+            detail:
+              'unsupported or unreadable HBC layout; text-only comparison cannot verify equivalence',
+            functions,
+            literals,
+          };
+        }
+        const audit = await auditRawHermesBytecode(
+          hermesCommand,
+          [withBase, plain],
+          [dataA, dataB],
+          [buffersA, buffersB],
+          controller.signal,
+        );
+        return { ...audit, functions, literals };
       }
       if (functions === 0 && !binary) {
         // buffers precede the functions, so both are complete by now. This
@@ -1524,9 +1652,17 @@ export async function compareHermesBytecode(
       if (detail) return different(detail);
       functions++;
     }
+  } catch (error) {
+    return {
+      status: 'dump-failed',
+      detail: error instanceof Error ? error.message : String(error),
+      functions,
+      literals,
+    };
   } finally {
-    a.kill();
-    b.kill();
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abort);
+    await Promise.all([a.kill(), b.kill()]);
   }
 }
 

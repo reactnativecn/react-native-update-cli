@@ -134,3 +134,59 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm publish --dry-run --access public --tag dry-run
+
+  hermes-integration:
+    name: hermes-hbc-${{ matrix.hbc }}
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - hbc: 96
+            package: react-native@0.77.3
+            directory: react-native
+            executable: sdks/hermesc/linux64-bin/hermesc
+          - hbc: 98
+            package: hermes-compiler@250829098.0.16
+            directory: hermes-compiler
+            executable: hermesc/linux64-bin/hermesc
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+      - run: bun install --frozen-lockfile
+      - name: Install the pinned real compiler
+        shell: bash
+        env:
+          COMPILER_PACKAGE: ${{ matrix.package }}
+          COMPILER_DIRECTORY: ${{ matrix.directory }}
+          COMPILER_EXECUTABLE: ${{ matrix.executable }}
+          EXPECTED_HBC: ${{ matrix.hbc }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/hermes-tests/$COMPILER_DIRECTORY"
+          mkdir -p "$root"
+          archive=$(npm pack "$COMPILER_PACKAGE" --pack-destination "$RUNNER_TEMP" --silent)
+          tar -xzf "$RUNNER_TEMP/$archive" --strip-components=1 -C "$root" \
+            "package/$COMPILER_EXECUTABLE" package/package.json
+          export HERMESC="$root/$COMPILER_EXECUTABLE"
+          test -x "$HERMESC"
+          "$HERMESC" -version
+          bun -e 'import {probeHbcVersion} from "./src/utils/hermes-base"; if (probeHbcVersion(process.env.HERMESC) !== Number(process.env.EXPECTED_HBC)) throw new Error("unexpected HBC version");'
+          echo "HERMESC=$HERMESC" >> "$GITHUB_ENV"
+      - name: Run real compiler and fallback regressions
+        run: bun test tests/hermes-*.test.ts
+      - name: Run seeded differential fuzzing
+        run: bun run fuzz:hermes-base --rounds 50 --seed ${{ matrix.hbc }} --out "${{ runner.temp }}/hermes-fuzz"
+      - name: Preserve failing fuzz cases
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hermes-fuzz-hbc-${{ matrix.hbc }}
+          path: ${{ runner.temp }}/hermes-fuzz
+          if-no-files-found: ignore

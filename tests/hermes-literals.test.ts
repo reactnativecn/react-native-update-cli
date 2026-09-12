@@ -139,12 +139,12 @@ describe('decodeSerializedLiterals', () => {
 
 describe('renderLiteral', () => {
   const strings = new Map([[82, 'color']]);
-  test('strings resolve through the table; unknown ids stay visible', () => {
+  test('strings resolve through the table; unknown ids fail closed', () => {
     expect(renderLiteral({ kind: 'string', id: 82 }, strings)).toBe(
       '[String "color"]',
     );
-    expect(renderLiteral({ kind: 'string', id: 5 }, strings)).toBe(
-      '[String ?5]',
+    expect(() => renderLiteral({ kind: 'string', id: 5 }, strings)).toThrow(
+      'unresolved string id 5',
     );
   });
   test('doubles keep their bits: -0 and 0 differ, two NaNs agree', () => {
@@ -213,14 +213,14 @@ describe('normalizeDisassemblyLine with binary literals', () => {
     ).toBe('    NewObjectWithBuffer r1 size=1 n=1 {[String "k"]: true}');
   });
 
-  test('an undecodable offset is spelled out so it never matches a decoded one', () => {
-    expect(
+  test('an undecodable offset fails closed even when both sides are broken', () => {
+    expect(() =>
       normalizeDisassemblyLine(
         '    NewArrayWithBuffer r4, 2, 2, 9',
         strings,
         resolver,
       ),
-    ).toBe('    NewArrayWithBuffer r4 size=2 n=2 [<undecodable@9>]');
+    ).toThrow('undecodable');
   });
 
   test('without buffers only the size hint survives (whole-buffer fallback)', () => {
@@ -305,21 +305,21 @@ describe('normalizeDisassemblyLine with v98 shaped literals', () => {
     );
   });
 
-  test('a shape or key offset out of range is spelled out', () => {
-    expect(
+  test('a shape or key offset out of range fails closed', () => {
+    expect(() =>
       normalizeDisassemblyLine(
         '    NewObjectWithBuffer r2, 5, 0',
         strings,
         resolver,
       ),
-    ).toBe('    NewObjectWithBuffer r2 n=? {<undecodable@shape5/0>}');
-    expect(
+    ).toThrow('undecodable');
+    expect(() =>
       normalizeDisassemblyLine(
         '    NewObjectWithBuffer r2, 1, 0',
         strings,
         resolver,
       ),
-    ).toBe('    NewObjectWithBuffer r2 n=1 {<undecodable@shape1/0>}');
+    ).toThrow('undecodable');
   });
 
   test('the shape index itself is not compared, only what it points at', () => {
