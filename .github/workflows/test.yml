@@ -102,6 +102,11 @@ jobs:
       - name: Load every built module and run the offline commands
         run: node scripts/smoke-lib.js
 
+      - name: Check late abort errors on the oldest supported Node.js
+        run: >-
+          node tests/fixtures/hermes-async-check.cjs
+          '{"operation":"abort","modulePath":"./lib/utils/hermes-base.js"}'
+
   publish-dry-run:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
