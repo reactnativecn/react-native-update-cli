@@ -133,7 +133,7 @@ export async function readLiteralBuffers(
 /**
  * Decode `count` literal values starting at byte `offset`. Null when the
  * offset or a run reaches outside the buffer or a tag type is unknown; the
- * caller reports that as a difference rather than guessing. `layout` decides
+ * caller fails verification rather than treating two failures as equivalent. `layout` decides
  * what type 6 means (see the file comment).
  */
 export function decodeSerializedLiterals(
@@ -142,6 +142,14 @@ export function decodeSerializedLiterals(
   count: number,
   layout: LiteralBuffers['layout'] = 'split',
 ): LiteralValue[] | null {
+  if (
+    !Number.isSafeInteger(offset) ||
+    !Number.isSafeInteger(count) ||
+    offset < 0 ||
+    count < 0 ||
+    count > 1_000_000
+  )
+    return null;
   const values: LiteralValue[] = [];
   let pos = offset;
   while (values.length < count) {
@@ -152,6 +160,7 @@ export function decodeSerializedLiterals(
       if (pos >= buffer.length) return null;
       length = (length << 8) | buffer[pos++];
     }
+    if (length === 0) return null;
     const type = tag & TAG_TYPE_MASK;
     for (let i = 0; i < length && values.length < count; i++) {
       switch (type) {
@@ -203,7 +212,7 @@ export function decodeSerializedLiterals(
 
 /**
  * One literal as text, string ids resolved through the dump's string table
- * (an unknown id stays visible as `?id`). Doubles keep their exact bits in
+ * (an unknown id fails closed). Doubles keep their exact bits in
  * the text so -0 and 0, or two NaNs, never collide by accident.
  */
 export function renderLiteral(
@@ -225,7 +234,9 @@ export function renderLiteral(
     }
     case 'string': {
       const text = strings.get(value.id);
-      return `[String ${text === undefined ? `?${value.id}` : JSON.stringify(text)}]`;
+      if (text === undefined)
+        throw new Error(`unresolved string id ${value.id}`);
+      return `[String ${JSON.stringify(text)}]`;
     }
   }
 }
@@ -283,7 +294,8 @@ export class LiteralResolver {
   /** Shape table entry (HBC v98); null out of range or in the split layout. */
   shape(index: number): { keyOffset: number; count: number } | null {
     const b = this.buffers;
-    if (b.layout !== 'shaped' || index < 0) return null;
+    if (b.layout !== 'shaped' || !Number.isSafeInteger(index) || index < 0)
+      return null;
     const at = index * SHAPE_ENTRY_SIZE;
     if (at + SHAPE_ENTRY_SIZE > b.shapes.length) return null;
     return {

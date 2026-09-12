@@ -661,7 +661,7 @@ describe('helpers', () => {
     ).toBe('    NewObjectWithBuffer r5 sizes=386');
     expect(
       normalizeDisassemblyLine('    JStrictEqualLong L12, r1, r2', strings),
-    ).toBe('    JStrictEqual <tgt>, r1, r2');
+    ).toBe('    JStrictEqual L12, r1, r2');
     expect(
       normalizeDisassemblyLine('    DefineOwnById r7, r8, 2, 11591', strings),
     ).toBe('    DefineOwnById r7, r8, 2, "foo"');
@@ -846,7 +846,7 @@ function legacyNormalize(
     return `${m[1]}${m[2] ?? ''} ${regs} sizes=${nums.slice(0, 1).join(',')}`;
   }
   m = /^(\s*J[A-Za-z]+?)(Long)?\s+(L\d+|\d+)(.*)$/.exec(line);
-  if (m) return `${m[1]} <tgt>${m[4]}`;
+  if (m) return `${m[1]} ${m[3]}${m[4]}`;
   m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)$/.exec(line);
   if (m) line = `${m[1]}"${strings.get(Number(m[2])) ?? `?${m[2]}`}"`;
   m = /^(\s*)([A-Za-z]+?)(?:LongIndex|Long|Short)?(\s+.*|)$/.exec(line);
@@ -864,6 +864,7 @@ describe('normalizeDisassemblyLine fast path', () => {
     const strings = new Map([
       [3, 'foo'],
       [42, 'bar'],
+      [7, 'known'],
     ]);
     const corpus = [
       'Offset in debug table: source 0x0, lexical 0x0',
@@ -1082,15 +1083,17 @@ describe.if(os.platform() !== 'win32')(
     });
     afterEach(() => fs.removeSync(dir));
 
-    test('a foreign-base compile is equivalent: ids, widths, buffers and debug tables differ only in representation', async () => {
+    test('matching text dumps without readable HBC metadata are unverifiable', async () => {
       const result = await compareHermesBytecode(
         fakeHermesc,
         write('delta.hbc', DELTA_DUMP),
         write('plain.hbc', PLAIN_DUMP),
       );
-      // fake dumps without HBC files behind them: buffers compared as a whole
+      // Equal human-readable text cannot establish bytecode equivalence.
       expect(result).toEqual({
-        status: 'equivalent',
+        status: 'dump-failed',
+        detail:
+          'unsupported or unreadable HBC layout; text-only comparison cannot verify equivalence',
         functions: 2,
         literals: 'buffer',
       });
@@ -1100,7 +1103,7 @@ describe.if(os.platform() !== 'win32')(
           write('d2.hbc', DELTA_DUMP),
           write('p2.hbc', PLAIN_DUMP),
         ),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     test("literal buffer content is compared through each side's string table", async () => {
@@ -1228,7 +1231,7 @@ describe.if(os.platform() !== 'win32')(
         write('plain.hbc', PLAIN_DUMP),
         { dumpTo },
       );
-      expect(result.status).toBe('equivalent');
+      expect(result.status).toBe('dump-failed');
       // the tee streams close on their own once the processes exit
       await new Promise((r) => setTimeout(r, 100));
       expect(fs.readFileSync(dumpTo.withBase, 'utf8')).toBe(DELTA_DUMP);

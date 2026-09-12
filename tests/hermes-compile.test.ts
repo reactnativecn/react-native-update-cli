@@ -199,6 +199,128 @@ exec "${hermesc}" "$@"
     expect(leftovers()).toEqual([]);
   });
 
+  test('a hanging base compile times out and reuses the successful plain compile', async () => {
+    const wrapperDir = path.join(
+      dir,
+      'node_modules/react-native/sdks/hermesc/linux64-bin',
+    );
+    fs.ensureDirSync(wrapperDir);
+    const wrapper = path.join(wrapperDir, 'hermesc');
+    const calls = path.join(dir, 'deadline-calls');
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh
+echo "$*" >> "${calls}"
+case "$*" in *-base-bytecode=*) exec "${process.execPath}" -e 'setInterval(() => {}, 1000)';; esac
+exec "${hermesc}" "$@"
+`,
+      { mode: 0o755 },
+    );
+    const previous = process.env.PUSHY_HERMES_COMPILE_TIMEOUT_MS;
+    process.env.PUSHY_HERMES_COMPILE_TIMEOUT_MS = '250';
+    try {
+      const result = await compileHermesByteCode({
+        bundleName,
+        outputFolder,
+        sourcemapOutput: '',
+        shouldCleanSourcemap: true,
+        baseRequest: { option: baseHbc, verify: true },
+        hermesCommand: wrapper,
+      });
+      expect(result.base).toBeNull();
+      expect(result.outcomeDetail).toContain('base compile failed');
+      expect(
+        getHbcVersion(fs.readFileSync(path.join(outputFolder, bundleName))),
+      ).toBe(probeHbcVersion(hermesc!)!);
+      const compiles = fs
+        .readFileSync(calls, 'utf8')
+        .split('\n')
+        .filter(
+          (line) =>
+            line.includes('-emit-binary') && line.includes(outputFolder),
+        );
+      expect(compiles).toHaveLength(2);
+      expect(leftovers()).toEqual([]);
+    } finally {
+      if (previous === undefined)
+        delete process.env.PUSHY_HERMES_COMPILE_TIMEOUT_MS;
+      else process.env.PUSHY_HERMES_COMPILE_TIMEOUT_MS = previous;
+    }
+  }, 5000);
+
+  test('an early speculative sourcemap rejection is observed before verification finishes', async () => {
+    const wrapperDir = path.join(
+      dir,
+      'node_modules/react-native/sdks/hermesc/linux64-bin',
+    );
+    const scripts = path.join(dir, 'node_modules/react-native/scripts');
+    fs.ensureDirSync(wrapperDir);
+    fs.ensureDirSync(scripts);
+    fs.writeJsonSync(path.join(dir, 'node_modules/react-native/package.json'), {
+      name: 'react-native',
+      version: '0.77.3',
+    });
+    const marker = path.join(dir, 'compose-attempted');
+    // The discarded base's composer fails immediately. After verification
+    // fails, composing the retained plain output must still succeed.
+    fs.writeFileSync(
+      path.join(scripts, 'compose-source-maps.js'),
+      `
+const fs = require('fs');
+if (!fs.existsSync(${JSON.stringify(marker)})) {
+  fs.writeFileSync(${JSON.stringify(marker)}, 'first');
+  throw new Error('speculative composer failed');
+}
+fs.writeFileSync(process.argv[process.argv.indexOf('-o') + 1], '{}');
+`,
+    );
+    const wrapper = path.join(wrapperDir, 'hermesc');
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh
+case "$*" in *-dump-bytecode*) sleep 0.25; exit 3;; esac
+exec "${hermesc}" "$@"
+`,
+      { mode: 0o755 },
+    );
+    const map = path.join(outputFolder, `${bundleName}.map`);
+    fs.writeFileSync(map, '{}');
+    const child = spawnSync(
+      process.execPath,
+      [
+        path.join(__dirname, 'fixtures/hermes-async-check.cjs'),
+        JSON.stringify({
+          operation: 'compile',
+          modulePath: require.resolve('../src/bundle-runner'),
+          cwd: dir,
+          options: {
+            bundleName,
+            outputFolder,
+            sourcemapOutput: map,
+            shouldCleanSourcemap: true,
+            baseRequest: { option: baseHbc, verify: true },
+            hermesCommand: wrapper,
+          },
+        }),
+      ],
+      { encoding: 'utf8', timeout: 4000 },
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.signal).toBeNull();
+    expect(child.status).toBe(0);
+    expect(child.stderr).not.toContain('HERMES_ASYNC_ERROR');
+    const line = child.stdout
+      .split('\n')
+      .find((value) => value.startsWith('HERMES_ASYNC_RESULT '));
+    expect(line).toBeDefined();
+    const result = JSON.parse(line!.slice('HERMES_ASYNC_RESULT '.length));
+    expect(fs.existsSync(marker)).toBe(true);
+    expect(result.outcome).toBe('dump-failed');
+    expect(result.base).toBeNull();
+    expect(fs.readFileSync(map, 'utf8')).toBe('{}');
+    expect(leftovers()).toEqual([]);
+  }, 5000);
+
   test('a selection started ahead of time is consumed by the compile', async () => {
     const pending = startHermesBaseSelection({
       option: baseHbc,
