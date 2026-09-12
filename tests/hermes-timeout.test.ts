@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { spawnSync } from 'child_process';
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
@@ -85,18 +86,45 @@ describe.if(process.platform !== 'win32')('Hermes subprocess deadlines', () => {
     }
   }, 2000);
 
-  test('an already-aborted request fails without an unhandled spawn error', async () => {
-    const controller = new AbortController();
-    controller.abort();
-    const result = await compareHermesBytecode(
-      hanging,
-      'missing-a',
-      'missing-b',
-      {
-        signal: controller.signal,
-        timeoutMs: 500,
-      },
+  test('an already-aborted request has no late unhandled errors in an isolated process', () => {
+    const child = spawnSync(
+      process.execPath,
+      [
+        path.join(__dirname, 'fixtures/hermes-async-check.cjs'),
+        JSON.stringify({
+          operation: 'abort',
+          modulePath: require.resolve('../src/utils/hermes-base'),
+          command: hanging,
+        }),
+      ],
+      { encoding: 'utf8', timeout: 1500 },
     );
-    expect(result.status).toBe('dump-failed');
+    expect(child.error).toBeUndefined();
+    expect(child.signal).toBeNull();
+    expect(child.status).toBe(0);
+    expect(child.stderr).not.toContain('HERMES_ASYNC_ERROR');
+    expect(child.stdout).toContain('"status":"dump-failed"');
   }, 2000);
+});
+
+describe('isolated async-error observer negative controls', () => {
+  for (const [operation, event] of [
+    ['control-rejection', 'unhandledRejection'],
+    ['control-exception', 'uncaughtException'],
+  ]) {
+    test(`fails for a late ${event}`, () => {
+      const child = spawnSync(
+        process.execPath,
+        [
+          path.join(__dirname, 'fixtures/hermes-async-check.cjs'),
+          JSON.stringify({ operation }),
+        ],
+        { encoding: 'utf8', timeout: 1500 },
+      );
+      expect(child.error).toBeUndefined();
+      expect(child.signal).toBeNull();
+      expect(child.status).toBe(1);
+      expect(child.stderr).toContain(`HERMES_ASYNC_ERROR ${event}`);
+    }, 2000);
+  }
 });

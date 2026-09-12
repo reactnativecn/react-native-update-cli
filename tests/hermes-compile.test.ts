@@ -285,30 +285,40 @@ exec "${hermesc}" "$@"
     );
     const map = path.join(outputFolder, `${bundleName}.map`);
     fs.writeFileSync(map, '{}');
-    const cwd = process.cwd();
-    const unhandled: unknown[] = [];
-    const onUnhandled = (error: unknown) => unhandled.push(error);
-    process.on('unhandledRejection', onUnhandled);
-    process.chdir(dir);
-    try {
-      const result = await compileHermesByteCode({
-        bundleName,
-        outputFolder,
-        sourcemapOutput: map,
-        shouldCleanSourcemap: true,
-        baseRequest: { option: baseHbc, verify: true },
-        hermesCommand: wrapper,
-      });
-      expect(fs.existsSync(marker)).toBe(true);
-      expect(result.outcome).toBe('dump-failed');
-      expect(result.base).toBeNull();
-      expect(unhandled).toEqual([]);
-      expect(fs.readFileSync(map, 'utf8')).toBe('{}');
-      expect(leftovers()).toEqual([]);
-    } finally {
-      process.chdir(cwd);
-      process.off('unhandledRejection', onUnhandled);
-    }
+    const child = spawnSync(
+      process.execPath,
+      [
+        path.join(__dirname, 'fixtures/hermes-async-check.cjs'),
+        JSON.stringify({
+          operation: 'compile',
+          modulePath: require.resolve('../src/bundle-runner'),
+          cwd: dir,
+          options: {
+            bundleName,
+            outputFolder,
+            sourcemapOutput: map,
+            shouldCleanSourcemap: true,
+            baseRequest: { option: baseHbc, verify: true },
+            hermesCommand: wrapper,
+          },
+        }),
+      ],
+      { encoding: 'utf8', timeout: 4000 },
+    );
+    expect(child.error).toBeUndefined();
+    expect(child.signal).toBeNull();
+    expect(child.status).toBe(0);
+    expect(child.stderr).not.toContain('HERMES_ASYNC_ERROR');
+    const line = child.stdout
+      .split('\n')
+      .find((value) => value.startsWith('HERMES_ASYNC_RESULT '));
+    expect(line).toBeDefined();
+    const result = JSON.parse(line!.slice('HERMES_ASYNC_RESULT '.length));
+    expect(fs.existsSync(marker)).toBe(true);
+    expect(result.outcome).toBe('dump-failed');
+    expect(result.base).toBeNull();
+    expect(fs.readFileSync(map, 'utf8')).toBe('{}');
+    expect(leftovers()).toEqual([]);
   }, 5000);
 
   test('a selection started ahead of time is consumed by the compile', async () => {

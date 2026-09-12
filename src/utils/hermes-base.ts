@@ -1150,13 +1150,18 @@ export function normalizeDisassemblyLine(
   return line;
 }
 
-/** Only formatting outside quoted operands may be collapsed. */
+/**
+ * Collapse formatting outside quoted operands without altering literal code units.
+ * ASCII dump spacing takes the char-code fast path; uncommon Unicode characters
+ * retain the complete runtime `\s` semantics instead of a narrower space list.
+ */
 function normalizeOperandSpacing(text: string): string {
   let result = '';
   let quoted = false;
   let escaped = false;
   let spacing = false;
-  for (const char of text) {
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
     if (quoted) {
       result += char;
       if (escaped) escaped = false;
@@ -1164,7 +1169,12 @@ function normalizeOperandSpacing(text: string): string {
       else if (char === '"') quoted = false;
       continue;
     }
-    if (/\s/.test(char)) {
+    const code = text.charCodeAt(i);
+    const whitespace =
+      code <= 0x7f
+        ? isSpace(code) || (code >= 0x0a && code <= 0x0c)
+        : /\s/.test(char);
+    if (whitespace) {
       if (!spacing) result += ' ';
       spacing = true;
     } else {
@@ -1343,6 +1353,7 @@ class DumpReader {
     });
   }
 
+  /** Consume lookahead first, then the stream; null is reserved for EOF. */
   private async nextLine(): Promise<string | null> {
     if (this.pending !== null) {
       const line = this.pending;

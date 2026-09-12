@@ -31,3 +31,61 @@ describe('Hermes-base normalization must retain semantic differences', () => {
     );
   });
 });
+
+/** Previous spacing implementation, kept as an independent compatibility oracle. */
+function referenceSpacing(text: string): string {
+  let result = '';
+  let quoted = false;
+  let escaped = false;
+  let spacing = false;
+  for (const char of text) {
+    if (quoted) {
+      result += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (!spacing) result += ' ';
+      spacing = true;
+    } else {
+      result += char;
+      spacing = false;
+      if (char === '"') quoted = true;
+    }
+  }
+  return result;
+}
+
+describe('Hermes operand spacing compatibility', () => {
+  test('matches the previous whitespace behavior for every UTF-16 code unit', () => {
+    const mismatches: number[] = [];
+    for (let code = 0; code <= 0xffff; code++) {
+      const operands = ` r0, ${String.fromCharCode(code)} r1`;
+      if (
+        normalize(`    Mov${operands}`) !==
+        `    Mov${referenceSpacing(operands)}`
+      ) {
+        mismatches.push(code);
+      }
+    }
+    expect(mismatches).toEqual([]);
+  });
+
+  test('preserves whitespace, escapes and surrogate pairs inside quotes', () => {
+    const whitespace =
+      '\t\n\v\f\r \u00a0\u1680\u2000\u2028\u2029\u202f\u205f\u3000\ufeff';
+    const operands = [
+      ` r0, "a${whitespace}b"`,
+      String.raw` r0, "a\"  b\\  c",  r1`,
+      ` r0, "😀  𠮷\ud800\udfff",\u00a0\ufeffr1`,
+      ' r0, \u0085\u180e\u200b r1',
+    ];
+    for (const operand of operands) {
+      expect(normalize(`    Mov${operand}`)).toBe(
+        `    Mov${referenceSpacing(operand)}`,
+      );
+    }
+  });
+});

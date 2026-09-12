@@ -16,6 +16,7 @@ import { type LiteralBuffers, LiteralResolver } from './hermes-literals';
 
 export class UnverifiableHermesBytecode extends Error {}
 
+/** Fail closed on missing references rather than comparing equal placeholders. */
 function requireValue<T>(value: T | null | undefined, what: string): T {
   if (value === null || value === undefined) {
     throw new UnverifiableHermesBytecode(what);
@@ -23,6 +24,7 @@ function requireValue<T>(value: T | null | undefined, what: string): T {
   return value;
 }
 
+/** Bound a reference to its owning section before creating a zero-copy view. */
 function checkedSlice(data: Buffer, start: number, length: number): Buffer {
   if (
     !Number.isSafeInteger(start) ||
@@ -248,10 +250,15 @@ interface RawInstruction {
   size: number;
 }
 
+/** Remove encoding-width suffixes; operand values remain part of the audit. */
 function foldWidth(opcode: string): string {
   return opcode.replace(/(?:LongIndex|Long|Short)$/, '');
 }
 
+/**
+ * Read raw operand boundaries and verify integer values against the HBC bytes.
+ * Doubles use their exact bits, not the rounded number printed by hermesc.
+ */
 function parseRawInstruction(
   line: string,
   data: HermesSemanticData,
@@ -460,6 +467,7 @@ export interface RawAuditResult {
   detail?: string;
 }
 
+/** Decode split UTF-8 sequences without buffering the whole raw dump. */
 async function* linesOf(stream: NodeJS.ReadableStream): AsyncGenerator<string> {
   const decoder = new StringDecoder('utf8');
   let rest = '';
@@ -476,7 +484,10 @@ async function* linesOf(stream: NodeJS.ReadableStream): AsyncGenerator<string> {
   if (rest) yield rest;
 }
 
-/** A second, raw pass: no additional compile, and only one function in memory. */
+/**
+ * Audit a pair of raw dumps while retaining one function per side plus HBC data.
+ * Cancellation/errors fail closed; both subprocesses are terminated and reaped.
+ */
 export async function auditRawHermesBytecode(
   command: string,
   files: [string, string],
