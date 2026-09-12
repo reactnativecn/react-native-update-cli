@@ -4,7 +4,10 @@ import { createHash } from 'crypto';
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-import { compareHermesBytecode } from '../src/utils/hermes-base';
+import {
+  compareHermesBytecode,
+  probeHbcVersion,
+} from '../src/utils/hermes-base';
 import { readHermesSemanticData } from '../src/utils/hermes-raw';
 
 const hermesc = process.env.HERMESC;
@@ -30,7 +33,12 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
   });
   afterEach(() => fs.removeSync(dir));
 
-  const compile = (name: string, source: string, base?: string) => {
+  const compile = (
+    name: string,
+    source: string,
+    base?: string,
+    extra: string[] = [],
+  ) => {
     const input = path.join(dir, `${name}.js`);
     const output = path.join(dir, `${name}.hbc`);
     fs.writeFileSync(input, source);
@@ -45,6 +53,7 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
         output,
         input,
         ...(base ? [`-base-bytecode=${base}`] : []),
+        ...extra,
       ],
       { encoding: 'utf8', timeout: 10_000 },
     );
@@ -115,6 +124,27 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
       'different',
     );
   });
+
+  test.skipIf(!hasHermesc || probeHbcVersion(hermesc!) === 98)(
+    'classic global lexical declarations resolve restricted-property string IDs',
+    async () => {
+      const base = compile('lexical-base', 'print("old-base-string");');
+      const source =
+        'let sharedPrefixGlobalLexical = "value"; print(sharedPrefixGlobalLexical);';
+      const plain = compile('lexical-plain', source, undefined, [
+        '-block-scoping',
+      ]);
+      const delta = compile('lexical-delta', source, base, ['-block-scoping']);
+      const op = /ThrowIfHasRestrictedGlobalProperty (\d+)<UInt32>/;
+      const plainId = op.exec(dump(plain, false));
+      const deltaId = op.exec(dump(delta, false));
+      expect(plainId).not.toBeNull();
+      expect(deltaId).not.toBeNull();
+      expect(plainId![1]).not.toBe(deltaId![1]);
+      const result = await compareHermesBytecode(hermesc!, delta, plain);
+      expect(result.status, result.detail).toBe('equivalent');
+    },
+  );
 
   test('same-name closures cannot hide a changed function reference', async () => {
     const file = compile(

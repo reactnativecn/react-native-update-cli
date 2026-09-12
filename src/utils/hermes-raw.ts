@@ -97,6 +97,14 @@ export async function readHermesSemanticData(
   }
   const string = (id: number) =>
     requireValue(strings.get(id), `unresolved string id ${id}`);
+  // Audited v98 function schema: hermes-compiler 250829098.0.16/.17
+  // (250829098 stable snapshot), NOT every static_h build reporting HBC 98.
+  // Large headers: 37 bytes, flags[36]; small cache bits: 6/1/1. Upstream
+  // 7193d4485beeb87cd7a3b6ca8b6b5d97a1a433c4 removed NumCacheNewObject
+  // without immediately bumping HBC: 36 bytes/flags[35], cache bits 7/1.
+  // hbcTransform's file-header variants do not distinguish that function
+  // schema change. A compiler upgrade needs independent large/small fixtures;
+  // do not infer either schema from numStringSwitchImms or HBC version alone.
   const shaped = resolved.version === 98;
   const entrySize = shaped ? 12 : 16;
   const headers = section('functionHeaders');
@@ -225,6 +233,7 @@ const OPERAND_BYTES: Record<string, number> = {
 // DefineOwnById annotation supplied explicitly. Keep classic and v98 variants.
 const STRING_OPERANDS: Record<string, number[]> = {
   DeclareGlobalVar: [0],
+  ThrowIfHasRestrictedGlobalProperty: [0],
   GetById: [3],
   GetByIdWithReceiver: [4],
   TryGetById: [3],
@@ -340,7 +349,10 @@ export function normalizeRawHermesFunction(
     targets.set(inst.offset, index);
     end += inst.size;
   }
-  if (end !== fn.size || instructions.length === 0) {
+  // Static Hermes retains legal zero-byte (dead) functions in the table.
+  // Their metadata is still audited, and the raw reader still requires every
+  // function header. Only a body shorter/longer than its declared size fails.
+  if (end !== fn.size) {
     throw new UnverifiableHermesBytecode(
       'raw dump ended before the function body',
     );

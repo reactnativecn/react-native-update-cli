@@ -37,6 +37,25 @@ async function main() {
     );
     assert.equal(result.status, 'dump-failed');
     assert.match(result.detail, /abort/i);
+  } else if (config.operation === 'verify') {
+    const { compareHermesBytecode } = require(path.resolve(config.modulePath));
+    const controller = new AbortController();
+    let timer;
+    if (config.abortAfterMs === 0) controller.abort();
+    else if (config.abortAfterMs !== undefined) {
+      timer = setTimeout(() => controller.abort(), config.abortAfterMs);
+    }
+    try {
+      result = await compareHermesBytecode(
+        config.command,
+        'missing-a',
+        'missing-b',
+        { ...config.options, signal: controller.signal },
+      );
+      assert.equal(result.status, 'dump-failed');
+    } finally {
+      clearTimeout(timer);
+    }
   } else if (config.operation === 'compile') {
     const { compileHermesByteCode } = require(path.resolve(config.modulePath));
     result = await compileHermesByteCode(config.options);

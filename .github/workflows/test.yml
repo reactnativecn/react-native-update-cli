@@ -107,6 +107,11 @@ jobs:
           node tests/fixtures/hermes-async-check.cjs
           '{"operation":"abort","modulePath":"./lib/utils/hermes-base.js"}'
 
+      - name: Check debug-output failure cleanup on Node 18
+        env:
+          HERMES_TEST_NODE: node
+        run: bun test tests/hermes-blockers.test.ts
+
   publish-dry-run:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
@@ -141,7 +146,7 @@ jobs:
         run: npm publish --dry-run --access public --tag dry-run
 
   hermes-integration:
-    name: hermes-hbc-${{ matrix.hbc }}
+    name: hermes-hbc-${{ matrix.hbc }}${{ matrix.suffix }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     strategy:
@@ -149,11 +154,18 @@ jobs:
       matrix:
         include:
           - hbc: 96
+            suffix: ""
             package: react-native@0.77.3
             directory: react-native
             executable: sdks/hermesc/linux64-bin/hermesc
           - hbc: 98
+            suffix: ""
             package: hermes-compiler@250829098.0.16
+            directory: hermes-compiler
+            executable: hermesc/linux64-bin/hermesc
+          - hbc: 98
+            suffix: -patch17
+            package: hermes-compiler@250829098.0.17
             directory: hermes-compiler
             executable: hermesc/linux64-bin/hermesc
     steps:
@@ -184,6 +196,20 @@ jobs:
           "$HERMESC" -version
           bun -e 'import {probeHbcVersion} from "./src/utils/hermes-base"; if (probeHbcVersion(process.env.HERMESC) !== Number(process.env.EXPECTED_HBC)) throw new Error("unexpected HBC version");'
           echo "HERMESC=$HERMESC" >> "$GITHUB_ENV"
+      - name: Fetch pinned real Metro fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/hermes-metro-fixtures"
+          mkdir -p "$root"
+          base="https://raw.githubusercontent.com/sunnylqm/hbc-diff-benchmark/e6a870a1c26c4b64c7860d7e1aa575707d22ad88"
+          for file in base.jsbundle s3-medium-feature.jsbundle; do
+            curl --fail --location --retry 2 --max-time 60 "$base/fixtures/$file" -o "$root/$file"
+          done
+          curl --fail --location --retry 2 --max-time 60 "$base/LICENSE" -o "$root/LICENSE"
+          echo "11c8ad8f7e8c7c59ee45582c77d896a35fa646617f3ba0f5b338a425a7c93b7d  $root/base.jsbundle" | sha256sum --check
+          echo "a693e68254b6c13fae8f839d20c14f9d11c5ab98d4be1b8d13ba1e929a12d752  $root/s3-medium-feature.jsbundle" | sha256sum --check
+          echo "HERMES_METRO_FIXTURES=$root" >> "$GITHUB_ENV"
       - name: Run real compiler and fallback regressions
         run: bun test tests/hermes-*.test.ts
       - name: Run seeded differential fuzzing
@@ -192,6 +218,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: hermes-fuzz-hbc-${{ matrix.hbc }}
+          name: hermes-fuzz-hbc-${{ matrix.hbc }}${{ matrix.suffix }}
           path: ${{ runner.temp }}/hermes-fuzz
           if-no-files-found: ignore

@@ -1134,14 +1134,16 @@ export function normalizeDisassemblyLine(
     // the table header hermesc prints for them) moves with instruction widths.
     // The two switch instructions carry that offset in different operands:
     //   StringSwitchImm rX, <id>, <jtOffset>, <defaultLabel>, <count>
-    //   UIntSwitchImm   rX, <jtOffset>, <defaultLabel>, <min>, <max>
+    //   UIntSwitchImm (classic: SwitchImm) rX, <jtOffset>, <defaultLabel>, <min>, <max>
     // Folding only the first shape let a shifted UIntSwitchImm offset read as a
     // real difference and drop an otherwise good delta build.
     if (folded === 'StringSwitchImm') {
       m = /^(\s*StringSwitchImm r\d+, \d+, )\d+(, L\d+, \d+)$/.exec(line);
       if (m) line = `${m[1]}<jt>${m[2]}`;
-    } else if (folded === 'UIntSwitchImm') {
-      m = /^(\s*UIntSwitchImm r\d+, )\d+(, L\d+, \d+, \d+)$/.exec(line);
+    } else if (folded === 'UIntSwitchImm' || folded === 'SwitchImm') {
+      m = /^(\s*(?:UIntSwitchImm|SwitchImm) r\d+, )\d+(, L\d+, \d+, \d+)$/.exec(
+        line,
+      );
       if (m) line = `${m[1]}<jt>${m[2]}`;
     } else if (folded === 'offset' && /^\s*offset \d+$/.test(line)) {
       line = line.replace(/\d+$/, '<jt>');
@@ -1341,9 +1343,12 @@ class DumpReader {
       let processError: Error | undefined;
       // a spawn failure (ENOENT) may leave stdout open and never 'close'
       proc.on('error', (error) => {
-        proc.stdout?.unpipe(pass);
+        // destroy() need not emit end, so pipe() will not finish its sinks.
+        // End the debug file here: finish() awaits it before finally/kill().
+        proc.stdout?.unpipe();
         proc.stdout?.destroy();
         pass.end();
+        this.debugOutput?.end();
         processError = error;
         if (!proc.pid) resolve({ code: null, signal: null, error, stderr });
       });
