@@ -22,4 +22,11 @@ export const pricingPageUrl = IS_CRESC
 
 export const defaultEndpoints = IS_CRESC
   ? ['https://api.cresc.dev', 'https://api.cresc.app']
-  : ['https://update.reactnative.cn/api', 'https://update.react-native.cn/api'];
+  : [
+      'https://1.rnupdate.online/api',
+      'https://2.rnupdate.online/api',
+      'https://3.rnupdate.online/api',
+      'https://4.rnupdate.online/api',
+      'https://update.reactnative.cn/api',
+      'https://update.react-native.cn/api',
+    ];
