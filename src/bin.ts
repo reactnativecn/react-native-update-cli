@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { showCurrentAccount } from './account';
 import { loadSession } from './api';
 import { commandNames, loadCommandHandler } from './commands';
 import { printVersionCommand } from './utils';
@@ -97,6 +98,9 @@ async function run() {
     const handler = loadCommandHandler(argv.command);
     if (!handler) {
       throw new Error(t('unknownCommand', { command: argv.command }));
+    }
+    if (argv.command !== 'me') {
+      showCurrentAccount();
     }
     await handler(argv);
     // a check still in flight (cold cache) gets a short grace period; the

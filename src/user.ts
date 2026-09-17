@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { printAccountInfo } from './account';
 import { closeSession, get, post, replaceSession, saveSession } from './api';
 import type { CommandContext } from './types';
 import { question } from './utils';
@@ -36,6 +37,7 @@ export const userCommands = {
   },
   me: async () => {
     const me = await get('/user/me');
+    printAccountInfo(me);
     for (const k in me) {
       if (k !== 'ok') {
         console.log(`${k}: ${me[k]}`);

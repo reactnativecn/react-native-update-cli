@@ -14,13 +14,6 @@ mock.module('tty-table', () => {
   return { default: mockTable };
 });
 mock.module('read', () => ({ read: () => {} }));
-mock.module('chalk', () => ({
-  default: {
-    green: (s: string) => s,
-    red: (s: string) => s,
-    yellow: (s: string) => s,
-  },
-}));
 mock.module('compare-versions', () => ({
   satisfies: () => true,
 }));

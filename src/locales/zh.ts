@@ -1,4 +1,11 @@
 export default {
+  accountSummary:
+    '当前账号：{{account}} | 等级：{{tier}} | 有效期至：{{expiry}}',
+  accountUnknown: '未知',
+  accountNoExpiry: '未设置有效期',
+  accountRenewalWarning:
+    '[警告] 您的 Pushy 付费套餐将在 {{days}} 天内到期，请及时续费，以免影响服务：{{url}}',
+  accountLookupFailed: '[警告] 暂时无法获取账号信息，将继续执行命令。',
   addedToGitignore: '已将 {{line}} 添加到 .gitignore',
   androidCrunchPngsWarning:
     'android 的 crunchPngs 选项似乎尚未禁用（如已禁用则请忽略此提示），这可能导致热更包体积异常增大，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8-android-%E7%9A%84-crunch-%E4%BC%98%E5%8C%96 \n',

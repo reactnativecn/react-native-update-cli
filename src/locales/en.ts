@@ -1,4 +1,12 @@
 export default {
+  accountSummary:
+    'Account: {{account}} | Plan: {{tier}} | Expires at: {{expiry}}',
+  accountUnknown: 'Unknown',
+  accountNoExpiry: 'No expiry specified',
+  accountRenewalWarning:
+    '[Warning] Your Pushy paid plan expires in {{days}} days. Renew soon to avoid service disruption: {{url}}',
+  accountLookupFailed:
+    '[Warning] Unable to retrieve account information. Continuing with the command.',
   addedToGitignore: 'Added {{line}} to .gitignore',
   androidCrunchPngsWarning:
     'The crunchPngs option of android seems not disabled (Please ignore this warning if already disabled), which may cause abnormal consumption of mobile network traffic. Please refer to https://cresc.dev/docs/getting-started#disable-crunchpngs-on-android \n',
