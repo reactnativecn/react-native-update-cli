@@ -4,7 +4,7 @@ export default {
   accountUnknown: 'Unknown',
   accountNoExpiry: 'No expiry specified',
   accountRenewalWarning:
-    '[Warning] Your Pushy paid plan expires in {{days}} days. Renew soon to avoid service disruption: {{url}}',
+    '[Notice] Your Pushy paid plan expires in {{days}} days. Renew soon to avoid service disruption: {{url}}',
   accountLookupFailed:
     '[Warning] Unable to retrieve account information. Continuing with the command.',
   addedToGitignore: 'Added {{line}} to .gitignore',
