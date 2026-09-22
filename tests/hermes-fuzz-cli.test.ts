@@ -14,16 +14,21 @@ describe.skipIf(os.platform() === 'win32')(
       try {
         const compiler = path.join(dir, 'hermesc');
         const out = path.join(dir, 'cases');
+        const calls = path.join(dir, 'compiler-called');
         writeFileSync(
           compiler,
-          '#!/bin/sh\necho deliberate compiler failure >&2\nexit 1\n',
+          '#!/bin/sh\n: > "$HERMES_TEST_COMPILER_CALLS"\necho deliberate compiler failure >&2\nexit 1\n',
           { mode: 0o755 },
         );
         const result = spawnSync(
           process.execPath,
           [script, '--rounds', '2', '--seed', '7', '--out', out],
           {
-            env: { ...process.env, HERMESC: compiler },
+            env: {
+              ...process.env,
+              HERMESC: compiler,
+              HERMES_TEST_COMPILER_CALLS: calls,
+            },
             encoding: 'utf8',
             timeout: 10_000,
           },
@@ -32,6 +37,7 @@ describe.skipIf(os.platform() === 'win32')(
         expect(result.status).toBe(1);
         expect(result.stdout).toContain('equivalent: 0');
         expect(result.stdout).toContain('compile errors (generator): 2');
+        expect(existsSync(calls)).toBe(true);
         expect(
           existsSync(path.join(out, 'round-0000', 'compile-error.txt')),
         ).toBe(true);
@@ -42,6 +48,52 @@ describe.skipIf(os.platform() === 'win32')(
         rmSync(dir, { recursive: true, force: true });
       }
     }, 15_000);
+
+    test.each([
+      { args: ['--rounds'] },
+      { args: ['--rounds', '--verbose'] },
+      { args: ['--rounds', '--seed', '7'] },
+      { args: ['--rounds', ''] },
+    ])(
+      'missing round values fail before starting any work: %j',
+      ({ args }) => {
+        const dir = mkdtempSync(path.join(os.tmpdir(), 'rnu-fuzz-args-'));
+        try {
+          const compiler = path.join(dir, 'hermesc');
+          const out = path.join(dir, 'cases');
+          const calls = path.join(dir, 'compiler-called');
+          writeFileSync(
+            compiler,
+            '#!/bin/sh\n: > "$HERMES_TEST_COMPILER_CALLS"\nexit 1\n',
+            { mode: 0o755 },
+          );
+          const result = spawnSync(
+            process.execPath,
+            [script, '--out', out, ...args],
+            {
+              env: {
+                ...process.env,
+                HERMESC: compiler,
+                HERMES_TEST_COMPILER_CALLS: calls,
+              },
+              encoding: 'utf8',
+              timeout: 10_000,
+            },
+          );
+          expect(result.error).toBeUndefined();
+          expect(result.status).toBe(2);
+          expect(result.stderr).toContain(
+            '--rounds must be a positive safe integer',
+          );
+          expect(result.stdout).not.toContain('fuzz-hermes-base:');
+          expect(existsSync(calls)).toBe(false);
+          expect(existsSync(out)).toBe(false);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      },
+      15_000,
+    );
 
     test.each(['0', '-1', '0.5', 'NaN'])(
       'invalid round count %s cannot produce a green empty run',

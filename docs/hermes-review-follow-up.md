@@ -41,3 +41,12 @@ is not currently covered by the raw instruction normalizer alone.
 Local validation in the authoring environment is limited to Node.js execution of
 transpiled helpers and synthetic fixtures; Bun and hermesc are not installed.
 The PR description records the subsequent CI state separately.
+
+## CodeRabbit argument-validation follow-up
+
+Only an omitted `--rounds` flag selects the default of 200. A flag without a
+value, an empty value, or a following option is rejected with exit code 2 before
+creating the output directory or invoking the compiler. Four CLI regressions
+use an executable compiler fixture with a call marker to verify those side
+effects do not occur; the valid-count control verifies the marker does work.
+Argument-reading, compilation and run-entry functions now document their contracts.

@@ -36,13 +36,17 @@ import { hermesFuzzSucceeded } from './hermes-fuzz-result';
 // arguments
 // ---------------------------------------------------------------------------
 
+/** Read a flag's next token; undefined alone does not imply flag omission. */
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
   if (index < 0) return undefined;
   return process.argv[index + 1];
 }
 
-const ROUNDS = Number(argValue('rounds') ?? 200);
+// Only an omitted flag uses the default; a missing value becomes NaN.
+const ROUNDS = Number(
+  process.argv.includes('--rounds') ? argValue('rounds') : 200,
+);
 if (!Number.isSafeInteger(ROUNDS) || ROUNDS <= 0) {
   console.error('--rounds must be a positive safe integer');
   process.exit(2);
@@ -541,6 +545,7 @@ class Gen {
 // compile + compare
 // ---------------------------------------------------------------------------
 
+/** Compile a generated source, returning diagnostics on compiler failure. */
 function compile(
   input: string,
   out: string,
@@ -572,6 +577,7 @@ interface Finding {
   count: number;
 }
 
+/** Run seeded comparisons and exit successfully only with effective coverage. */
 async function main() {
   const rng = new Rng(SEED);
   const gen = new Gen(rng);
