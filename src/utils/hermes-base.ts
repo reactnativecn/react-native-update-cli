@@ -19,6 +19,7 @@ import { PassThrough, Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { tempDir } from './constants';
 import { getHbcVersion } from './hbcTransform';
+import { normalizeCachedObjectInstruction } from './hermes-cached-object';
 import {
   type LiteralBuffers,
   LiteralResolver,
@@ -1080,6 +1081,9 @@ export function normalizeDisassemblyLine(
   const opcode = line.slice(indent, opEnd);
   if (opcode === 'Offset' && line.startsWith('Offset in debug table', indent)) {
     return null;
+  }
+  if (opcode === 'CacheNewObject') {
+    return normalizeCachedObjectInstruction(line, literals);
   }
   let m: RegExpExecArray | null;
   if (opcode.startsWith('New') && opcode.includes('WithBuffer')) {
