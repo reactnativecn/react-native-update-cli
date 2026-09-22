@@ -28,18 +28,16 @@ describe('Hermes fuzz mutations use actual string boundaries', () => {
       String.raw`const pattern = /["']/;`,
       'const template = `text "raw" ${"actual"}`;',
     ].join('\n');
-    expect(fuzzStringLiterals(source).map((literal) => literal.value)).toEqual(
-      ['actual'],
-    );
+    const values = fuzzStringLiterals(source).map((literal) => literal.value);
+    expect(values).toEqual(['actual']);
   });
 
   test('retains UTF-16 source offsets and decodes escaped values', () => {
-    const source = String.raw`var x = "😀"; var y = "\u4e2d";`;
+    // Use a cooked string: Bun may escape non-ASCII in a tagged raw template.
+    const source = 'var x = "😀"; var y = "\\u4e2d";';
     const literals = fuzzStringLiterals(source);
     expect(literals.map((literal) => literal.value)).toEqual(['😀', '中']);
-    expect(literals.map(({ start, end }) => source.slice(start, end))).toEqual([
-      '"😀"',
-      String.raw`"\u4e2d"`,
-    ]);
+    const spellings = literals.map(({ start, end }) => source.slice(start, end));
+    expect(spellings).toEqual(['"😀"', '"\\u4e2d"']);
   });
 });
