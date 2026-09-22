@@ -27,7 +27,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-
+import { failureFingerprint } from '../src/utils/failure-fingerprint';
 import { compareHermesBytecode } from '../src/utils/hermes-base';
 import { fuzzStringLiterals } from './hermes-fuzz-literals';
 import { hermesFuzzSucceeded } from './hermes-fuzz-result';
@@ -560,14 +560,13 @@ function compile(
   return (run.stderr || run.stdout || `exit ${run.status}`).trim();
 }
 
-/** collapse ids/offsets/registers so one normalization gap counts once */
-function dedupeKey(detail: string): string {
-  return detail
-    .replace(/Function<[^>]*>/g, 'Function<…>')
-    .replace(/\br\d+\b/g, 'r#')
-    .replace(/\d+/g, '#')
-    .replace(/"[^"]*"/g, '"…"');
-}
+/**
+ * Collapse ids/offsets/registers so one normalization gap counts once. This is
+ * the same key the CLI reports and the server groups by: a finding here and
+ * the same defect seen in the field have to land in one bucket, which they
+ * only do while both sides call this one function.
+ */
+const dedupeKey = failureFingerprint;
 
 interface Finding {
   key: string;

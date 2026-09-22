@@ -59,6 +59,8 @@ pretty 输出本身会截断长字符串与 BigInt、用函数名替代函数索
 
 CLI（`26764b1`）在 `version/create` 附带 `hermesBaseOutcome: 'used' | 'rejected' | 'dump-failed' | 'none'` 与可选 `hermesBaseDetail`（首处差异或失败原因，≤ 500 个码点）。规则同其它链路字段：只发已知值、绝不发 JSON null、未知就省略字段（单独 `pushy publish` 一个 ppk 时没有校验结果，字段不出现）。outcome 从 `HermesCompileResult.outcome` 带出，与 `base` 分开：base 被拒时 `base` 仍为 null，但 outcome 说明是被拒而不是没找到。base 编译本身失败记为 `none` 并附 `base compile failed: …`。
 
+上报前 detail 会经 `src/utils/failure-fingerprint.ts` 的 `redactFailureDetail` 脱敏：引号内的字符串操作数、`Function<…>` 的函数名、编译器 stderr 里的路径都换成 `str#<hash8>/<长度>` / `fn#<hash8>` / `path#<hash8>.<ext>`，指令形态、寄存器、计数原样保留。本地控制台仍打印未脱敏的原文——属性名在本机排查时才有用；离开这台机器的那份不该带客户代码。同时上报 `hermesBaseFingerprint`（脱敏后再抹掉寄存器号/id/偏移，取 SHA-256 前 16 字节，32 个十六进制字符），同一个缺陷在不同 app、不同寄存器分配下归到同一组。**这个指纹函数只有一份实现**：上报、`scripts/fuzz-hermes-base.ts` 的去重、以后的线上语料回放共用它和同一套测试，否则聚合出来的次数是假的。
+
 服务端（pushy-go 分支 `hermes-base-outcome`，提交 `9208c24`）新增可空列 `versions.hermesBaseOutcome` / `hermesBaseDetail`，解析器接受缺字段与 JSON null，只拒绝类型错误与未知枚举值；版本列表接口一并透出。全体应用的拒绝率：
 
 ```sql
