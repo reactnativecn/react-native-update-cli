@@ -37,7 +37,9 @@ v98 的 shape 索引和 offset 一样只用于定位（delta 可能重排 shape 
 
 为什么不能按 dump 的整段文本比：Hermes 的缓冲区构建器会**重叠/去重**序列化后的字面量——一个字面量的最后一个值字节可以同时是下一个字面量的 tag 字节（模糊测试实测：`61 52 | cd 09 b3 05 11`，前一段以 `[String 82]` 结尾，后一条指令的 offset 正指向 `52`）。顺序解析整段缓冲区（hermesc 的 dump 就是这么打印的）从这里开始失步，之后的条目全是噪声；delta 构建的 id 宽度不同，重叠位置也不同，于是两段"噪声"在某处不一致就被判为差异。2026-09-10 的 20 轮冒烟模糊测试里 3 次误杀全部源于此，改按指令比较后全部等价。无法读二进制缓冲区（文件结构不识别）时两侧一起比较整段文本，仅辅助诊断；即使文本相等也返回 `dump-failed` 并回退 plain，不能以丢失 offset/count 的文本确认等价。结果里 `literals: 'buffer'` 标明这一点。
 
-`normalizeDisassemblyLine` 只折叠表示层差异：按指令解析后的字面量地址、已知宽度后缀、引号外的列对齐空白、switch 表的物理偏移（含经典 `SwitchImm`）、debug 偏移。字符串内部的连续空格、跳转目标标签、寄存器均保留。未知 string ID、无法解码的字面量、未知 buffer 操作数形态直接失败；两侧都无法解析也不等价。
+`normalizeDisassemblyLine` 只折叠表示层差异：按指令解析后的字面量地址、已知宽度后缀、引号外的列对齐空白、switch 表的物理偏移（含经典 `SwitchImm`）、debug 偏移、`DefineOwnById*` 的字符串操作数。字符串内部的连续空格、跳转目标标签、寄存器均保留。
+
+**`DefineOwnById*` 的字符串操作数为什么只能丢给 raw**：Hermes 的 `BytecodeList.def` 只给 `DefineOwnByIdLong` 标了字符串操作数，短形式没标。于是同一条指令有两种 pretty 打印：普通编译 id 小、走短形式，打印**裸 id**；base 编译继承了 base 的字符串表，id 溢出 16 位后改用 Long 形式，打印**文本**，而 pretty 的文本又按显示预算截断（`equivalenceCheckPropertyName` 打成 `"equivalenceCheckP"...`）。两种表示互相还原不了——这个预算对非 ASCII 还会静默截断且不加 `...`（实测 `ab中` 打成 `"ab"`、`abcdefghijklmnop中` 打成 `"abcdefghi"`），所以还原出的完整名字永远等不上打印出来的名字。归一化因此把该操作数整个折成 `<str>`，属性名交给 raw 核对按二进制字符串表全量比较（`hermes-raw.ts` 的 `STRING_OPERANDS` 正是为此显式补了 `DefineOwnById`）。2026-09-22 之前这里会把任何超过显示预算的属性名判成差异，线上因此误杀过 base。未知 string ID、无法解码的字面量、未知 buffer 操作数形态直接失败；两侧都无法解析也不等价。
 
 **原始操作数核对**：`hermes-raw.ts` 从 raw dump 读取指令起点和操作数类型，并检查操作数与 HBC 字节一致、指令覆盖完整函数体。字符串从 small/overflow string table 与 string storage 按完整 ASCII/UTF-16 code unit 解码；BigInt、正则和 double 读取真实字节（保留 `-0` 和尾部精度）；函数引用保留索引，与顺序对齐的函数表共同检查，同名函数不能互换。地址映射为目标指令序号；整数和字符串 switch 从二进制恢复 case 值与目的地。函数运行时 flags 和参数/寄存器等字段也参与比较，剔除的仅是物理地址、debug presence 与 compact/overflow 表示。
 

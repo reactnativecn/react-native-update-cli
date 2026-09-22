@@ -236,6 +236,54 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
     );
   });
 
+  // hermesc annotates the string operand of DefineOwnByIdLong but not of
+  // DefineOwnById, so the same instruction prints the text in one build and a
+  // bare id in the other -- and pretty output cuts that text to a display
+  // budget. A base whose string table spills past 16 bits makes the delta
+  // build take the Long form, which used to read as a difference and threw
+  // away a good base for any property name longer than the budget.
+  // v96 and older print the text for both widths of PutNewOwnById, so only
+  // v98's DefineOwnById carries the asymmetry.
+  test.skipIf(!hasHermesc || probeHbcVersion(hermesc!) !== 98)(
+    'a wide DefineOwnById against a foreign base is not a difference',
+    async () => {
+      const base = compile(
+        'wide-base',
+        Array.from(
+          { length: 70000 },
+          (_, i) => `globalThis.s${i} = "base string ${i}";`,
+        ).join('\n'),
+      );
+      // longer than hermesc's display budget, so the Long form prints a cut
+      // name where the short form prints the id
+      const name = 'equivalenceCheckPropertyName';
+      const source = `globalThis.h = function h(s, v){ return {...s, ${name}: v, b: 1}; };`;
+      const plain = compile('wide-plain', source);
+      const delta = compile('wide-delta', source, base);
+      const pretty = (file: string) =>
+        dump(file, true)
+          .split('\n')
+          .filter((line) => line.includes('DefineOwnById'));
+      // the renderings really are the two the fold has to bridge
+      expect(pretty(delta)[0]).toContain('DefineOwnByIdLong');
+      expect(pretty(delta)[0]).toContain(`"${name.slice(0, 17)}"...`);
+      expect(pretty(plain)[0]).not.toContain(name.slice(0, 17));
+      const result = await compareHermesBytecode(hermesc!, delta, plain);
+      expect(result.status, result.detail).toBe('equivalent');
+    },
+    30_000,
+  );
+
+  test('a property name past the pretty limit still has to match', async () => {
+    const object = (name: string) =>
+      `globalThis.h = function h(s, v){ return {...s, ${name}: v}; };`;
+    const a = compile('name-a', object('equivalenceCheckPropertyNameAlpha'));
+    const b = compile('name-b', object('equivalenceCheckPropertyNameBeta'));
+    const result = await compareHermesBytecode(hermesc!, a, b);
+    expect(result.status).toBe('different');
+    expect(result.detail).toContain('raw instruction');
+  });
+
   test('overflow function headers retain the same runtime fields', async () => {
     const base = compile('header-base', 'globalThis.old = "older strings";');
     const params = Array.from({ length: 140 }, (_, i) => `p${i}`).join(',');
