@@ -6,52 +6,61 @@ import path from 'node:path';
 
 const script = path.resolve(__dirname, '../scripts/fuzz-hermes-base.ts');
 
-describe.skipIf(os.platform() === 'win32')('Hermes fuzz CLI coverage gate', () => {
-  test('all compiler failures return nonzero and preserve their inputs', () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), 'rnu-fuzz-failure-'));
-    try {
-      const compiler = path.join(dir, 'hermesc');
-      const out = path.join(dir, 'cases');
-      writeFileSync(
-        compiler,
-        '#!/bin/sh\necho deliberate compiler failure >&2\nexit 1\n',
-        { mode: 0o755 },
-      );
-      const result = spawnSync(
-        process.execPath,
-        [script, '--rounds', '2', '--seed', '7', '--out', out],
-        {
-          env: { ...process.env, HERMESC: compiler },
-          encoding: 'utf8',
-          timeout: 10_000,
-        },
-      );
-      expect(result.error).toBeUndefined();
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain('equivalent: 0');
-      expect(result.stdout).toContain('compile errors (generator): 2');
-      expect(
-        existsSync(path.join(out, 'round-0000', 'compile-error.txt')),
-      ).toBe(true);
-      expect(
-        existsSync(path.join(out, 'round-0001', 'compile-error.txt')),
-      ).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }, 15_000);
+describe.skipIf(os.platform() === 'win32')(
+  'Hermes fuzz CLI coverage gate',
+  () => {
+    test('all compiler failures return nonzero and preserve their inputs', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'rnu-fuzz-failure-'));
+      try {
+        const compiler = path.join(dir, 'hermesc');
+        const out = path.join(dir, 'cases');
+        writeFileSync(
+          compiler,
+          '#!/bin/sh\necho deliberate compiler failure >&2\nexit 1\n',
+          { mode: 0o755 },
+        );
+        const result = spawnSync(
+          process.execPath,
+          [script, '--rounds', '2', '--seed', '7', '--out', out],
+          {
+            env: { ...process.env, HERMESC: compiler },
+            encoding: 'utf8',
+            timeout: 10_000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe(1);
+        expect(result.stdout).toContain('equivalent: 0');
+        expect(result.stdout).toContain('compile errors (generator): 2');
+        expect(
+          existsSync(path.join(out, 'round-0000', 'compile-error.txt')),
+        ).toBe(true);
+        expect(
+          existsSync(path.join(out, 'round-0001', 'compile-error.txt')),
+        ).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }, 15_000);
 
-  test.each(['0', '-1', '0.5', 'NaN'])(
-    'invalid round count %s cannot produce a green empty run',
-    (rounds) => {
-      const result = spawnSync(process.execPath, [script, '--rounds', rounds], {
-        encoding: 'utf8',
-        timeout: 10_000,
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.status).toBe(2);
-      expect(result.stderr).toContain('--rounds must be a positive safe integer');
-    },
-    15_000,
-  );
-});
+    test.each(['0', '-1', '0.5', 'NaN'])(
+      'invalid round count %s cannot produce a green empty run',
+      (rounds) => {
+        const result = spawnSync(
+          process.execPath,
+          [script, '--rounds', rounds],
+          {
+            encoding: 'utf8',
+            timeout: 10_000,
+          },
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.status).toBe(2);
+        expect(result.stderr).toContain(
+          '--rounds must be a positive safe integer',
+        );
+      },
+      15_000,
+    );
+  },
+);

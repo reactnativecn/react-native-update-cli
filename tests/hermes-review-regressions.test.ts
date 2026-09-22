@@ -25,7 +25,9 @@ function cachedObject(shapeIndex: number, names = ['field']) {
   const strings = new Map(names.map((name, i) => [i + 1, name]));
   const objectKeys = Buffer.alloc(1 + names.length * 2);
   objectKeys[0] = 0x50 | names.length;
-  names.forEach((_name, i) => objectKeys.writeUInt16LE(i + 1, 1 + i * 2));
+  names.forEach((_name, i) => {
+    objectKeys.writeUInt16LE(i + 1, 1 + i * 2);
+  });
   const shapes = Buffer.alloc((shapeIndex + 1) * 8);
   shapes.writeUInt32LE(names.length, shapeIndex * 8 + 4);
   const buffers: LiteralBuffers = {
@@ -74,7 +76,10 @@ describe('CacheNewObject shape references', () => {
 
   test.each([
     [['field'], ['differentField']],
-    [['first', 'second'], ['second', 'first']],
+    [
+      ['first', 'second'],
+      ['second', 'first'],
+    ],
     [['a  b'], ['a b']],
     [['sharedLongPropertyPrefix甲'], ['sharedLongPropertyPrefix乙']],
   ])('changed keys remain different: %j versus %j', (left, right) => {

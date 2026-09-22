@@ -6,9 +6,7 @@ export function normalizeCachedObjectInstruction(
   literals?: LiteralResolver,
 ): string {
   const m =
-    /^(\s*)CacheNewObject\s+(r\d+),\s*(r\d+),\s*(\d+),\s*(\d+)\s*$/.exec(
-      line,
-    );
+    /^(\s*)CacheNewObject\s+(r\d+),\s*(r\d+),\s*(\d+),\s*(\d+)\s*$/.exec(line);
   if (!m) throw new Error(`unsupported cached object operands: ${line.trim()}`);
   const prefix = `${m[1]}CacheNewObject ${m[2]}, ${m[3]}, `;
   // Diagnostic-only fallback: compareHermesBytecode still requires readable
