@@ -25,7 +25,8 @@ describe('Hermes fuzz mutations use actual string boundaries', () => {
   test('ignores quotes in comments, regexps and template text', () => {
     const source = [
       '// "comment"',
-      String.raw`const pattern = /["']/;`,
+      String.raw`const pattern = /["'\d]/;`,
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: JS source fixture.
       'const template = `text "raw" ${"actual"}`;',
     ].join('\n');
     const values = fuzzStringLiterals(source).map((literal) => literal.value);
@@ -37,7 +38,9 @@ describe('Hermes fuzz mutations use actual string boundaries', () => {
     const source = 'var x = "😀"; var y = "\\u4e2d";';
     const literals = fuzzStringLiterals(source);
     expect(literals.map((literal) => literal.value)).toEqual(['😀', '中']);
-    const spellings = literals.map(({ start, end }) => source.slice(start, end));
+    const spellings = literals.map(({ start, end }) =>
+      source.slice(start, end),
+    );
     expect(spellings).toEqual(['"😀"', '"\\u4e2d"']);
   });
 });
