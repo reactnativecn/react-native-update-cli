@@ -16,6 +16,14 @@
 - New regressions cover shape-index relocation, key changes, key order,
   register/cache preservation, malformed/missing references, text-only fallback,
   and fuzz runs with zero or incomplete useful coverage.
+- Enforcing that gate exposed a pre-existing generator defect in the HBC 96
+  CI run (seed 96, round 41): the quoted-string regex matched a gap after an
+  escaped quote and inserted `~` before a quoted property name. String mutation
+  and negative planting now use real string-token boundaries from the already
+  installed Babel parser and JSON-encode replacements. The minimized regression
+  also checks comments, regexps, templates, escapes and UTF-16 source offsets.
+  The failure gate remains strict; the generator is fixed rather than skipping
+  the failing round or changing the seed.
 
 ## Scope and evidence
 

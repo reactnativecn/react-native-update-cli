@@ -29,6 +29,7 @@ import os from 'os';
 import path from 'path';
 
 import { compareHermesBytecode } from '../src/utils/hermes-base';
+import { fuzzStringLiterals } from './hermes-fuzz-literals';
 import { hermesFuzzSucceeded } from './hermes-fuzz-result';
 
 // ---------------------------------------------------------------------------
@@ -477,13 +478,17 @@ class Gen {
           break;
         }
         case 1: {
-          // change one string literal (a real literal: quote, body without
-          // an unescaped quote or backslash, same quote — never the gap
-          // between two literals)
-          const literals = [...text.matchAll(/(["'])([^"'\\\n]{1,40})\1/g)];
+          // A regex can match the gap after an escaped closing quote. Use
+          // parser offsets and encode the replacement as one complete token.
+          const literals = fuzzStringLiterals(text).filter(
+            ({ value }) => value.length > 0 && value.length <= 40,
+          );
           if (literals.length > 0) {
-            const m = this.rng.pick(literals);
-            text = `${text.slice(0, m.index)}${m[1]}${m[2]}~${m[1]}${text.slice((m.index ?? 0) + m[0].length)}`;
+            const literal = this.rng.pick(literals);
+            text =
+              text.slice(0, literal.start) +
+              JSON.stringify(`${literal.value}~`) +
+              text.slice(literal.end);
           }
           break;
         }
@@ -516,14 +521,17 @@ class Gen {
   /** identical to `source` except one string literal value — must be caught */
   /** `marker`: the new string, to tell whether it survived the optimizer */
   plantDifference(source: string): { source: string; marker: string } | null {
-    const literals = [...source.matchAll(/(["'])([A-Za-z]{3,20})\1/g)];
+    const literals = fuzzStringLiterals(source).filter(({ value }) =>
+      /^[A-Za-z]{3,20}$/.test(value),
+    );
     if (literals.length === 0) return null;
     const target = this.rng.pick(literals);
-    const before = source.slice(0, target.index);
-    const after = source.slice((target.index ?? 0) + target[0].length);
-    const marker = `${target[2]}Z`;
+    const marker = `${target.value}Z`;
     return {
-      source: `${before}${target[1]}${marker}${target[1]}${after}`,
+      source:
+        source.slice(0, target.start) +
+        JSON.stringify(marker) +
+        source.slice(target.end),
       marker,
     };
   }
