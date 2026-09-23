@@ -9,9 +9,10 @@
  * `normalizeDisassemblyLine` + a unit test) or a real hermesc delta-mode bug
  * (report upstream; record it in docs/hermes-base-verification.md §3).
  *
- * Every tenth round also plants a one-literal change into the delta build and
- * asserts the check still catches it, so a rule that folds too much shows up
- * here as well.
+ * Every tenth round and the final round also plant a one-literal change into
+ * the delta build and assert the check still catches it, so a rule that folds
+ * too much shows up here as well. Success requires all requested comparisons,
+ * zero compilation failures and at least one effective planted difference.
  *
  *   HERMESC=<path> bun scripts/fuzz-hermes-base.ts [--rounds N] [--seed S]
  *                                                  [--out DIR] [--verbose]
@@ -20,7 +21,7 @@
  * cases (both sources, all three HBC files) are kept under --out
  * (default: a fresh temp dir, printed at the end); passing cases are deleted.
  * Exit code: 0 when every round was equivalent and every planted change was
- * caught, 1 otherwise.
+ * caught with useful coverage, 1 otherwise; invalid arguments exit 2.
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'fs-extra';
@@ -28,18 +29,28 @@ import os from 'os';
 import path from 'path';
 
 import { compareHermesBytecode } from '../src/utils/hermes-base';
+import { fuzzStringLiterals } from './hermes-fuzz-literals';
+import { hermesFuzzSucceeded } from './hermes-fuzz-result';
 
 // ---------------------------------------------------------------------------
 // arguments
 // ---------------------------------------------------------------------------
 
+/** Read a flag's next token; undefined alone does not imply flag omission. */
 function argValue(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
   if (index < 0) return undefined;
   return process.argv[index + 1];
 }
 
-const ROUNDS = Number(argValue('rounds') ?? 200);
+// Only an omitted flag uses the default; a missing value becomes NaN.
+const ROUNDS = Number(
+  process.argv.includes('--rounds') ? argValue('rounds') : 200,
+);
+if (!Number.isSafeInteger(ROUNDS) || ROUNDS <= 0) {
+  console.error('--rounds must be a positive safe integer');
+  process.exit(2);
+}
 const SEED = Number(argValue('seed') ?? Date.now() % 2 ** 31);
 const VERBOSE = process.argv.includes('--verbose');
 const OUT_DIR =
@@ -471,13 +482,17 @@ class Gen {
           break;
         }
         case 1: {
-          // change one string literal (a real literal: quote, body without
-          // an unescaped quote or backslash, same quote — never the gap
-          // between two literals)
-          const literals = [...text.matchAll(/(["'])([^"'\\\n]{1,40})\1/g)];
+          // A regex can match the gap after an escaped closing quote. Use
+          // parser offsets and encode the replacement as one complete token.
+          const literals = fuzzStringLiterals(text).filter(
+            ({ value }) => value.length > 0 && value.length <= 40,
+          );
           if (literals.length > 0) {
-            const m = this.rng.pick(literals);
-            text = `${text.slice(0, m.index)}${m[1]}${m[2]}~${m[1]}${text.slice((m.index ?? 0) + m[0].length)}`;
+            const literal = this.rng.pick(literals);
+            text =
+              text.slice(0, literal.start) +
+              JSON.stringify(`${literal.value}~`) +
+              text.slice(literal.end);
           }
           break;
         }
@@ -510,14 +525,17 @@ class Gen {
   /** identical to `source` except one string literal value — must be caught */
   /** `marker`: the new string, to tell whether it survived the optimizer */
   plantDifference(source: string): { source: string; marker: string } | null {
-    const literals = [...source.matchAll(/(["'])([A-Za-z]{3,20})\1/g)];
+    const literals = fuzzStringLiterals(source).filter(({ value }) =>
+      /^[A-Za-z]{3,20}$/.test(value),
+    );
     if (literals.length === 0) return null;
     const target = this.rng.pick(literals);
-    const before = source.slice(0, target.index);
-    const after = source.slice((target.index ?? 0) + target[0].length);
-    const marker = `${target[2]}Z`;
+    const marker = `${target.value}Z`;
     return {
-      source: `${before}${target[1]}${marker}${target[1]}${after}`,
+      source:
+        source.slice(0, target.start) +
+        JSON.stringify(marker) +
+        source.slice(target.end),
       marker,
     };
   }
@@ -527,6 +545,7 @@ class Gen {
 // compile + compare
 // ---------------------------------------------------------------------------
 
+/** Compile a generated source, returning diagnostics on compiler failure. */
 function compile(
   input: string,
   out: string,
@@ -558,6 +577,7 @@ interface Finding {
   count: number;
 }
 
+/** Run seeded comparisons and exit successfully only with effective coverage. */
 async function main() {
   const rng = new Rng(SEED);
   const gen = new Gen(rng);
@@ -574,6 +594,7 @@ async function main() {
   let planted = 0;
   let plantedMissed = 0;
   let plantedFolded = 0;
+  let plantedCompileErrors = 0;
   const started = Date.now();
 
   for (let round = 0; round < ROUNDS; round++) {
@@ -634,14 +655,25 @@ async function main() {
       console.log(`round ${round}: dump failed — ${outcome.detail}`);
     }
 
-    // detection check: a planted one-literal change must be rejected
-    if (round % 10 === 9) {
+    // Include the last round so even a short run attempts a negative case.
+    if (round % 10 === 9 || round === ROUNDS - 1) {
       const wrong = gen.plantDifference(next);
       if (wrong) {
         const wrongJs = path.join(dir, 'wrong.js');
         const wrongHbc = path.join(dir, 'wrong.delta.hbc');
         fs.writeFileSync(wrongJs, wrong.source);
-        if (!compile(wrongJs, wrongHbc, [`-base-bytecode=${baseHbc}`])) {
+        const wrongError = compile(wrongJs, wrongHbc, [
+          `-base-bytecode=${baseHbc}`,
+        ]);
+        if (wrongError) {
+          plantedCompileErrors++;
+          keep = true;
+          fs.writeFileSync(
+            path.join(dir, 'planted-compile-error.txt'),
+            wrongError,
+          );
+          console.log(`round ${round}: planted compile error (kept in ${dir})`);
+        } else {
           // The literal may sit in code the optimizer removes or folds
           // (`!'x'`, an unreachable switch case — Static Hermes folds far more
           // than classic hermesc). Then both builds are really equivalent and
@@ -649,6 +681,7 @@ async function main() {
           // of the check under test (ASCII strings are stored as is).
           if (!fs.readFileSync(wrongHbc).includes(wrong.marker)) {
             plantedFolded++;
+            keep = true;
             if (VERBOSE) {
               console.log(
                 `round ${round}: planted "${wrong.marker}" optimized away`,
@@ -674,6 +707,9 @@ async function main() {
             }
           }
         }
+      } else {
+        // Keep the input to diagnose a run with no effective negative cases.
+        keep = true;
       }
     }
 
@@ -681,17 +717,22 @@ async function main() {
   }
 
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
+  const different = [...findings.values()].reduce((n, f) => n + f.count, 0);
   console.log('');
   console.log(`rounds: ${ROUNDS} in ${seconds}s (seed ${SEED})`);
   console.log(`equivalent: ${equivalent}`);
-  console.log(
-    `different: ${[...findings.values()].reduce((n, f) => n + f.count, 0)} (${findings.size} unique)`,
-  );
+  console.log(`different: ${different} (${findings.size} unique)`);
   console.log(`dump failed: ${dumpFailed}`);
   console.log(`compile errors (generator): ${compileErrors}`);
+  console.log(`planted compile errors: ${plantedCompileErrors}`);
   console.log(
     `planted differences: ${planted}, missed: ${plantedMissed} (${plantedFolded} more optimized away, not counted)`,
   );
+  if (planted === 0) {
+    console.error(
+      'No effective planted difference was checked; coverage is insufficient.',
+    );
+  }
   if (findings.size > 0) {
     console.log('');
     console.log('unique differences (first occurrence, reproduction dir):');
@@ -700,7 +741,16 @@ async function main() {
       console.log(`       ${f.detail}`);
     }
   }
-  const ok = findings.size === 0 && dumpFailed === 0 && plantedMissed === 0;
+  const ok = hermesFuzzSucceeded({
+    rounds: ROUNDS,
+    equivalent,
+    different,
+    dumpFailed,
+    compileErrors,
+    planted,
+    plantedMissed,
+    plantedCompileErrors,
+  });
   if (!ok) console.log(`\nfailing cases kept under ${OUT_DIR}`);
   else if (!argValue('out')) fs.removeSync(OUT_DIR);
   process.exit(ok ? 0 : 1);

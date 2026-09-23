@@ -19,6 +19,7 @@ import { PassThrough, Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { tempDir } from './constants';
 import { getHbcVersion } from './hbcTransform';
+import { normalizeCachedObjectInstruction } from './hermes-cached-object';
 import {
   type LiteralBuffers,
   LiteralResolver,
@@ -1081,6 +1082,9 @@ export function normalizeDisassemblyLine(
   if (opcode === 'Offset' && line.startsWith('Offset in debug table', indent)) {
     return null;
   }
+  if (opcode === 'CacheNewObject') {
+    return normalizeCachedObjectInstruction(line, literals);
+  }
   let m: RegExpExecArray | null;
   if (opcode.startsWith('New') && opcode.includes('WithBuffer')) {
     // v98's AndParent form takes the parent object in a second register,
@@ -1112,11 +1116,26 @@ export function normalizeDisassemblyLine(
     if (m) return `${m[1]} ${m[3]}${normalizeOperandSpacing(m[4])}`;
   }
   if (opcode.startsWith('DefineOwnById')) {
-    m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)$/.exec(line);
+    // BytecodeList.def annotates the string operand of DefineOwnByIdLong but
+    // not of DefineOwnById, so one instruction has two pretty renderings: the
+    // plain compile keeps small ids and prints the bare id, while a base
+    // compile inherits the base's string table, spills past 16 bits, picks the
+    // Long form and prints the *text* — cut to hermesc's display budget
+    // (`"equivalenceCheckP"...` for `equivalenceCheckPropertyName`). Neither side can
+    // be turned into the other: that budget also drops non-ASCII silently and
+    // without a marker (`ab\u4e2d` prints as `"ab"`), so a resolved name never
+    // equals a printed one. The operand is folded away here and the property
+    // name is compared by the raw audit, which decodes it from the string
+    // table in full (STRING_OPERANDS supplies the missing annotation).
+    m = /^(\s*DefineOwnById\w*\s+r\d+, r\d+, \d+, )(\d+)?.*$/.exec(line);
     if (m) {
-      const text = strings.get(Number(m[2]));
-      if (text === undefined) throw new Error(`unresolved string id ${m[2]}`);
-      line = `${m[1]}${JSON.stringify(text)}`;
+      // An id form whose id is not in the table means the string table was
+      // not read at all; that still fails closed rather than folding an
+      // operand nothing could resolve.
+      if (m[2] !== undefined && !strings.has(Number(m[2]))) {
+        throw new Error(`unresolved string id ${m[2]}`);
+      }
+      line = `${m[1]}<str>`;
     }
   }
   // Operand-width variants of one instruction (GetByIdShort/GetById/GetByIdLong,

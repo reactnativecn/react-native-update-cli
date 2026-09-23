@@ -4,7 +4,7 @@ export default {
   accountUnknown: '未知',
   accountNoExpiry: '未设置有效期',
   accountRenewalWarning:
-    '[警告] 您的 Pushy 付费套餐将在 {{days}} 天内到期，请及时续费，以免影响服务：{{url}}',
+    '[注意] 您的 Pushy 付费套餐将在 {{days}} 天内到期，请及时续费，以免影响服务：{{url}}',
   accountLookupFailed: '[警告] 暂时无法获取账号信息，将继续执行命令。',
   addedToGitignore: '已将 {{line}} 添加到 .gitignore',
   androidCrunchPngsWarning:
