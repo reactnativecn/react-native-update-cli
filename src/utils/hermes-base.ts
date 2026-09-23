@@ -18,6 +18,7 @@ import path from 'path';
 import { PassThrough, Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { tempDir } from './constants';
+import { failureFingerprint, redactFailureDetail } from './failure-fingerprint';
 import { getHbcVersion } from './hbcTransform';
 import { normalizeCachedObjectInstruction } from './hermes-cached-object';
 import {
@@ -95,8 +96,17 @@ export interface HermesBaseMeta {
   baseHash: string | null;
   /** absent (never null) when the bundle step did not run hermesc */
   hermesBaseOutcome?: HermesBaseOutcome;
-  /** first difference / failure reason; absent when there is none */
+  /**
+   * First difference / failure reason, redacted (see redactFailureDetail):
+   * the raw text carries the user's own property and string names. Absent
+   * when there is none.
+   */
   hermesBaseDetail?: string;
+  /**
+   * Grouping key for the same defect across builds and apps, computed from
+   * the unredacted detail. Absent with the detail.
+   */
+  hermesBaseFingerprint?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -988,8 +998,15 @@ export function hermesBaseMeta(
   };
   if (check) {
     meta.hermesBaseOutcome = check.outcome;
-    const detail = truncateHermesBaseDetail(check.detail);
-    if (detail) meta.hermesBaseDetail = detail;
+    // The console above keeps the real text -- that is where the property
+    // name helps. What leaves the machine is redacted and fingerprinted.
+    const detail = truncateHermesBaseDetail(
+      redactFailureDetail(check.detail ?? ''),
+    );
+    if (detail) {
+      meta.hermesBaseDetail = detail;
+      meta.hermesBaseFingerprint = failureFingerprint(check.detail ?? '');
+    }
   }
   return meta;
 }

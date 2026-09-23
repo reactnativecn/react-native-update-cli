@@ -612,12 +612,22 @@ describe('helpers', () => {
       outcome: 'rejected',
       detail: 'Function<f>  line 3:\n  a\n  b',
     });
-    expect(rejected).toEqual({
+    // the function name is redacted on the way out; the shape is not
+    expect(rejected.hermesBaseDetail).toMatch(
+      /^Function<fn#[0-9a-f]{8}> line 3: a b$/,
+    );
+    expect(rejected.hermesBaseFingerprint).toMatch(/^[0-9a-f]{32}$/);
+    expect({
+      ...rejected,
+      hermesBaseDetail: '',
+      hermesBaseFingerprint: '',
+    }).toEqual({
       bytecodeVersion: 98,
       baseVersionId: null,
       baseHash: null,
       hermesBaseOutcome: 'rejected',
-      hermesBaseDetail: 'Function<f> line 3: a b',
+      hermesBaseDetail: '',
+      hermesBaseFingerprint: '',
     });
     // no detail → no key (the server rejects JSON null, and '' is noise)
     expect(hermesBaseMeta(null, 98, { outcome: 'none' })).toEqual({
