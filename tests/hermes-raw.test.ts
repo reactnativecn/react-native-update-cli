@@ -278,6 +278,7 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
       plain,
     );
     expect(result.status).toBe('different');
+    expect(result.detail).toContain('raw instruction');
   });
 
   // hermesc annotates the string operand of DefineOwnByIdLong but not of
