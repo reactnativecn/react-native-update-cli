@@ -236,6 +236,50 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
     );
   });
 
+  // The pretty pass folds the jump-table offset of (UInt)SwitchImm because a
+  // foreign base shifts it (v96 prints the classic `SwitchImm` name, which
+  // v2.26.1 missed and rejected good bases for). Folding the offset must not
+  // fold what the table holds: swapping two case targets in the delta build
+  // keeps every instruction byte and still has to be rejected.
+  test('a folded switch offset still compares the jump-table targets', async () => {
+    const base = compile(
+      'switch-base',
+      `globalThis.strings = ${JSON.stringify(Array.from({ length: 400 }, (_, i) => `foreign${i}`))};`,
+    );
+    const cases = Array.from(
+      { length: 32 },
+      (_, i) => `case ${i}: return o.k${i} + "v${i}";`,
+    ).join('\n');
+    const source = `globalThis.oi = function oi(x, o, a){ var t = o.alpha + a.beta; switch(x){${cases} default: return t;}};`;
+    const plain = compile('switch-plain', source);
+    const delta = compile('switch-delta', source, base);
+    const isSwitch = (op: string) =>
+      op === 'SwitchImm' || op === 'UIntSwitchImm';
+    const [plainSwitch] = (await operands(plain, isSwitch)).found;
+    const { data, found } = await operands(delta, isSwitch);
+    expect(found).toHaveLength(1);
+    const [inst] = found;
+    // the offset really moved, so the fold is what makes these equivalent
+    expect(inst.values[1]).not.toBe(plainSwitch.values[1]);
+    const unchanged = await compareHermesBytecode(hermesc!, delta, plain);
+    expect(unchanged.status, unchanged.detail).toBe('equivalent');
+
+    // table entries are Int32 targets relative to the instruction, 4-byte aligned
+    const start = Math.ceil((inst.positions[0] - 1 + inst.values[1]) / 4) * 4;
+    const bytes = Buffer.from(data.bytes);
+    const first = bytes.readInt32LE(start);
+    const sixth = bytes.readInt32LE(start + 20);
+    expect(first).not.toBe(sixth);
+    bytes.writeInt32LE(sixth, start);
+    bytes.writeInt32LE(first, start + 20);
+    const result = await compareHermesBytecode(
+      hermesc!,
+      rewrite(delta, bytes),
+      plain,
+    );
+    expect(result.status).toBe('different');
+  });
+
   // hermesc annotates the string operand of DefineOwnByIdLong but not of
   // DefineOwnById, so the same instruction prints the text in one build and a
   // bare id in the other -- and pretty output cuts that text to a display
