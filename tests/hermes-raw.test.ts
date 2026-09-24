@@ -8,7 +8,11 @@ import {
   compareHermesBytecode,
   probeHbcVersion,
 } from '../src/utils/hermes-base';
-import { readHermesSemanticData } from '../src/utils/hermes-raw';
+import { readLiteralBuffers } from '../src/utils/hermes-literals';
+import {
+  auditRawHermesBytecode,
+  readHermesSemanticData,
+} from '../src/utils/hermes-raw';
 
 const hermesc = process.env.HERMESC;
 const hasHermesc = Boolean(hermesc && fs.existsSync(hermesc));
@@ -272,13 +276,28 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
     expect(first).not.toBe(sixth);
     bytes.writeInt32LE(sixth, start);
     bytes.writeInt32LE(first, start + 20);
-    const result = await compareHermesBytecode(
-      hermesc!,
-      rewrite(delta, bytes),
-      plain,
-    );
+    const swapped = rewrite(delta, bytes);
+    // the pretty pass already catches it by the table's label order...
+    const result = await compareHermesBytecode(hermesc!, swapped, plain);
     expect(result.status).toBe('different');
-    expect(result.detail).toContain('raw instruction');
+    // ...and the raw audit, which decodes the targets from the binary table,
+    // must reject it on its own too
+    const files: [string, string] = [swapped, plain];
+    const audit = await auditRawHermesBytecode(
+      hermesc!,
+      files,
+      [
+        await readHermesSemanticData(swapped),
+        await readHermesSemanticData(plain),
+      ],
+      [
+        (await readLiteralBuffers(swapped))!,
+        (await readLiteralBuffers(plain))!,
+      ],
+      new AbortController().signal,
+    );
+    expect(audit.status).toBe('different');
+    expect(audit.detail).toContain('raw instruction');
   });
 
   // hermesc annotates the string operand of DefineOwnByIdLong but not of
