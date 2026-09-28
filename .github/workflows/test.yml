@@ -73,6 +73,7 @@ jobs:
         with:
           name: coverage
           path: coverage
+          retention-days: 7
           if-no-files-found: error
 
   node18-smoke:
@@ -177,36 +178,60 @@ jobs:
         with:
           node-version: '24.x'
       - run: bun install --frozen-lockfile
-      - name: Install the pinned real compiler
+      - name: Cache the exact compiler package
+        id: compiler-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/hermes-tests/${{ matrix.directory }}
+          # Full package version, not just HBC: .16 and .17 must never collide.
+          key: hermesc-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.package }}
+      - name: Install and verify the pinned real compiler
         shell: bash
         env:
           COMPILER_PACKAGE: ${{ matrix.package }}
           COMPILER_DIRECTORY: ${{ matrix.directory }}
           COMPILER_EXECUTABLE: ${{ matrix.executable }}
           EXPECTED_HBC: ${{ matrix.hbc }}
+          COMPILER_CACHE_HIT: ${{ steps.compiler-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/hermes-tests/$COMPILER_DIRECTORY"
-          mkdir -p "$root"
-          archive=$(npm pack "$COMPILER_PACKAGE" --pack-destination "$RUNNER_TEMP" --silent)
-          tar -xzf "$RUNNER_TEMP/$archive" --strip-components=1 -C "$root" \
-            "package/$COMPILER_EXECUTABLE" package/package.json
+          if [ "$COMPILER_CACHE_HIT" != true ]; then
+            mkdir -p "$root"
+            archive=$(npm pack "$COMPILER_PACKAGE" --pack-destination "$RUNNER_TEMP" --silent)
+            tar -xzf "$RUNNER_TEMP/$archive" --strip-components=1 -C "$root" \
+              "package/$COMPILER_EXECUTABLE" package/package.json
+          fi
+          # Cache hits still prove package identity, executable presence and HBC.
+          node -e 'const p = require(process.argv[1]); if (`${p.name}@${p.version}` !== process.env.COMPILER_PACKAGE) throw new Error("unexpected compiler package");' "$root/package.json"
           export HERMESC="$root/$COMPILER_EXECUTABLE"
           test -x "$HERMESC"
           "$HERMESC" -version
           bun -e 'import {probeHbcVersion} from "./src/utils/hermes-base"; if (probeHbcVersion(process.env.HERMESC) !== Number(process.env.EXPECTED_HBC)) throw new Error("unexpected HBC version");'
           echo "HERMESC=$HERMESC" >> "$GITHUB_ENV"
-      - name: Fetch pinned real Metro fixtures
+      - name: Cache pinned Metro fixtures
+        id: metro-cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/hermes-metro-fixtures
+          key: metro-fixtures-v1-${{ runner.os }}-e6a870a1c26c4b64c7860d7e1aa575707d22ad88
+      - name: Fetch and verify pinned real Metro fixtures
         shell: bash
+        env:
+          METRO_CACHE_HIT: ${{ steps.metro-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/hermes-metro-fixtures"
           mkdir -p "$root"
           base="https://raw.githubusercontent.com/sunnylqm/hbc-diff-benchmark/e6a870a1c26c4b64c7860d7e1aa575707d22ad88"
-          for file in base.jsbundle s3-medium-feature.jsbundle; do
-            curl --fail --location --retry 2 --max-time 60 "$base/fixtures/$file" -o "$root/$file"
-          done
-          curl --fail --location --retry 2 --max-time 60 "$base/LICENSE" -o "$root/LICENSE"
+          if [ "$METRO_CACHE_HIT" != true ]; then
+            for file in base.jsbundle s3-medium-feature.jsbundle; do
+              curl --fail --location --retry 2 --max-time 60 "$base/fixtures/$file" -o "$root/$file"
+            done
+            curl --fail --location --retry 2 --max-time 60 "$base/LICENSE" -o "$root/LICENSE"
+          fi
+          test -s "$root/LICENSE"
+          # Verification is unconditional, including on exact cache hits.
           echo "11c8ad8f7e8c7c59ee45582c77d896a35fa646617f3ba0f5b338a425a7c93b7d  $root/base.jsbundle" | sha256sum --check
           echo "a693e68254b6c13fae8f839d20c14f9d11c5ab98d4be1b8d13ba1e929a12d752  $root/s3-medium-feature.jsbundle" | sha256sum --check
           echo "HERMES_METRO_FIXTURES=$root" >> "$GITHUB_ENV"
@@ -220,4 +245,5 @@ jobs:
         with:
           name: hermes-fuzz-hbc-${{ matrix.hbc }}${{ matrix.suffix }}
           path: ${{ runner.temp }}/hermes-fuzz
+          retention-days: 7
           if-no-files-found: ignore
