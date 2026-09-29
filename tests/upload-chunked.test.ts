@@ -32,6 +32,7 @@ mock.module('node-fetch', () => ({
 }));
 const { uploadFile } = await import('../src/api');
 const runtime = await import('../src/utils/runtime');
+const httpHelper = await import('../src/utils/http-helper');
 
 const tmp = path.join(os.tmpdir(), `rnu-chunked-${process.pid}.ppk`);
 // distinct bytes per MiB, so a misplaced range is visible
@@ -54,7 +55,6 @@ describe('chunked upload', () => {
 
   function setup(instruction: Record<string, unknown>) {
     fs.writeFileSync(tmp, content);
-    process.env.RNU_API = 'https://api.test';
     for (const name of [
       'HTTPS_PROXY',
       'https_proxy',
@@ -82,6 +82,9 @@ describe('chunked upload', () => {
         },
       ),
       spyOn(runtime, 'measureTcpLatency').mockResolvedValue(10),
+      // the base url is memoized per process: another test file may have
+      // resolved it already, so pin it instead of setting RNU_API
+      spyOn(httpHelper, 'getBaseUrl').mockResolvedValue('https://api.test'),
       spyOn(console, 'warn').mockImplementation(() => {}),
     );
     return apiCalls;
