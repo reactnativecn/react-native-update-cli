@@ -19,6 +19,7 @@ import {
   replaceSession,
   saveSession,
   setApiToken,
+  uploadTimeoutMs,
 } from '../src/api';
 import * as runtime from '../src/utils/runtime';
 
@@ -288,5 +289,14 @@ describe('api.ts error helpers', () => {
         message: 'Upload timed out',
       }),
     ).toBe(true);
+  });
+  test('upload deadline allows 5 s per MB on a 30 s base, at least 60 s', () => {
+    const mb = 1048576;
+    expect(uploadTimeoutMs(0)).toBe(60_000);
+    expect(uploadTimeoutMs(5 * mb)).toBe(60_000);
+    expect(uploadTimeoutMs(10 * mb)).toBe(80_000);
+    expect(uploadTimeoutMs(100 * mb)).toBe(530_000);
+    // a partial megabyte counts as a whole one
+    expect(uploadTimeoutMs(100 * mb + 1)).toBe(535_000);
   });
 });
