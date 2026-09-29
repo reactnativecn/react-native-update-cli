@@ -246,11 +246,12 @@ export const post = queryWithBody('POST');
 export const put = queryWithBody('PUT');
 export const doDelete = queryWithBody('DELETE');
 
-// Upload deadline: generous for a slow link (1 s/MB on top of a 30 s base,
-// never below 60 s) but bounded, so a stalled connection cannot hang a CI job
-// forever. The bar keeps ticking while bytes flow; the deadline is absolute.
+// Upload deadline: generous for a slow link (5 s/MB, i.e. ~200 KB/s, on top
+// of a 30 s base, never below 60 s) but bounded, so a stalled connection cannot
+// hang a CI job forever. The bar keeps ticking while bytes flow; the deadline
+// is absolute.
 const UPLOAD_TIMEOUT_BASE_MS = 30_000;
-const UPLOAD_TIMEOUT_PER_MB_MS = 1_000;
+const UPLOAD_TIMEOUT_PER_MB_MS = 5_000;
 const UPLOAD_TIMEOUT_MIN_MS = 60_000;
 const UPLOAD_MAX_RETRIES = 1;
 
