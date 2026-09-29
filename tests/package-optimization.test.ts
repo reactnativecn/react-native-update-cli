@@ -2,13 +2,6 @@ import { describe, expect, mock, spyOn, test } from 'bun:test';
 
 // Mock modules before any imports
 mock.module('filesize-parser', () => ({ default: () => 0 }));
-mock.module('form-data', () => ({ default: class {} }));
-mock.module('node-fetch', () => ({ default: () => {} }));
-mock.module('progress', () => ({
-  default: class {
-    tick() {}
-  },
-}));
 mock.module('tty-table', () => {
   const mockTable = () => ({ render: () => '' });
   return { default: mockTable };
