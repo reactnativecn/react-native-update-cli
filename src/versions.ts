@@ -10,12 +10,12 @@ import type { Package, Platform, Version } from './types';
 import { isNonInteractive, loadTtyTable, question } from './utils';
 import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import { getHbcVersion } from './utils/hbcTransform';
 import {
   BUNDLE_ENTRY_NAMES,
   cachePut,
   extractBundleFromArchive,
   type HermesBaseMeta,
+  reportedBytecodeVersion,
   sha256Hex,
   truncateHermesBaseDetail,
 } from './utils/hermes-base';
@@ -497,8 +497,8 @@ async function describePpkBundle(
     if (bundle) {
       const bundleHash = sha256Hex(bundle);
       meta.bundleHash = bundleHash;
-      const hbcVersion = getHbcVersion(bundle) ?? base?.bytecodeVersion;
-      if (hbcVersion != null) meta.bytecodeVersion = hbcVersion;
+      // 0 for plain JS: the server then never offers it as a Hermes base
+      meta.bytecodeVersion = reportedBytecodeVersion(bundle);
       await cachePut(bundle, undefined, bundleHash).catch(() => {});
       Object.assign(meta, bundleLocationFields(found?.location));
     }

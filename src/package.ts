@@ -17,7 +17,11 @@ import {
 import { updateJson } from './utils/constants';
 import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
-import { bundleEntryMatcher, cachePut } from './utils/hermes-base';
+import {
+  bundleEntryMatcher,
+  cachePut,
+  reportedBytecodeVersion,
+} from './utils/hermes-base';
 import { t } from './utils/i18n';
 import { getStringListOption } from './utils/options';
 import { bundleLocationFields, locateZipEntry } from './utils/zip-range';
@@ -196,6 +200,11 @@ async function uploadNativePackage(
       // against the client-reported bundleHash to decide pdiff applicability.
       // Old servers strip unknown fields, so this is forward-compatible.
       ...(bundleHash ? { bundleHash } : {}),
+      // HBC version of the embedded bundle (0 = plain JS), so the server
+      // offers this package as hermes base only to a matching compile
+      ...(bundleFile
+        ? { bytecodeVersion: reportedBytecodeVersion(bundleFile) }
+        : {}),
       ...bundleLocation,
       deps: getDepVersions(),
       commit: await getCommitInfo(),

@@ -63,9 +63,28 @@ export class HbcVersionMismatchError extends PermanentBaseError {
     readonly version: number | null,
     readonly expected: number,
   ) {
-    super(`downloaded base is HBC ${version ?? 'n/a'}, need ${expected}`);
+    super(
+      `downloaded base is ${version == null ? 'plain JS' : `HBC ${version}`}, need ${expected}`,
+    );
   }
 }
+
+/**
+ * `bytecodeVersion` reported for a bundle that is not Hermes bytecode, so the
+ * server can tell "plain JS" from "not reported" (NULL) and never offers it
+ * as a base.
+ */
+export const PLAIN_JS_BYTECODE_VERSION = 0;
+
+/** the `bytecodeVersion` to report for `bundle` at publish / upload time */
+export function reportedBytecodeVersion(bundle: Buffer): number {
+  return getHbcVersion(bundle) ?? PLAIN_JS_BYTECODE_VERSION;
+}
+
+const describeBytecodeVersion = (version: number | null) =>
+  version === PLAIN_JS_BYTECODE_VERSION
+    ? 'plain JS'
+    : `HBC ${version ?? 'n/a'}`;
 
 /** bytes `getHbcVersion` needs to read the version */
 const HBC_HEAD_BYTES = 128;
@@ -905,7 +924,7 @@ export async function resolveHermesBase(
   ) {
     log(
       t('hermesBaseNone', {
-        reason: `server base is HBC ${record.bytecodeVersion}, need ${bytecodeVersion}`,
+        reason: `server base is ${describeBytecodeVersion(record.bytecodeVersion)}, need ${bytecodeVersion}`,
       }),
     );
     return null;

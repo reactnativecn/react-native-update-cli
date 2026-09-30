@@ -464,7 +464,7 @@ describe('zip-range', () => {
               98,
             ).catch((e) => e);
             expect(error).toBeInstanceOf(HbcVersionMismatchError);
-            expect(error.message).toBe('downloaded base is HBC n/a, need 98');
+            expect(error.message).toBe('downloaded base is plain JS, need 98');
             expect(messages).toEqual([]);
             // tail + one header/head chunk, not the bundle body
             expect(server.log.length).toBeLessThanOrEqual(2);

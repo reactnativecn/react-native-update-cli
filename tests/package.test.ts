@@ -215,7 +215,8 @@ describe('packageCommands native upload', () => {
     infoSpy = spyOn(utils, 'getApkInfo').mockResolvedValue({
       versionName: '1.0.0',
       buildTime: 123,
-    });
+      bundleFile: Buffer.from('var a = 1;'),
+    } as never);
     postSpy = spyOn(api, 'post').mockResolvedValue({ id: 9 });
   });
 
@@ -269,6 +270,8 @@ describe('packageCommands native upload', () => {
         buildTime: '123',
         hash: 'slim-package-hash',
         name: '1.0.0',
+        // the embedded bundle is plain JS
+        bytecodeVersion: 0,
       }),
     );
     expect(fs.existsSync(uploadedPath)).toBe(false);

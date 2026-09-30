@@ -842,11 +842,18 @@ describe('publish metadata never sends JSON null', () => {
       });
       expect(used.hermesBaseOutcome).toBe('used');
       expect('hermesBaseDetail' in used).toBe(false);
-      // plain JS bundle: no bytecodeVersion at all rather than null
+      // plain JS bundle: reported as 0, never null — even when compiled
+      // against a base (the bundle, not the base, decides)
       const js = path.join(dir, 'js.ppk');
       await writeZip(js, { 'index.bundlejs': Buffer.from('var a = 1;') });
       const plain = await describePpkBundleForTests(js, undefined);
-      expect('bytecodeVersion' in plain).toBe(false);
+      expect(plain.bytecodeVersion).toBe(0);
+      const plainWithBase = await describePpkBundleForTests(js, {
+        bytecodeVersion: 98,
+        baseVersionId: null,
+        baseHash: null,
+      });
+      expect(plainWithBase.bytecodeVersion).toBe(0);
     } finally {
       fs.removeSync(dir);
     }
