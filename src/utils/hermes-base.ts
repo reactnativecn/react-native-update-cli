@@ -33,6 +33,7 @@ import { webFetch } from './runtime';
 import { enumZipEntries, readEntry } from './zip-entries';
 import {
   fetchZipEntryData,
+  fetchZipEntryHead,
   openRemoteZip,
   RangeUnsupportedError,
   readRemoteZipEntry,
@@ -55,6 +56,19 @@ export class BundleHashMismatchError extends PermanentBaseError {
     );
   }
 }
+
+/** The base bundle is not Hermes bytecode of the version being compiled. */
+export class HbcVersionMismatchError extends PermanentBaseError {
+  constructor(
+    readonly version: number | null,
+    readonly expected: number,
+  ) {
+    super(`downloaded base is HBC ${version ?? 'n/a'}, need ${expected}`);
+  }
+}
+
+/** bytes `getHbcVersion` needs to read the version */
+const HBC_HEAD_BYTES = 128;
 
 /** time allowed for a response to start (headers) */
 const FETCH_HEADERS_TIMEOUT_MS = 30_000;
@@ -613,6 +627,9 @@ interface FetchedBaseBundle {
   totalBytes?: number;
 }
 
+/** the head at a recorded bundle location is not the expected bytecode */
+class StaleHeadError extends Error {}
+
 function hasBundleLocation(record: HermesBaseServerRecord): boolean {
   return (
     record.bundleOffset != null &&
@@ -674,12 +691,19 @@ async function saveResponse(
  * recorded location is stale, so the directory transport (2) still runs; a
  * mismatch of the entry itself (2, 3) is final — the same bytes would come
  * back however they are fetched — and raises BundleHashMismatchError.
+ *
+ * With `expectHbcVersion` (the server does not know the base's version), the
+ * bundle's first bytes are checked before its body is fetched; a base of
+ * another HBC version, or plain JS, raises HbcVersionMismatchError without
+ * downloading the rest. A head read at a recorded location (1) may be stale,
+ * so only the directory transport (2) decides.
  */
 export async function fetchBaseBundle(
   record: HermesBaseServerRecord,
   artifactType: BaseArtifactType,
   archive: string,
   log: (message: string) => void = () => {},
+  expectHbcVersion?: number,
 ): Promise<FetchedBaseBundle> {
   const matches = bundleEntryMatcher(artifactType);
   const verified = (
@@ -707,14 +731,21 @@ export async function fetchBaseBundle(
   // harmony .app nests the bundle in a second zip, so a location inside the
   // outer archive is never reported for it
   if (artifactType !== 'app' && hasBundleLocation(record)) {
+    const location = {
+      dataOffset: record.bundleOffset as number,
+      compressedSize: record.bundleCompressedSize as number,
+      compressionMethod: record.bundleCompression as number,
+    };
     try {
+      const headMatches =
+        expectHbcVersion === undefined ||
+        getHbcVersion(
+          await fetchZipEntryHead(record.url, location, HBC_HEAD_BYTES),
+        ) === expectHbcVersion;
+      if (!headMatches) throw new StaleHeadError();
       const { data, fetchedBytes, totalBytes } = await fetchZipEntryData(
         record.url,
-        {
-          dataOffset: record.bundleOffset as number,
-          compressedSize: record.bundleCompressedSize as number,
-          compressionMethod: record.bundleCompression as number,
-        },
+        location,
       );
       return {
         ...verified(data),
@@ -727,7 +758,10 @@ export async function fetchBaseBundle(
         skip('server ignores Range');
         return fromFullResponse(error.response);
       }
-      skip(`entry range: ${error?.message ?? error}`);
+      // not a transport failure: the directory read below settles it
+      if (!(error instanceof StaleHeadError)) {
+        skip(`entry range: ${error?.message ?? error}`);
+      }
     }
   }
 
@@ -742,6 +776,17 @@ export async function fetchBaseBundle(
         remote.zipFile,
         matches,
         remote.reader,
+        expectHbcVersion === undefined
+          ? undefined
+          : {
+              bytes: HBC_HEAD_BYTES,
+              check: (head) => {
+                const version = getHbcVersion(head);
+                if (version !== expectHbcVersion) {
+                  throw new HbcVersionMismatchError(version, expectHbcVersion);
+                }
+              },
+            },
       );
       return {
         ...verified(bundle),
@@ -916,7 +961,14 @@ export async function resolveHermesBase(
     );
     try {
       log(t('hermesBaseDownloading', { url: record.url }));
-      const fetched = await fetchBaseBundle(record, artifactType, archive, log);
+      const fetched = await fetchBaseBundle(
+        record,
+        artifactType,
+        archive,
+        log,
+        // a server that knows the version already matched it above
+        record.bytecodeVersion == null ? bytecodeVersion : undefined,
+      );
       const { bundle, bundleHash: actualHash } = fetched;
       if (fetched.transport !== 'full') {
         log(
@@ -928,12 +980,7 @@ export async function resolveHermesBase(
       }
       const version = getHbcVersion(bundle);
       if (version !== bytecodeVersion) {
-        log(
-          t('hermesBaseNone', {
-            reason: `downloaded base is HBC ${version ?? 'n/a'}, need ${bytecodeVersion}`,
-          }),
-        );
-        return null;
+        throw new HbcVersionMismatchError(version, bytecodeVersion);
       }
       const cached = await cachePut(bundle, params.cacheMaxMb, actualHash);
       log(
@@ -954,6 +1001,10 @@ export async function resolveHermesBase(
         source,
       };
     } catch (error: any) {
+      if (error instanceof HbcVersionMismatchError) {
+        log(t('hermesBaseNone', { reason: error.message }));
+        return null;
+      }
       if (attempt === 2 || error instanceof PermanentBaseError) {
         log(
           t('hermesBaseNone', {

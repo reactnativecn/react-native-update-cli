@@ -4,16 +4,19 @@ import os from 'os';
 import path from 'path';
 import { fromRandomAccessReader, type ZipFile as YauzlZipFile } from 'yauzl';
 import { ZipFile } from 'yazl';
-import { inflateRawSync } from 'zlib';
+import { deflateRawSync, inflateRawSync } from 'zlib';
 import {
   BundleHashMismatchError,
   bundleEntryMatcher,
   fetchBaseBundle,
+  HbcVersionMismatchError,
   sha256Hex,
 } from '../src/utils/hermes-base';
 import {
   bundleLocationFields,
+  decodeEntryHead,
   fetchZipEntryData,
+  fetchZipEntryHead,
   HttpRangeReader,
   locateZipEntry,
   openRemoteZip,
@@ -114,6 +117,16 @@ function serveFiles(dir: string, ranges = true, opts: ServeOptions = {}) {
     ifRange,
     stop: () => server.stop(true),
   };
+}
+
+/** bytes served for Range requests (a `full` request counts as everything) */
+function servedBytes(log: string[]): number {
+  return log.reduce((sum, r) => {
+    if (r === 'full') return Number.POSITIVE_INFINITY;
+    if (r.startsWith('bytes=-')) return sum + Number(r.slice(7));
+    const [a, b] = span(r);
+    return sum + b - a + 1;
+  }, 0);
 }
 
 /** `[start, end]` of a `bytes=start-end` request */
@@ -401,6 +414,169 @@ describe('zip-range', () => {
       } finally {
         server.stop();
       }
+    });
+
+    describe('with the HBC version unknown to the server', () => {
+      // ~1 MB of Metro output that does not deflate to nothing
+      const plainJs = Buffer.from(
+        Array.from(
+          { length: 40000 },
+          (_, i) => `__d(function(){return ${i * 7919}},${i});\n`,
+        ).join(''),
+      );
+      const unknown = (url: string, extra: Record<string, unknown> = {}) =>
+        record(url, { bytecodeVersion: null, bundleHash: null, ...extra });
+      const locationFields = async (file: string) => {
+        const location = (await locateZipEntry(
+          path.join(dir, file),
+          (n) => n === 'index.bundlejs',
+        ))!;
+        return {
+          bundleOffset: location.dataOffset,
+          bundleCompressedSize: location.compressedSize,
+          bundleCompression: location.compressionMethod,
+        };
+      };
+      beforeEach(async () => {
+        await writeZip(path.join(dir, 'plain-stored.ppk'), {
+          'assets/big.bin': { data: assets, compress: false },
+          'index.bundlejs': { data: plainJs, compress: false },
+        });
+        await writeZip(path.join(dir, 'plain-deflate.ppk'), {
+          'index.bundlejs': { data: plainJs },
+          'assets/big.bin': { data: assets, compress: false },
+        });
+        await writeZip(path.join(dir, 'hbc97.ppk'), {
+          'index.bundlejs': { data: fakeHbc(97, 'x'.repeat(200000)) },
+        });
+      });
+
+      for (const file of ['plain-stored.ppk', 'plain-deflate.ppk']) {
+        test(`a plain JS base (${file}) is rejected from its head alone`, async () => {
+          const server = serveFiles(dir);
+          const messages: string[] = [];
+          try {
+            const error = await fetchBaseBundle(
+              unknown(server.url(file)),
+              'ppk',
+              path.join(dir, 'archive.ppk'),
+              (m) => messages.push(m),
+              98,
+            ).catch((e) => e);
+            expect(error).toBeInstanceOf(HbcVersionMismatchError);
+            expect(error.message).toBe('downloaded base is HBC n/a, need 98');
+            expect(messages).toEqual([]);
+            // tail + one header/head chunk, not the bundle body
+            expect(server.log.length).toBeLessThanOrEqual(2);
+            const served = servedBytes(server.log);
+            expect(served).toBeLessThan(200 * 1024);
+            expect(fs.statSync(path.join(dir, file)).size).toBeGreaterThan(
+              2 * served,
+            );
+          } finally {
+            server.stop();
+          }
+        });
+      }
+
+      test('a recorded location is probed first, the directory decides', async () => {
+        const server = serveFiles(dir);
+        const messages: string[] = [];
+        try {
+          const error = await fetchBaseBundle(
+            unknown(server.url('plain-deflate.ppk'), {
+              ...(await locationFields('plain-deflate.ppk')),
+            }),
+            'ppk',
+            path.join(dir, 'archive.ppk'),
+            (m) => messages.push(m),
+            98,
+          ).catch((e) => e);
+          expect(error).toBeInstanceOf(HbcVersionMismatchError);
+          expect(messages).toEqual([]);
+          expect(span(server.log[0])[1] - span(server.log[0])[0] + 1).toBe(
+            4096,
+          );
+          expect(servedBytes(server.log)).toBeLessThan(200 * 1024);
+        } finally {
+          server.stop();
+        }
+      });
+
+      test('another HBC version is reported with its number', async () => {
+        const server = serveFiles(dir);
+        try {
+          const error = await fetchBaseBundle(
+            unknown(server.url('hbc97.ppk')),
+            'ppk',
+            path.join(dir, 'archive.ppk'),
+            () => {},
+            98,
+          ).catch((e) => e);
+          expect(error).toBeInstanceOf(HbcVersionMismatchError);
+          expect(error.version).toBe(97);
+        } finally {
+          server.stop();
+        }
+      });
+
+      test('a matching base passes the probe and is read in full', async () => {
+        const server = serveFiles(dir);
+        try {
+          for (const [file, fields] of [
+            ['deflate.ppk', {}],
+            ['stored.ppk', await locationFields('stored.ppk')],
+            ['deflate.ppk', await locationFields('deflate.ppk')],
+          ] as const) {
+            server.log.length = 0;
+            const fetched = await fetchBaseBundle(
+              unknown(server.url(file), fields),
+              'ppk',
+              path.join(dir, 'archive.ppk'),
+              () => {},
+              98,
+            );
+            expect(fetched.bundle.equals(bundle)).toBe(true);
+            expect(fetched.transport).toBe(
+              'bundleOffset' in fields ? 'range-entry' : 'range-zip',
+            );
+            // the probe costs one small request on top
+            if ('bundleOffset' in fields) expect(server.log.length).toBe(2);
+          }
+        } finally {
+          server.stop();
+        }
+      });
+
+      test('fetchZipEntryHead reads a stored head exactly', async () => {
+        const server = serveFiles(dir);
+        try {
+          const head = await fetchZipEntryHead(
+            server.url('plain-stored.ppk'),
+            {
+              dataOffset: (await locationFields('plain-stored.ppk'))
+                .bundleOffset,
+              compressedSize: plainJs.length,
+              compressionMethod: ZIP_STORED,
+            },
+            128,
+          );
+          expect(head.equals(plainJs.subarray(0, 128))).toBe(true);
+          expect(span(server.log[0])[1] - span(server.log[0])[0] + 1).toBe(128);
+        } finally {
+          server.stop();
+        }
+      });
+    });
+
+    test('decodeEntryHead inflates a truncated deflate stream', () => {
+      const raw = deflateRawSync(bundle);
+      expect(
+        decodeEntryHead(raw.subarray(0, 300), ZIP_DEFLATED, 128).equals(
+          bundle.subarray(0, 128),
+        ),
+      ).toBe(true);
+      expect(() => decodeEntryHead(raw, 12, 128)).toThrow();
     });
 
     test('a missing object fails instead of falling back', async () => {
@@ -815,6 +991,34 @@ describe('zip-range consistency and deadlines', () => {
       expect(error).not.toBeInstanceOf(RangeUnsupportedError);
       expect(error.message).toMatch(/archive size changed/);
     } finally {
+      server.stop();
+    }
+  });
+
+  test('a fractional per-MB deadline still yields a valid timeout', async () => {
+    const server = serveFiles(dir);
+    const original = AbortSignal.timeout;
+    try {
+      const location = (await locateZipEntry(
+        path.join(dir, 'big.apk'),
+        bundleEntryMatcher('apk'),
+      ))!;
+      // defaults turn this size into a non-integer number of ms
+      expect(((1000 * location.compressedSize) / (1024 * 1024)) % 1).not.toBe(
+        0,
+      );
+      // Node throws on a fractional delay (Bun does not), so check the value
+      const delays: number[] = [];
+      AbortSignal.timeout = (ms: number) => {
+        delays.push(ms);
+        return original.call(AbortSignal, ms);
+      };
+      const result = await fetchZipEntryData(server.url('big.apk'), location);
+      expect(result.data.equals(bigBundle)).toBe(true);
+      expect(delays.length).toBeGreaterThan(0);
+      for (const ms of delays) expect(Number.isInteger(ms)).toBe(true);
+    } finally {
+      AbortSignal.timeout = original;
       server.stop();
     }
   });
