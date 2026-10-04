@@ -45,7 +45,31 @@ const FUNC_OFFSET_25: DeltaField = { byte: 0, bit: 0, bits: 25 };
 const STRING_OFFSET_23: DeltaField = { byte: 0, bit: 1, bits: 23 };
 const PAIR_OFFSET_32: DeltaField = { byte: 0, bit: 0, bits: 32 };
 
-// v98 两种头部变体共享的段布局
+// 晚期 v98 与 v99 共用的头部计数字段
+const V98_LATE_HEADER_FIELDS = [
+  'fileLength',
+  'globalCodeIndex',
+  'functionCount',
+  'stringKindCount',
+  'identifierCount',
+  'stringCount',
+  'overflowStringCount',
+  'stringStorageSize',
+  'bigIntCount',
+  'bigIntStorageSize',
+  'regExpCount',
+  'regExpStorageSize',
+  'literalValueBufferSize',
+  'objKeyBufferSize',
+  'objShapeTableCount',
+  'numStringSwitchImms',
+  'segmentID',
+  'cjsModuleCount',
+  'functionSourceCount',
+  'debugInfoOffset',
+];
+
+// v98 两种头部变体(及 v99)共享的段布局
 const V98_SECTIONS: SectionDesc[] = [
   {
     name: 'functionHeaders',
@@ -195,28 +219,16 @@ export const HBC_LAYOUTS: HbcLayout[] = [
     // 段布局与早期 v98 相同。
     minVersion: 98,
     maxVersion: 98,
-    headerFields: [
-      'fileLength',
-      'globalCodeIndex',
-      'functionCount',
-      'stringKindCount',
-      'identifierCount',
-      'stringCount',
-      'overflowStringCount',
-      'stringStorageSize',
-      'bigIntCount',
-      'bigIntStorageSize',
-      'regExpCount',
-      'regExpStorageSize',
-      'literalValueBufferSize',
-      'objKeyBufferSize',
-      'objShapeTableCount',
-      'numStringSwitchImms',
-      'segmentID',
-      'cjsModuleCount',
-      'functionSourceCount',
-      'debugInfoOffset',
-    ],
+    headerFields: V98_LATE_HEADER_FIELDS,
+    sections: V98_SECTIONS,
+  },
+  {
+    // Hermes V1 v99(hermes-compiler 260318099,RN 0.88+):文件头与段布局
+    // 同晚期 v98,只改了函数头内部位域(去 NumCacheNewObject)与操作码表,
+    // 二者都不在本变换触及的范围内。
+    minVersion: 99,
+    maxVersion: 99,
+    headerFields: V98_LATE_HEADER_FIELDS,
     sections: V98_SECTIONS,
   },
   {

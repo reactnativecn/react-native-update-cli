@@ -114,6 +114,13 @@ function buildSyntheticV98(
   return buf;
 }
 
+/** v99 的文件头与段布局同晚期 v98,只有版本号不同。 */
+function buildSyntheticV99(): Buffer {
+  const buf = buildSyntheticV98('late');
+  buf.writeUInt32LE(99, 8);
+  return buf;
+}
+
 describe('hbcTransform', () => {
   test('recognizes fixture version and layout', () => {
     const a = fixture('v96-a.hbc');
@@ -121,6 +128,20 @@ describe('hbcTransform', () => {
     expect(findLayouts(96)).toHaveLength(1);
     expect(findLayouts(97)).toHaveLength(0);
     expect(findLayouts(98)).toHaveLength(2); // 晚期(20 槽)优先,早期(19 槽)兜底
+    expect(findLayouts(99)).toHaveLength(1);
+    expect(findLayouts(99)[0]!.headerFields).toEqual(
+      findLayouts(98)[0]!.headerFields,
+    );
+    expect(findLayouts(100)).toHaveLength(0);
+  });
+
+  test('v99 is transformed with the late v98 file layout', () => {
+    const buf = buildSyntheticV99();
+    expect(getHbcVersion(buf)).toBe(99);
+    const t = transformHbc(buf);
+    expect(t).not.toBeNull();
+    expect(Buffer.compare(t!, buf)).not.toBe(0);
+    expect(Buffer.compare(transformHbc(t!, true)!, buf)).toBe(0);
   });
 
   test('transform is invertible on real v96 fixtures', () => {
@@ -245,6 +266,7 @@ describe('hbcTransform', () => {
       [fixture('v96-b.hbc'), layout96],
       [buildSyntheticV98('late'), findLayouts(98)[0]!],
       [buildSyntheticV98('early'), findLayouts(98)[1]!],
+      [buildSyntheticV99(), findLayouts(99)[0]!],
     ];
     for (const [buf, layout] of cases) {
       const expected = transformHbcWithLayout(buf, layout, false)!;

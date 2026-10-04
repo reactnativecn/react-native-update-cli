@@ -129,7 +129,7 @@ describe.if(hasHermesc)('lossless Hermes operand audit (real compiler)', () => {
     );
   });
 
-  test.skipIf(!hasHermesc || probeHbcVersion(hermesc!) === 98)(
+  test.skipIf(!hasHermesc || probeHbcVersion(hermesc!) >= 98)(
     'classic global lexical declarations resolve restricted-property string IDs',
     async () => {
       const base = compile('lexical-base', 'print("old-base-string");');

@@ -68,7 +68,8 @@ export async function readHermesSemanticData(
   if (
     !(
       (resolved.version >= 87 && resolved.version <= 96) ||
-      resolved.version === 98
+      resolved.version === 98 ||
+      resolved.version === 99
     )
   ) {
     throw new UnverifiableHermesBytecode('unsupported semantic HBC version');
@@ -105,7 +106,11 @@ export async function readHermesSemanticData(
   // hbcTransform's file-header variants do not distinguish that function
   // schema change. A compiler upgrade needs independent large/small fixtures;
   // do not infer either schema from numStringSwitchImms or HBC version alone.
-  const shaped = resolved.version === 98;
+  // Audited v99 function schema: hermes-compiler 260318099.0.4 (RN 0.88), the
+  // first HBC bump after that removal, so it always has the 36-byte form.
+  const shaped = resolved.version >= 98;
+  const noCacheNewObject = resolved.version === 99;
+  const largeSize = noCacheNewObject ? 36 : 37;
   const entrySize = shaped ? 12 : 16;
   const headers = section('functionHeaders');
   const functions: FunctionData[] = [];
@@ -122,15 +127,17 @@ export async function readHermesSemanticData(
       const largeOffset = shaped
         ? ((word1 >>> 14) & 0xff) * 0x1000000 + offset
         : (headers.readUInt32LE(at + 8) & 0x1ffffff) * 0x10000 + offset;
-      const large = checkedSlice(bytes, largeOffset, shaped ? 37 : 31);
+      const large = checkedSlice(bytes, largeOffset, shaped ? largeSize : 31);
       offset = large.readUInt32LE(0);
       size = large.readUInt32LE(shaped ? 12 : 8);
       name = large.readUInt32LE(shaped ? 16 : 12);
-      flags = large[shaped ? 36 : 30];
+      flags = large[shaped ? largeSize - 1 : 30];
       fields = shaped
         ? [4, 8, 20, 24, 28].map((p) => large.readUInt32LE(p))
         : [4, 20, 24].map((p) => large.readUInt32LE(p));
-      fields.push(...large.subarray(shaped ? 32 : 28, shaped ? 36 : 30));
+      fields.push(
+        ...large.subarray(shaped ? 32 : 28, shaped ? largeSize - 1 : 30),
+      );
     } else if (shaped) {
       size = word1 & 0x3fff;
       name = (word1 >>> 14) & 0xff;
@@ -141,9 +148,13 @@ export async function readHermesSemanticData(
         word1 >>> 27,
         headers[at + 8],
         headers[at + 9],
-        headers[at + 10] & 63,
-        (headers[at + 10] >>> 6) & 1,
-        headers[at + 10] >>> 7,
+        ...(noCacheNewObject
+          ? [headers[at + 10] & 127, headers[at + 10] >>> 7]
+          : [
+              headers[at + 10] & 63,
+              (headers[at + 10] >>> 6) & 1,
+              headers[at + 10] >>> 7,
+            ]),
       ];
     } else {
       size = word1 & 0x7fff;
@@ -435,6 +446,9 @@ export function normalizeRawHermesFunction(
           'undecodable shape values',
         );
       }
+    } else if (op === 'NewTypedObjectWithBuffer') {
+      // HBC v99 typed-mode buffer user; its literal operands are not decoded.
+      throw new UnverifiableHermesBytecode('typed object literal buffer');
     } else if (op === 'CacheNewObject') {
       if (buffers.layout !== 'shaped' || values.length !== 4) {
         throw new UnverifiableHermesBytecode('unknown cached object operands');

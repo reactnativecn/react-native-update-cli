@@ -169,6 +169,11 @@ jobs:
             package: hermes-compiler@250829098.0.17
             directory: hermes-compiler
             executable: hermesc/linux64-bin/hermesc
+          - hbc: 99
+            suffix: ""
+            package: hermes-compiler@260318099.0.4
+            directory: hermes-compiler
+            executable: hermesc/linux64-bin/hermesc
     steps:
       - uses: actions/checkout@v7
         with:
