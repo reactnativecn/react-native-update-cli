@@ -275,8 +275,19 @@ interface RawInstruction {
 }
 
 /** Remove encoding-width suffixes; operand values remain part of the audit. */
-function foldWidth(opcode: string): string {
-  return opcode.replace(/(?:LongIndex|Long|Short)$/, '');
+/** The opcode without its operand-width suffix (`GetByIdLong` → `GetById`). */
+export function foldWidthSuffix(opcode: string): string {
+  for (const suffix of ['LongIndex', 'Long', 'Short']) {
+    if (opcode.length > suffix.length && opcode.endsWith(suffix)) {
+      return opcode.slice(0, -suffix.length);
+    }
+  }
+  return opcode;
+}
+
+/** The first line of a function in either dump. */
+export function isFunctionHeader(line: string): boolean {
+  return /^(?:Function|NCFunction|Constructor)</.test(line);
 }
 
 /**
@@ -382,7 +393,7 @@ export function normalizeRawHermesFunction(
   const literal = new LiteralResolver(buffers, data.strings);
   const output = [fn.metadata];
   for (const inst of instructions) {
-    const op = foldWidth(inst.opcode);
+    const op = foldWidthSuffix(inst.opcode);
     const values = inst.operands.map((o) => o.value);
     const refs = STRING_OPERANDS[op] ?? [];
     const operands: unknown[] = inst.operands.map((operand, i) => {
@@ -568,7 +579,7 @@ export async function auditRawHermesBytecode(
     const normalize = (body: string[]) =>
       normalizeRawHermesFunction(body, data[side], index++, buffers[side]);
     for await (const line of linesOf(children[side].stdout!)) {
-      if (/^(?:Function|NCFunction|Constructor)</.test(line)) {
+      if (isFunctionHeader(line)) {
         if (lines) yield normalize(lines);
         lines = [];
       } else if (

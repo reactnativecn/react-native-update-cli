@@ -37,7 +37,12 @@ import {
   LiteralResolver,
   literalBuffersFromBytes,
 } from './hermes-literals';
-import { auditRawHermesBytecode, hermesSemanticData } from './hermes-raw';
+import {
+  auditRawHermesBytecode,
+  foldWidthSuffix,
+  hermesSemanticData,
+  isFunctionHeader,
+} from './hermes-raw';
 import { hermesTimeout } from './hermes-timeout';
 import { t } from './i18n';
 import { webFetch } from './runtime';
@@ -1252,15 +1257,6 @@ function isLetter(code: number): boolean {
 }
 
 /** strip one operand-width suffix (LongIndex, Long, Short) off an opcode */
-function foldWidthSuffix(opcode: string): string {
-  for (const suffix of ['LongIndex', 'Long', 'Short']) {
-    if (opcode.length > suffix.length && opcode.endsWith(suffix)) {
-      return opcode.slice(0, -suffix.length);
-    }
-  }
-  return opcode;
-}
-
 /** Split a readable stream into lines without readline (Bun's readline async iterator misbehaves when pulled manually). */
 async function* streamLines(
   stream: NodeJS.ReadableStream,
@@ -1333,10 +1329,6 @@ const TRAILER_SECTION = /^(?:Debug |Textified callees table)/;
 const DUMP_STDERR_KEEP = 4 * 1024;
 /** a diagnostic line is cut to this many characters */
 const DETAIL_LINE_MAX = 120;
-
-function isFunctionHeader(line: string): boolean {
-  return /^(?:Function|NCFunction|Constructor)</.test(line);
-}
 
 /**
  * Structured reader over one `hermesc -dump-bytecode -pretty-disassemble`
