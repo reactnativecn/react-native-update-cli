@@ -6,9 +6,13 @@ import {
   open as openZipFile,
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
-import { ZipFile as YazlZipFile } from 'yazl';
 import type { Platform } from './types';
 import { ensureDir, remove } from './utils/fs-helpers';
+import {
+  createOutputZip,
+  openEntryStream,
+  writeEntry,
+} from './utils/zip-entries';
 import { fitsRawZip, RawZipWriter } from './utils/zip-raw-writer';
 
 export type NativePackageEntry = {
@@ -87,22 +91,11 @@ class RawCopySink implements SlimSink {
   constructor(output: string) {
     this.writer = new RawZipWriter(output);
   }
-  copyEntry(sourceZip: YauzlZipFile, entry: Entry): Promise<void> {
-    return new Promise((resolve, reject) => {
-      sourceZip.openReadStream(
-        entry,
-        { decodeFileData: false },
-        (error, readStream) => {
-          if (error || !readStream) {
-            reject(
-              error ?? new Error(`Unable to read zip entry: ${entry.fileName}`),
-            );
-            return;
-          }
-          this.writer.addRawEntry(entry, readStream).then(resolve, reject);
-        },
-      );
+  async copyEntry(sourceZip: YauzlZipFile, entry: Entry): Promise<void> {
+    const readStream = await openEntryStream(entry, sourceZip, {
+      decodeFileData: false,
     });
+    await this.writer.addRawEntry(entry, readStream);
   }
   addFile(filePath: string, fileName: string, like: Entry): Promise<void> {
     // a nested slim archive is a zip of deflated entries: storing it as-is
@@ -119,32 +112,18 @@ class RawCopySink implements SlimSink {
 
 /** Re-deflates every kept entry through yazl; only for sources that need zip64. */
 class RepackSink implements SlimSink {
-  private readonly outputZip = new YazlZipFile();
-  private readonly writePromise: Promise<void>;
-  constructor(readonly output: string) {
-    this.writePromise = new Promise<void>((resolve, reject) => {
-      this.outputZip.outputStream.once('error', reject);
-      this.outputZip.outputStream
-        .pipe(fs.createWriteStream(output))
-        .once('error', reject)
-        .once('close', () => resolve());
-    });
+  private readonly output: ReturnType<typeof createOutputZip>;
+  constructor(output: string) {
+    this.output = createOutputZip(output);
   }
-  copyEntry(sourceZip: YauzlZipFile, entry: Entry): Promise<void> {
-    return new Promise((resolve, reject) => {
-      sourceZip.openReadStream(entry, (error, readStream) => {
-        if (error || !readStream) {
-          reject(
-            error ?? new Error(`Unable to read zip entry: ${entry.fileName}`),
-          );
-          return;
-        }
-        readStream.once('error', reject);
-        readStream.once('end', () => resolve());
-        this.outputZip.addReadStream(readStream, entry.fileName, {
-          compress: entry.compressionMethod !== 0,
-          mtime: entry.getLastModDate(),
-        });
+  async copyEntry(sourceZip: YauzlZipFile, entry: Entry): Promise<void> {
+    const readStream = await openEntryStream(entry, sourceZip);
+    await new Promise<void>((resolve, reject) => {
+      readStream.once('error', reject);
+      readStream.once('end', () => resolve());
+      this.output.zipfile.addReadStream(readStream, entry.fileName, {
+        compress: entry.compressionMethod !== 0,
+        mtime: entry.getLastModDate(),
       });
     });
   }
@@ -153,19 +132,17 @@ class RepackSink implements SlimSink {
     fileName: string,
     like: Entry,
   ): Promise<void> {
-    this.outputZip.addFile(filePath, fileName, {
+    this.output.zipfile.addFile(filePath, fileName, {
       compress: like.compressionMethod !== 0,
       mtime: like.getLastModDate(),
     });
   }
   async end(): Promise<void> {
-    this.outputZip.end();
-    await this.writePromise;
+    this.output.zipfile.end();
+    await this.output.writePromise;
   }
-  async abort(): Promise<void> {
-    this.outputZip.end();
-    await this.writePromise.catch(() => {});
-    await remove(this.output).catch(() => {});
+  abort(): Promise<void> {
+    return this.output.abort();
   }
 }
 
@@ -177,31 +154,6 @@ function openZip(source: string): Promise<YauzlZipFile> {
         return;
       }
       resolve(zipFile);
-    });
-  });
-}
-
-function extractEntryToFile(
-  sourceZip: YauzlZipFile,
-  entry: Entry,
-  outputPath: string,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    sourceZip.openReadStream(entry, (error, readStream) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      if (!readStream) {
-        reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
-        return;
-      }
-
-      const writeStream = fs.createWriteStream(outputPath);
-      readStream.once('error', reject);
-      writeStream.once('error', reject);
-      writeStream.once('close', () => resolve());
-      readStream.pipe(writeStream);
     });
   });
 }
@@ -270,7 +222,7 @@ async function filterNativePackageArchive(
             const index = nestedArchiveIndex++;
             const nestedSource = path.join(scratchDir, `${index}.source.hap`);
             const nestedOutput = path.join(scratchDir, `${index}.slim.hap`);
-            await extractEntryToFile(sourceZip, entry, nestedSource);
+            await writeEntry(entry, sourceZip, nestedSource);
             const nestedResult = await filterNativePackageArchive(
               nestedSource,
               nestedOutput,

@@ -11,13 +11,12 @@ import { PassThrough, Readable } from 'stream';
 import {
   type Entry,
   fromRandomAccessReader,
-  open as openZipFile,
   RandomAccessReader,
   type ZipFile,
 } from 'yauzl';
 import { inflateRawSync, constants as zlibConstants } from 'zlib';
 import { webFetch } from './runtime';
-import { readEntry } from './zip-entries';
+import { openFirstEntry, readEntry } from './zip-entries';
 
 export const ZIP_STORED = 0;
 export const ZIP_DEFLATED = 8;
@@ -115,46 +114,6 @@ async function locationOfEntry(
     uncompressedSize: entry.uncompressedSize,
     compressionMethod: entry.compressionMethod,
   };
-}
-
-/** Open a local zip and stop at the first matching entry (caller closes). */
-function openFirstEntry(
-  zipPath: string,
-  matches: (name: string) => boolean,
-): Promise<{ zipFile: ZipFile; entry: Entry } | null> {
-  return new Promise((resolve, reject) => {
-    openZipFile(
-      zipPath,
-      { lazyEntries: true, autoClose: false },
-      (err, zipFile) => {
-        if (err) return reject(err);
-        let settled = false;
-        zipFile.on('error', (error) => {
-          if (!settled) {
-            settled = true;
-            reject(error);
-          }
-        });
-        zipFile.on('end', () => {
-          if (!settled) {
-            settled = true;
-            zipFile.close();
-            resolve(null);
-          }
-        });
-        zipFile.on('entry', (entry: Entry) => {
-          if (settled) return;
-          if (matches(entry.fileName)) {
-            settled = true;
-            resolve({ zipFile, entry });
-            return;
-          }
-          zipFile.readEntry();
-        });
-        zipFile.readEntry();
-      },
-    );
-  });
 }
 
 /**

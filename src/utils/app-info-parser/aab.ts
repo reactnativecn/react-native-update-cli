@@ -2,9 +2,9 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { open as openZipFile } from 'yauzl';
 import { pathExists, remove } from '../fs-helpers';
 import { t } from '../i18n';
+import { extractFirstEntry } from '../zip-entries';
 import { ResourceFinder } from './resource-finder';
 import { mapInfoResource } from './utils';
 import { ManifestParser } from './xml-parser/manifest';
@@ -127,43 +127,14 @@ export class AabParser extends Zip {
       }
 
       // 2. Extract universal.apk from the .apks (zip) file
-      await new Promise<void>((resolve, reject) => {
-        openZipFile(tempApksPath, { lazyEntries: true }, (err, zipfile) => {
-          if (err || !zipfile) {
-            reject(err || new Error(t('aabOpenApksFailed')));
-            return;
-          }
-
-          let found = false;
-          zipfile.readEntry();
-          zipfile.on('entry', (entry) => {
-            if (entry.fileName === 'universal.apk') {
-              found = true;
-              zipfile.openReadStream(entry, (err, readStream) => {
-                if (err || !readStream) {
-                  reject(err || new Error(t('aabReadUniversalApkFailed')));
-                  return;
-                }
-                const writeStream = fs.createWriteStream(outputPath);
-                readStream.pipe(writeStream);
-                writeStream.on('close', () => {
-                  zipfile.close();
-                  resolve();
-                });
-                readStream.on('error', reject);
-                writeStream.on('error', reject);
-              });
-            } else {
-              zipfile.readEntry();
-            }
-          });
-
-          zipfile.on('end', () => {
-            if (!found) reject(new Error(t('aabUniversalApkNotFound')));
-          });
-          zipfile.on('error', reject);
-        });
-      });
+      const found = await extractFirstEntry(
+        tempApksPath,
+        (name) => name === 'universal.apk',
+        outputPath,
+      );
+      if (!found) {
+        throw new Error(t('aabUniversalApkNotFound'));
+      }
     } finally {
       // Cleanup
       if (await pathExists(tempDir)) {

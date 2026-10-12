@@ -1,141 +1,183 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import type { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import {
   type Entry,
   open as openZipFile,
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
+import { ZipFile as YazlZipFile } from 'yazl';
 import { ensureDirSync, remove } from './fs-helpers';
 
-export function readEntry(
+export function openEntryStream(
   entry: Entry,
   zipFile: YauzlZipFile,
-): Promise<Buffer> {
-  const buffers: Buffer[] = [];
+  options: { decodeFileData?: boolean } = {},
+): Promise<Readable> {
   return new Promise((resolve, reject) => {
-    zipFile.openReadStream(entry, (err, stream) => {
-      if (err) {
-        return reject(err);
+    zipFile.openReadStream(entry, options, (err, stream) => {
+      if (err || !stream) {
+        reject(err ?? new Error(`Unable to read zip entry: ${entry.fileName}`));
+        return;
       }
-      if (!stream) {
-        return reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
-      }
-      stream.on('data', (chunk: Buffer) => {
-        buffers.push(chunk);
-      });
-      stream.on('end', () => {
-        // a single chunk (a cached Range read) is handed back as-is, not copied
-        resolve(buffers.length === 1 ? buffers[0] : Buffer.concat(buffers));
-      });
-      stream.on('error', (err) => {
-        reject(err);
-      });
+      resolve(stream);
     });
   });
 }
 
-export function writeEntry(
+export async function readEntry(
+  entry: Entry,
+  zipFile: YauzlZipFile,
+): Promise<Buffer> {
+  const buffers: Buffer[] = [];
+  for await (const chunk of await openEntryStream(entry, zipFile)) {
+    buffers.push(chunk);
+  }
+  // a single chunk (a cached Range read) is handed back as-is, not copied
+  return buffers.length === 1 ? buffers[0] : Buffer.concat(buffers);
+}
+
+export async function writeEntry(
   entry: Entry,
   zipFile: YauzlZipFile,
   outputPath: string,
 ): Promise<void> {
   ensureDirSync(path.dirname(outputPath));
-  return new Promise((resolve, reject) => {
-    zipFile.openReadStream(entry, (err, stream) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      if (!stream) {
-        reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
-        return;
-      }
-      pipeline(stream, fs.createWriteStream(outputPath)).then(resolve, reject);
-    });
-  });
+  await pipeline(
+    await openEntryStream(entry, zipFile),
+    fs.createWriteStream(outputPath),
+  );
 }
 
-export function readEntryPrefix(
+export async function readEntryPrefix(
   entry: Entry,
   zipFile: YauzlZipFile,
   maxBytes: number,
 ): Promise<Buffer> {
   if (maxBytes <= 0) {
-    return Promise.resolve(Buffer.alloc(0));
+    return Buffer.alloc(0);
   }
-
   const buffers: Buffer[] = [];
   let length = 0;
+  // leaving the loop early destroys the stream without an error
+  for await (const chunk of await openEntryStream(entry, zipFile)) {
+    const slice = chunk.subarray(0, maxBytes - length);
+    buffers.push(slice);
+    length += slice.length;
+    if (length >= maxBytes) {
+      break;
+    }
+  }
+  return Buffer.concat(buffers, length);
+}
 
+/** Open a local zip and stop at the first matching entry (caller closes). */
+export function openFirstEntry(
+  zipPath: string,
+  matches: (name: string) => boolean,
+): Promise<{ zipFile: YauzlZipFile; entry: Entry } | null> {
   return new Promise((resolve, reject) => {
-    zipFile.openReadStream(entry, (err, stream) => {
-      if (err) {
-        return reject(err);
-      }
-      if (!stream) {
-        return reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
-      }
+    openZipFile(
+      zipPath,
+      { lazyEntries: true, autoClose: false },
+      (err, zipFile) => {
+        if (err) return reject(err);
+        let settled = false;
+        zipFile.on('error', (error) => {
+          if (!settled) {
+            settled = true;
+            reject(error);
+          }
+        });
+        zipFile.on('end', () => {
+          if (!settled) {
+            settled = true;
+            zipFile.close();
+            resolve(null);
+          }
+        });
+        zipFile.on('entry', (entry: Entry) => {
+          if (settled) return;
+          if (matches(entry.fileName)) {
+            settled = true;
+            resolve({ zipFile, entry });
+            return;
+          }
+          zipFile.readEntry();
+        });
+        zipFile.readEntry();
+      },
+    );
+  });
+}
 
-      let settled = false;
-      let expectedDestroyError: Error | undefined;
-      const cleanup = () => {
-        stream.off('data', onData);
-        stream.off('end', onEnd);
-        stream.off('error', onError);
-      };
-      const finish = (destroyStream = false) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        stream.off('data', onData);
-        stream.off('end', onEnd);
-        if (!destroyStream) {
-          stream.off('error', onError);
-        }
-        resolve(Buffer.concat(buffers, length));
+/** Content of the first matching entry of a local zip, or null. */
+export async function readFirstEntry(
+  zipPath: string,
+  matches: (name: string) => boolean,
+): Promise<Buffer | null> {
+  const found = await openFirstEntry(zipPath, matches);
+  if (!found) return null;
+  try {
+    return await readEntry(found.entry, found.zipFile);
+  } finally {
+    found.zipFile.close();
+  }
+}
 
-        if (destroyStream) {
-          expectedDestroyError = new Error('zip entry prefix read complete');
-          stream.destroy(expectedDestroyError);
-        }
-      };
-      const onData = (chunk: Buffer) => {
-        const remaining = maxBytes - length;
-        if (remaining <= 0) {
-          finish(true);
-          return;
-        }
+/** Extract the first matching entry of a local zip to `outputPath`. */
+export async function extractFirstEntry(
+  zipPath: string,
+  matches: (name: string) => boolean,
+  outputPath: string,
+): Promise<boolean> {
+  const found = await openFirstEntry(zipPath, matches);
+  if (!found) return false;
+  try {
+    await writeEntry(found.entry, found.zipFile, outputPath);
+  } finally {
+    found.zipFile.close();
+  }
+  return true;
+}
 
-        const slice =
-          chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
-        buffers.push(slice);
-        length += slice.length;
-        if (length >= maxBytes) {
-          finish(true);
-        }
-      };
-      const onEnd = () => finish();
-      const onError = (error: Error) => {
-        if (settled && error === expectedDestroyError) {
-          cleanup();
-          return;
-        }
-        if (settled) {
-          return;
-        }
-        settled = true;
-        cleanup();
-        reject(error);
-      };
-
-      stream.on('data', onData);
-      stream.once('end', onEnd);
-      stream.once('error', onError);
+/**
+ * A yazl archive piped into `output`. `writePromise` settles once the file is
+ * closed; `abort` releases the fd and deletes the partial file.
+ */
+export function createOutputZip(output: string) {
+  ensureDirSync(path.dirname(output));
+  const zipfile = new YazlZipFile();
+  const writeStream = fs.createWriteStream(output);
+  const writePromise = new Promise<void>((resolve, reject) => {
+    zipfile.outputStream.on('error', reject);
+    // without this, a full disk / read-only target left the promise pending
+    writeStream.on('error', reject);
+    zipfile.outputStream.pipe(writeStream).on('close', () => {
+      resolve(void 0);
     });
   });
+  // 失败时释放输出 fd 并删掉半成品,避免残留一个截断的包
+  const abort = async () => {
+    writePromise.catch(() => {});
+    zipfile.outputStream.unpipe(writeStream);
+    // yazl 的 outputStream 类型声明缺 destroy,运行时是 PassThrough
+    (zipfile.outputStream as unknown as { destroy(): void }).destroy();
+    if (!writeStream.closed) {
+      // 等 fd 真正关闭再删文件,避免 Windows 上删除被占用文件失败
+      await new Promise<void>((resolve) => {
+        writeStream.once('close', () => resolve());
+        if (!writeStream.destroyed) {
+          writeStream.destroy();
+        }
+      });
+    }
+    // best effort: a failed cleanup must not mask the original error
+    await fs.promises.rm(output, { force: true }).catch(() => {});
+  };
+  return { zipfile, writePromise, abort };
 }
 
 export async function enumZipEntries(
@@ -148,63 +190,46 @@ export async function enumZipEntries(
   nestedPath = '',
 ) {
   return new Promise((resolve, reject) => {
-    openZipFile(
-      zipFn,
-      { lazyEntries: true },
-      async (err: any, zipfile: YauzlZipFile) => {
-        if (err) {
-          return reject(err);
-        }
+    openZipFile(zipFn, { lazyEntries: true }, (err: any, zipfile) => {
+      if (err) {
+        return reject(err);
+      }
 
-        zipfile.on('end', resolve);
-        zipfile.on('error', reject);
-        zipfile.on('entry', async (entry) => {
-          const fullPath = nestedPath + entry.fileName;
+      zipfile.on('end', resolve);
+      zipfile.on('error', reject);
+      zipfile.on('entry', async (entry) => {
+        const fullPath = nestedPath + entry.fileName;
 
-          try {
-            if (
-              !entry.fileName.endsWith('/') &&
-              entry.fileName.toLowerCase().endsWith('.hap')
-            ) {
-              const tempDir = await fs.promises.mkdtemp(
-                path.join(os.tmpdir(), 'nested_zip_'),
-              );
-              const tempZipPath = path.join(tempDir, 'temp.zip');
-              try {
-                await new Promise((res, rej) => {
-                  zipfile.openReadStream(entry, async (err, readStream) => {
-                    if (err) return rej(err);
-                    const writeStream = fs.createWriteStream(tempZipPath);
-                    readStream.on('error', rej);
-                    readStream.pipe(writeStream);
-                    writeStream.on('finish', () => res(void 0));
-                    writeStream.on('error', rej);
-                  });
-                });
-
-                await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
-              } finally {
-                await remove(tempDir);
-              }
+        try {
+          if (
+            !entry.fileName.endsWith('/') &&
+            entry.fileName.toLowerCase().endsWith('.hap')
+          ) {
+            const tempDir = await fs.promises.mkdtemp(
+              path.join(os.tmpdir(), 'nested_zip_'),
+            );
+            const tempZipPath = path.join(tempDir, 'temp.zip');
+            try {
+              await writeEntry(entry, zipfile, tempZipPath);
+              await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
+            } finally {
+              await remove(tempDir);
             }
-
-            const result = callback(entry, zipfile, fullPath);
-            if (result && typeof result.then === 'function') {
-              await result;
-            }
-          } catch (error) {
-            // the rejection carries the error; logging it here too would make
-            // callers report it twice
-            zipfile.close();
-            reject(error);
-            return;
           }
 
-          zipfile.readEntry();
-        });
+          await callback(entry, zipfile, fullPath);
+        } catch (error) {
+          // the rejection carries the error; logging it here too would make
+          // callers report it twice
+          zipfile.close();
+          reject(error);
+          return;
+        }
 
         zipfile.readEntry();
-      },
-    );
+      });
+
+      zipfile.readEntry();
+    });
   });
 }

@@ -37,7 +37,7 @@ import { auditRawHermesBytecode, readHermesSemanticData } from './hermes-raw';
 import { hermesTimeout } from './hermes-timeout';
 import { t } from './i18n';
 import { webFetch } from './runtime';
-import { enumZipEntries, readEntry } from './zip-entries';
+import { readFirstEntry } from './zip-entries';
 import {
   fetchZipEntryData,
   fetchZipEntryHead,
@@ -412,7 +412,7 @@ export async function extractBundleFromArchive(
     return fs.promises.readFile(filePath);
   }
   if (ext === '.ppk' || ext === '.apk' || ext === '.ipa') {
-    return readFirstZipEntry(
+    return readFirstEntry(
       filePath,
       bundleEntryMatcher(ext.slice(1) as BaseArtifactType),
     );
@@ -427,23 +427,10 @@ export async function extractBundleFromArchive(
     return bundle ?? null;
   }
   // unknown extension: try as zip, then as raw file
-  const fromZip = await readFirstZipEntry(filePath, (name) =>
+  const fromZip = await readFirstEntry(filePath, (name) =>
     BUNDLE_ENTRY_NAMES.includes(name),
   ).catch(() => null);
   return fromZip ?? fs.promises.readFile(filePath);
-}
-
-async function readFirstZipEntry(
-  zipPath: string,
-  matches: (name: string) => boolean,
-): Promise<Buffer | null> {
-  let found: Buffer | null = null;
-  await enumZipEntries(zipPath, async (entry, zipFile) => {
-    if (!found && matches(entry.fileName)) {
-      found = await readEntry(entry, zipFile);
-    }
-  });
-  return found;
 }
 
 // ---------------------------------------------------------------------------

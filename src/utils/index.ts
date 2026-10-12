@@ -4,13 +4,13 @@ import { createHash } from 'crypto';
 import path from 'path';
 import type { Root as ProtobufRoot } from 'protobufjs';
 import { read } from 'read';
-import { open as openZipFile, type Entry as YauzlEntry } from 'yauzl';
 import pkg from '../../package.json';
 import type AppInfoParserType from './app-info-parser';
 import { checkPlugins } from './check-plugin';
 import { IS_CRESC } from './constants';
 import { getDepVersion } from './dep-versions';
 import { t } from './i18n';
+import { readFirstEntry } from './zip-entries';
 
 // app-info-parser (and its zip/plist/protobuf stack) is only needed by the
 // package commands; load it on first use instead of on every CLI start.
@@ -427,44 +427,9 @@ export async function getAabInfo(fn: string) {
 }
 
 async function readZipEntry(fn: string, entryName: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    openZipFile(fn, { lazyEntries: true }, (err, zipfile) => {
-      if (err || !zipfile) {
-        reject(err ?? new Error('Failed to open zip file'));
-        return;
-      }
-      let found = false;
-      zipfile.readEntry();
-      zipfile.on('entry', (entry: YauzlEntry) => {
-        if (entry.fileName === entryName) {
-          found = true;
-          zipfile.openReadStream(entry, (streamError, readStream) => {
-            if (streamError || !readStream) {
-              zipfile.close();
-              reject(streamError ?? new Error('Failed to read zip entry'));
-              return;
-            }
-            const chunks: Buffer[] = [];
-            readStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-            readStream.on('end', () => {
-              zipfile.close();
-              resolve(Buffer.concat(chunks));
-            });
-            readStream.on('error', (error) => {
-              zipfile.close();
-              reject(error);
-            });
-          });
-        } else {
-          zipfile.readEntry();
-        }
-      });
-      zipfile.on('end', () => {
-        if (!found) reject(new Error(`${entryName} not found in AAB`));
-      });
-      zipfile.on('error', reject);
-    });
-  });
+  const data = await readFirstEntry(fn, (name) => name === entryName);
+  if (!data) throw new Error(`${entryName} not found in AAB`);
+  return data;
 }
 
 async function resolveResource(

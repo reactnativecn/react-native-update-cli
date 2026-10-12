@@ -4,12 +4,11 @@ import { npm, yarn } from 'global-dirs';
 import os from 'os';
 import path from 'path';
 import type { Entry, ZipFile as YauzlZipFile } from 'yauzl';
-import { ZipFile as YazlZipFile } from 'yazl';
+import type { ZipFile as YazlZipFile } from 'yazl';
 import { resolveNativePackageEntry } from './native-package';
 import type { CommandContext, Platform } from './types';
 import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
-import { ensureDirSync } from './utils/fs-helpers';
 import {
   type HbcTransformMeta,
   transformHbcFile,
@@ -19,7 +18,9 @@ import {
 } from './utils/hbcTransform';
 import { t } from './utils/i18n';
 import {
+  createOutputZip,
   enumZipEntries,
+  openEntryStream,
   readEntry,
   readEntryPrefix,
   writeEntry,
@@ -130,38 +131,6 @@ const hdiff = loadModule<HdiffModule>('node-hdiffpatch');
 function basename(fn: string): string | undefined {
   const m = /^(.+\/)[^/]+\/?$/.exec(fn);
   return m?.[1];
-}
-
-function createOutputZip(output: string) {
-  ensureDirSync(path.dirname(output));
-  const zipfile = new YazlZipFile();
-  const writeStream = fs.createWriteStream(output);
-  const writePromise = new Promise<void>((resolve, reject) => {
-    zipfile.outputStream.on('error', reject);
-    // without this, a full disk / read-only target left the promise pending
-    writeStream.on('error', reject);
-    zipfile.outputStream.pipe(writeStream).on('close', () => {
-      resolve(void 0);
-    });
-  });
-  // 失败时释放输出 fd 并删掉半成品,避免残留一个截断的 patch 包
-  const abort = async () => {
-    writePromise.catch(() => {});
-    zipfile.outputStream.unpipe(writeStream);
-    // yazl 的 outputStream 类型声明缺 destroy,运行时是 PassThrough
-    (zipfile.outputStream as unknown as { destroy(): void }).destroy();
-    if (!writeStream.closed) {
-      // 等 fd 真正关闭再删文件,避免 Windows 上删除被占用文件失败
-      await new Promise<void>((resolve) => {
-        writeStream.once('close', () => resolve());
-        if (!writeStream.destroyed) {
-          writeStream.destroy();
-        }
-      });
-    }
-    await fs.promises.rm(output, { force: true });
-  };
-  return { zipfile, writePromise, abort };
 }
 
 /**
@@ -543,24 +512,15 @@ async function addFileFromZipEntry(
     nextZipfile,
     ZIP_ENTRY_SNIFF_BYTES,
   );
+  const readStream = await openEntryStream(entry, nextZipfile);
   await new Promise<void>((resolve, reject) => {
-    nextZipfile.openReadStream(entry, (err, readStream) => {
-      if (err) {
-        return reject(err);
-      }
-      if (!readStream) {
-        return reject(new Error(`Unable to read zip entry: ${entry.fileName}`));
-      }
-      zipfile.addReadStream(
-        readStream,
-        entry.fileName,
-        zipOptionsForPayloadEntry(entry.fileName, entryPrefix),
-      );
-      readStream.on('error', reject);
-      readStream.on('end', () => {
-        resolve(void 0);
-      });
-    });
+    zipfile.addReadStream(
+      readStream,
+      entry.fileName,
+      zipOptionsForPayloadEntry(entry.fileName, entryPrefix),
+    );
+    readStream.on('error', reject);
+    readStream.on('end', () => resolve());
   });
 }
 
