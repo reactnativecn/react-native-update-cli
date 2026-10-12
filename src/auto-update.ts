@@ -11,8 +11,8 @@ import {
   statSync,
   writeFileSync,
 } from 'fs';
-import { homedir } from 'os';
 import path from 'path';
+import { userCacheDir } from './utils/fs-helpers';
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
@@ -61,21 +61,7 @@ const PERMISSION_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
 const OUTPUT_LIMIT = 32 * 1024;
 
 function cacheDir(): string {
-  if (process.env.XDG_CACHE_HOME) {
-    return path.join(process.env.XDG_CACHE_HOME, PACKAGE_NAME);
-  }
-  switch (process.platform) {
-    case 'darwin':
-      return path.join(homedir(), 'Library', 'Caches', PACKAGE_NAME);
-    case 'win32':
-      return path.join(
-        process.env.LOCALAPPDATA ?? path.join(homedir(), 'AppData', 'Local'),
-        PACKAGE_NAME,
-        'Cache',
-      );
-    default:
-      return path.join(homedir(), '.cache', PACKAGE_NAME);
-  }
+  return userCacheDir(PACKAGE_NAME);
 }
 
 function stateFile(): string {

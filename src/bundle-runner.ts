@@ -31,7 +31,6 @@ import {
 } from './utils/runtime';
 
 const g2js = require('gradle-to-js/lib/parser');
-const properties = require('properties');
 
 export interface BundleCliOptions {
   taro?: boolean;
@@ -545,11 +544,11 @@ export async function detectHermesEnabled(
     return true;
   }
   if (platform === 'android') {
-    const gradleProperties = await readGradleProperties(
+    const hermesEnabled = await readGradleHermesEnabled(
       path.join(projectRoot, 'android', 'gradle.properties'),
     );
-    if (typeof gradleProperties.hermesEnabled === 'boolean') {
-      return gradleProperties.hermesEnabled;
+    if (hermesEnabled !== undefined) {
+      return hermesEnabled;
     }
     if (typeof gradleConfig.enableHermes === 'boolean') {
       return gradleConfig.enableHermes;
@@ -562,29 +561,30 @@ export async function detectHermesEnabled(
   return false;
 }
 
-/** parsed gradle.properties; a missing file is simply empty */
-function readGradleProperties(
+/**
+ * `hermesEnabled` from gradle.properties (the last assignment wins, as in
+ * Gradle); undefined when the file, the key or a boolean value is missing.
+ */
+async function readGradleHermesEnabled(
   file: string,
-): Promise<{ hermesEnabled?: boolean }> {
-  return new Promise((resolve) => {
-    properties.parse(
-      file,
-      { path: true },
-      (
-        error: (Error & { code?: string }) | null,
-        props: { hermesEnabled?: boolean } = {},
-      ) => {
-        if (error) {
-          if (error.code !== 'ENOENT') {
-            console.warn(`${file}: ${error.message ?? error}`);
-          }
-          resolve({});
-          return;
-        }
-        resolve(props);
-      },
-    );
-  });
+): Promise<boolean | undefined> {
+  let content: string;
+  try {
+    content = await fs.promises.readFile(file, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`${file}: ${(error as Error).message ?? error}`);
+    }
+    return undefined;
+  }
+  let value: boolean | undefined;
+  for (const match of content.matchAll(
+    /^[ \t\f]*hermesEnabled[ \t\f]*[=: \t\f][ \t\f]*(.*?)[ \t\f]*\r?$/gm,
+  )) {
+    value =
+      match[1] === 'true' ? true : match[1] === 'false' ? false : undefined;
+  }
+  return value;
 }
 
 /** React Native's gradle plugin (0.71+) enables Hermes unless a property says otherwise */

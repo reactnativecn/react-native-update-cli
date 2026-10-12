@@ -464,19 +464,15 @@ const VERSION_CHECK_PACKAGES = [
 async function getLatestVersions(
   background: boolean,
 ): Promise<Array<string | undefined>> {
-  // the registry client pulls in global-dirs/registry-auth-token/semver: only
-  // pay for them when actually checking
-  const { default: latestVersion } =
+  // the registry client pulls in registry-auth-token: only pay for it when
+  // actually checking
+  const { getLatestVersions: fetchLatestVersions } =
     require('./latest-version') as typeof import('./latest-version');
-  return latestVersion(VERSION_CHECK_PACKAGES, {
+  return fetchLatestVersions(VERSION_CHECK_PACKAGES, {
     useCache: true,
     ...(background ? { unref: true } : { cacheMaxAge: 0 }),
-    requestOptions: {
-      timeout: 2000,
-    },
-  })
-    .then((pkgs) => pkgs.map((pkg) => pkg.latest))
-    .catch(() => VERSION_CHECK_PACKAGES.map(() => undefined));
+    timeout: 2000,
+  });
 }
 
 function isNewer(latest: string | undefined, current: string | undefined) {

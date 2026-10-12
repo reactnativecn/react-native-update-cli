@@ -1,7 +1,30 @@
 // The handful of fs-extra conveniences the CLI used, on plain node:fs.
 
 import fs from 'fs';
+import { homedir } from 'os';
 import path from 'path';
+
+/**
+ * The per-user cache directory for `name`: $XDG_CACHE_HOME when set (on every
+ * platform; also lets tests isolate), else the platform's cache location.
+ */
+export function userCacheDir(name: string): string {
+  if (process.env.XDG_CACHE_HOME) {
+    return path.join(process.env.XDG_CACHE_HOME, name);
+  }
+  switch (process.platform) {
+    case 'darwin':
+      return path.join(homedir(), 'Library', 'Caches', name);
+    case 'win32':
+      return path.join(
+        process.env.LOCALAPPDATA ?? path.join(homedir(), 'AppData', 'Local'),
+        name,
+        'Cache',
+      );
+    default:
+      return path.join(homedir(), '.cache', name);
+  }
+}
 
 /** `rm -rf`: no error when the path is already gone. */
 export function remove(target: string): Promise<void> {
