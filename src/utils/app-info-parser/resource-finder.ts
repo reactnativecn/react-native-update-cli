@@ -4,7 +4,65 @@
  * Decode binary file `resources.arsc` from a .apk file to a JavaScript Object.
  */
 
-const ByteBuffer = require('bytebuffer');
+/**
+ * Little-endian cursor over a Buffer: the subset of the `bytebuffer` API this
+ * decoder used. Reads past `limit` throw a RangeError, which the chunk loops
+ * below rely on to stop at the end of the data.
+ */
+class Reader {
+  offset = 0;
+  readonly limit: number;
+
+  constructor(readonly buffer: Buffer) {
+    this.limit = buffer.length;
+  }
+
+  private advance(size: number) {
+    const at = this.offset;
+    if (at < 0 || at + size > this.limit) {
+      throw new RangeError(
+        `Illegal offset: 0 <= ${at} (+${size}) <= ${this.limit}`,
+      );
+    }
+    this.offset = at + size;
+    return at;
+  }
+
+  remaining() {
+    return this.limit - this.offset;
+  }
+
+  readByte() {
+    return this.buffer.readInt8(this.advance(1));
+  }
+
+  readUint8() {
+    return this.buffer.readUInt8(this.advance(1));
+  }
+
+  readShort() {
+    return this.buffer.readInt16LE(this.advance(2));
+  }
+
+  readUint16() {
+    return this.buffer.readUInt16LE(this.advance(2));
+  }
+
+  readInt() {
+    return this.buffer.readInt32LE(this.advance(4));
+  }
+
+  /** The next `len` bytes as a new reader (a view, not a copy). */
+  readBytes(len: number) {
+    const at = this.advance(len);
+    return new Reader(this.buffer.subarray(at, at + len));
+  }
+}
+
+/** The `size`-byte chunk starting at `pos`, cut short at the end of the data. */
+function chunkAt(bb: Reader, pos: number, size: number) {
+  return new Reader(bb.buffer.subarray(pos, pos + size));
+}
 
 const DEBUG = false;
 
@@ -28,35 +86,17 @@ export class ResourceFinder {
   private entryMap: Record<number, string[]> = {};
 
   /**
-   * Same to C# BinaryReader.readBytes
    *
-   * @param bb ByteBuffer
-   * @param len length
-   * @returns {Buffer}
-   */
-  static readBytes(bb: any, len: number) {
-    const uint8Array = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      uint8Array[i] = bb.readUint8();
-    }
-
-    return ByteBuffer.wrap(uint8Array, 'binary', true);
-  }
-
-  /**
-   *
-   * @param {ByteBuffer} bb
+   * @param {Reader} bb
    * @return {Map<String, Set<String>>}
    */
   processResourceTable(resourceBuffer: Buffer) {
-    const bb = ByteBuffer.wrap(resourceBuffer, 'binary', true);
+    const bb = new Reader(resourceBuffer);
 
     const type = bb.readShort();
     const headerSize = bb.readShort();
     const size = bb.readInt();
     const packageCount = bb.readInt();
-    let buffer: any;
-    let bb2: any;
 
     if (type !== RES_TABLE_TYPE) {
       throw new Error('No RES_TABLE_TYPE found!');
@@ -90,14 +130,7 @@ export class ResourceFinder {
             console.log('Processing the string pool ...');
           }
 
-          buffer = new ByteBuffer(s);
-          bb.offset = pos;
-          bb.prependTo(buffer);
-
-          bb2 = ByteBuffer.wrap(buffer, 'binary', true);
-
-          bb2.LE();
-          this.valueStringPool = this.processStringPool(bb2);
+          this.valueStringPool = this.processStringPool(chunkAt(bb, pos, s));
         }
         realStringPoolCount++;
       } else if (t === RES_TABLE_PACKAGE_TYPE) {
@@ -105,13 +138,7 @@ export class ResourceFinder {
           console.log(`Processing the package ${realPackageCount} ...`);
         }
 
-        buffer = new ByteBuffer(s);
-        bb.offset = pos;
-        bb.prependTo(buffer);
-
-        bb2 = ByteBuffer.wrap(buffer, 'binary', true);
-        bb2.LE();
-        this.processPackage(bb2);
+        this.processPackage(chunkAt(bb, pos, s));
 
         realPackageCount++;
       } else {
@@ -133,9 +160,9 @@ export class ResourceFinder {
 
   /**
    *
-   * @param {ByteBuffer} bb
+   * @param {Reader} bb
    */
-  private processPackage(bb: any) {
+  private processPackage(bb: Reader) {
     const type = bb.readShort();
     const headerSize = bb.readShort();
     const size = bb.readInt();
@@ -170,7 +197,7 @@ export class ResourceFinder {
 
     let lastPosition = bb.offset;
     bb.offset = typeStrings;
-    const bbTypeStrings = ResourceFinder.readBytes(bb, bb.limit - bb.offset);
+    const bbTypeStrings = bb.readBytes(bb.limit - bb.offset);
     bb.offset = lastPosition;
     this.typeStringPool = this.processStringPool(bbTypeStrings);
 
@@ -188,7 +215,7 @@ export class ResourceFinder {
 
     lastPosition = bb.offset;
     bb.offset = keyStrings;
-    const bbKeyStrings = ResourceFinder.readBytes(bb, bb.limit - bb.offset);
+    const bbKeyStrings = bb.readBytes(bb.limit - bb.offset);
     bb.offset = lastPosition;
     this.keyStringPool = this.processStringPool(bbKeyStrings);
 
@@ -197,7 +224,7 @@ export class ResourceFinder {
 
     bb.offset = keyStrings + keySize;
 
-    let bb2: any;
+    let bb2: Reader;
 
     while (true) {
       const pos = bb.offset;
@@ -210,13 +237,13 @@ export class ResourceFinder {
 
         if (t === RES_TABLE_TYPE_SPEC_TYPE) {
           bb.offset = pos;
-          bb2 = ResourceFinder.readBytes(bb, s);
+          bb2 = bb.readBytes(s);
           this.processTypeSpec(bb2);
 
           typeSpecCount++;
         } else if (t === RES_TABLE_TYPE_TYPE) {
           bb.offset = pos;
-          bb2 = ResourceFinder.readBytes(bb, s);
+          bb2 = bb.readBytes(s);
           this.processType(bb2);
 
           typeCount++;
@@ -242,9 +269,9 @@ export class ResourceFinder {
 
   /**
    *
-   * @param {ByteBuffer} bb
+   * @param {Reader} bb
    */
-  private processType(bb: any) {
+  private processType(bb: Reader) {
     const type = bb.readShort();
     const headerSize = bb.readShort();
     const size = bb.readInt();
@@ -379,10 +406,10 @@ export class ResourceFinder {
 
   /**
    *
-   * @param {ByteBuffer} bb
+   * @param {Reader} bb
    * @return {Array}
    */
-  private processStringPool(bb: any) {
+  private processStringPool(bb: Reader) {
     const type = bb.readShort();
     const headerSize = bb.readShort();
     const size = bb.readInt();
@@ -426,9 +453,9 @@ export class ResourceFinder {
         }
 
         if (u8len > 0) {
-          const buffer = ResourceFinder.readBytes(bb, u8len);
+          const buffer = bb.readBytes(u8len);
           try {
-            strings[i] = ByteBuffer.wrap(buffer, 'utf8', true).toString('utf8');
+            strings[i] = buffer.buffer.toString('utf8');
           } catch (e) {
             if (DEBUG) {
               console.error(e);
@@ -446,9 +473,9 @@ export class ResourceFinder {
 
         if (u16len > 0) {
           const len = u16len * 2;
-          const buffer = ResourceFinder.readBytes(bb, len);
+          const buffer = bb.readBytes(len);
           try {
-            strings[i] = ByteBuffer.wrap(buffer, 'utf8', true).toString('utf8');
+            strings[i] = buffer.buffer.toString('utf8');
           } catch (e) {
             if (DEBUG) {
               console.error(e);
@@ -468,9 +495,9 @@ export class ResourceFinder {
 
   /**
    *
-   * @param {ByteBuffer} bb
+   * @param {Reader} bb
    */
-  private processTypeSpec(bb: any) {
+  private processTypeSpec(bb: Reader) {
     const type = bb.readShort();
     const headerSize = bb.readShort();
     const size = bb.readInt();
