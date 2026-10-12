@@ -105,7 +105,7 @@ function parseCsvOption(value: unknown): string[] | null {
   return parsed.length > 0 ? parsed : null;
 }
 
-function toNumericIds(ids: string[]) {
+export function toNumericIds(ids: string[]) {
   return ids.map((id) => {
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) {
@@ -113,6 +113,50 @@ function toNumericIds(ids: string[]) {
     }
     return numericId;
   });
+}
+
+const deleteMessages = {
+  version: {
+    one: 'deleteVersionSuccess',
+    many: 'deleteVersionsSuccess',
+    error: 'deleteVersionError',
+  },
+  package: {
+    one: 'deletePackageSuccess',
+    many: 'deletePackagesSuccess',
+    error: 'deletePackageError',
+  },
+} as const;
+
+/**
+ * Delete versions or packages of an app: one id through
+ * `DELETE /app/:appId/<kind>/:id`, several in one `DELETE /app/:appId/<kind>`.
+ */
+export async function deleteByIds(
+  appId: string | number,
+  kind: 'version' | 'package',
+  ids: string[],
+) {
+  const messages = deleteMessages[kind];
+  try {
+    if (ids.length === 1) {
+      const [id] = ids;
+      await doDelete(`/app/${appId}/${kind}/${id}`);
+      console.log(t(messages.one, { [`${kind}Id`]: id }));
+    } else {
+      await doDelete(`/app/${appId}/${kind}`, {
+        [`${kind}Ids`]: toNumericIds(ids),
+      });
+      console.log(
+        t(messages.many, { count: ids.length, [`${kind}Ids`]: ids.join(', ') }),
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      t(messages.error, { [`${kind}Id`]: ids.join(', '), error: message }),
+    );
+  }
 }
 
 function getVersionBinding(version: unknown): PackageVersionRef | undefined {
@@ -453,30 +497,6 @@ export const packageCommands = {
       });
     }
 
-    try {
-      if (packageIds.length === 1) {
-        const [packageId] = packageIds;
-        await doDelete(`/app/${appId}/package/${packageId}`);
-        console.log(t('deletePackageSuccess', { packageId }));
-      } else {
-        await doDelete(`/app/${appId}/package`, {
-          packageIds: toNumericIds(packageIds),
-        });
-        console.log(
-          t('deletePackagesSuccess', {
-            count: packageIds.length,
-            packageIds: packageIds.join(', '),
-          }),
-        );
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        t('deletePackageError', {
-          packageId: packageIds.join(', '),
-          error: message,
-        }),
-      );
-    }
+    await deleteByIds(appId, 'package', packageIds);
   },
 };

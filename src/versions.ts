@@ -3,9 +3,9 @@ import { compare, satisfies } from 'compare-versions';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
+import { get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, resolveAppId } from './app';
-import { choosePackage } from './package';
+import { choosePackage, deleteByIds, toNumericIds } from './package';
 import type { Package, Platform, Version } from './types';
 import { isNonInteractive, loadTtyTable, question } from './utils';
 import { getDepVersions } from './utils/dep-versions';
@@ -147,16 +147,6 @@ function getDepsChanges(oldDeps?: Deps, newDeps?: Deps): DepChange[] {
   }
 
   return rows;
-}
-
-function toNumericIds(ids: string[]) {
-  return ids.map((id) => {
-    const numericId = Number(id);
-    if (!Number.isInteger(numericId) || numericId <= 0) {
-      throw new Error(t('invalidId', { id }));
-    }
-    return numericId;
-  });
 }
 
 function getDepsChangeSummary(changes: DepChange[]): DepsChangeSummary {
@@ -872,29 +862,6 @@ export const versionCommands = {
       versionIds = [String((await chooseVersion(appId)).id)];
     }
 
-    try {
-      if (versionIds.length === 1) {
-        const [versionId] = versionIds;
-        await doDelete(`/app/${appId}/version/${versionId}`);
-        console.log(t('deleteVersionSuccess', { versionId }));
-      } else {
-        await doDelete(`/app/${appId}/version`, {
-          versionIds: toNumericIds(versionIds),
-        });
-        console.log(
-          t('deleteVersionsSuccess', {
-            count: versionIds.length,
-            versionIds: versionIds.join(', '),
-          }),
-        );
-      }
-    } catch (error: any) {
-      throw new Error(
-        t('deleteVersionError', {
-          versionId: versionIds.join(', '),
-          error: error.message,
-        }),
-      );
-    }
+    await deleteByIds(appId, 'version', versionIds);
   },
 };
