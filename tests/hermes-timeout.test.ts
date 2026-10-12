@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'child_process';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { removeSync } from '../src/utils/fs-helpers';
 import {
   compareHermesBytecode,
   probeHbcVersion,
@@ -49,7 +50,7 @@ describe.if(process.platform !== 'win32')('Hermes subprocess deadlines', () => {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test('a hung synchronous version probe times out', () => {

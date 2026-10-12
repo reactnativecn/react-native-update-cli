@@ -1,10 +1,16 @@
 import { spawn } from 'child_process';
 import { satisfies } from 'compare-versions';
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { getHermesBase } from './api';
 import { getDepVersion } from './utils/dep-versions';
+import {
+  emptyDirSync,
+  ensureDirSync,
+  moveSync,
+  removeSync,
+} from './utils/fs-helpers';
 import {
   classifyHermesCommand,
   compareHermesBytecode,
@@ -243,7 +249,7 @@ export async function runReactNativeBundleCommand({
   }
 
   outputFolder = assertSafeToEmpty(outputFolder);
-  fs.emptyDirSync(outputFolder);
+  emptyDirSync(outputFolder);
 
   let cliPath = '';
   let usingExpo = false;
@@ -401,16 +407,16 @@ export async function runReactNativeBundleCommand({
         if (platform === 'harmony') {
           const harmonyRawAssetsPath =
             'harmony/entry/src/main/resources/rawfile/assets';
-          fs.ensureDirSync(harmonyRawAssetsPath);
-          fs.copySync(outputFolder, harmonyRawAssetsPath, {
-            overwrite: true,
+          ensureDirSync(harmonyRawAssetsPath);
+          fs.cpSync(outputFolder, harmonyRawAssetsPath, {
+            recursive: true,
+            force: true,
             // sourcemaps must not ship inside the native package
             filter: (src) => !src.endsWith('.map'),
           });
-          fs.moveSync(
+          moveSync(
             `${harmonyRawAssetsPath}/bundle.harmony.js`,
             `${harmonyRawAssetsPath}/../bundle.harmony.js`,
-            { overwrite: true },
           );
         }
 
@@ -483,7 +489,7 @@ export function assertSafeToEmpty(dir: string, cwd = process.cwd()): string {
 
   // emptyDirSync creates a missing directory too; create it first so it can be
   // canonicalized and the exact validated path can be passed to deletion.
-  fs.ensureDirSync(requested);
+  ensureDirSync(requested);
   const canonical = (value: string) => fs.realpathSync.native(value);
   const target = canonical(requested);
   const canonicalCwd = canonical(lexicalCwd);
@@ -1118,7 +1124,7 @@ export async function compileHermesByteCode({
     const jsSource = path.join(workDir, bundleName);
     const plainPath = path.join(workDir, 'plain', bundleName);
     const wantPlain = Boolean(baseRequest?.verify);
-    fs.ensureDirSync(path.dirname(plainPath));
+    ensureDirSync(path.dirname(plainPath));
     fs.renameSync(bundlePath, jsSource);
     const args = hermescArgsWithBase(
       buildHermescArgs(bundlePath, jsSource),
@@ -1243,15 +1249,15 @@ export async function compileHermesByteCode({
     }
     if (!usedBase) {
       if (plainOk) {
-        fs.moveSync(plainPath, bundlePath, { overwrite: true });
+        moveSync(plainPath, bundlePath);
         if (fs.existsSync(`${plainPath}.map`)) {
-          fs.moveSync(`${plainPath}.map`, hermesMap, { overwrite: true });
+          moveSync(`${plainPath}.map`, hermesMap);
         }
       } else {
         await compilePlain(command, bundlePath, jsSource);
       }
     }
-    fs.removeSync(workDir);
+    removeSync(workDir);
     result.base = usedBase ? base : null;
     if (usedBase) result.outcome = 'used';
   }
@@ -1259,7 +1265,7 @@ export async function compileHermesByteCode({
     await composeSourceMaps(packagerMap, hermesMap, sourcemapOutput);
   }
   if (shouldCleanSourcemap) {
-    fs.removeSync(packagerMap);
+    removeSync(packagerMap);
   }
   return result;
 }
@@ -1407,7 +1413,7 @@ export async function copyDebugidForSentry(
       copyDebugidPath,
     );
   }
-  fs.removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
+  removeSync(path.join(outputFolder, `${bundleName}.txt.map`));
 }
 
 export async function prepareSentryUploadArtifacts(

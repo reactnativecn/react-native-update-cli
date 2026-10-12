@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { PassThrough } from 'stream';
 
 type FetchCall = { url: string; body: Buffer };
 const fetchCalls: FetchCall[] = [];
@@ -13,23 +12,13 @@ let fetchImpl: (call: FetchCall) => Promise<{ status: number }> = async () => ({
 // Read the streamed multipart body the way the socket would.
 async function drain(body: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  // form-data is an old-style stream: pipe it into a modern one
-  const pass = new PassThrough();
-  body.pipe(pass);
-  for await (const chunk of pass) {
+  for await (const chunk of body) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
 }
 
-mock.module('node-fetch', () => ({
-  default: async (url: string, init: { body: NodeJS.ReadableStream }) => {
-    const call = { url, body: await drain(init.body) };
-    fetchCalls.push(call);
-    const response = await fetchImpl(call);
-    return { statusText: '', ...response };
-  },
-}));
+const uploadRequest = await import('../src/utils/upload-request');
 const { uploadFile } = await import('../src/api');
 const runtime = await import('../src/utils/runtime');
 const httpHelper = await import('../src/utils/http-helper');
@@ -79,6 +68,16 @@ describe('chunked upload', () => {
             statusText: 'OK',
             text: async () => JSON.stringify(payload),
           };
+        },
+      ),
+      spyOn(uploadRequest, 'sendUploadRequest').mockImplementation(
+        async (url, request) => {
+          const call = { url, body: await drain(request.body) };
+          expect(Number(request.headers['content-length'])).toBe(
+            call.body.length,
+          );
+          fetchCalls.push(call);
+          return { statusText: '', ...(await fetchImpl(call)) };
         },
       ),
       spyOn(runtime, 'measureTcpLatency').mockResolvedValue(10),

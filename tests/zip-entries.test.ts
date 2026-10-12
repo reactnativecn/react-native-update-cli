@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { ZipFile } from 'yazl';
+import { removeSync } from '../src/utils/fs-helpers';
 import { enumZipEntries } from '../src/utils/zip-entries';
 
 function zipBuffer(entries: Record<string, Buffer>): Promise<Buffer> {
@@ -38,7 +39,7 @@ describe('enumZipEntries', () => {
     );
   });
   afterEach(() => {
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test('walks into a nested .hap and cleans up its temp dir', async () => {

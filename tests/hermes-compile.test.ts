@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'child_process';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import {
@@ -8,6 +8,7 @@ import {
   hermesBaseErrorLogPath,
   startHermesBaseSelection,
 } from '../src/bundle-runner';
+import { ensureDirSync, removeSync } from '../src/utils/fs-helpers';
 import { getHbcVersion } from '../src/utils/hbcTransform';
 import { probeHbcVersion } from '../src/utils/hermes-base';
 
@@ -40,7 +41,7 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-hermes-compile-'));
     process.env.PUSHY_CACHE_DIR = path.join(dir, 'cache');
     outputFolder = path.join(dir, 'out');
-    fs.ensureDirSync(outputFolder);
+    ensureDirSync(outputFolder);
     fs.writeFileSync(path.join(outputFolder, bundleName), NEXT_SRC);
     const baseJs = path.join(dir, 'base.js');
     fs.writeFileSync(baseJs, BASE_SRC);
@@ -55,7 +56,7 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
   afterEach(() => {
     if (previousCache === undefined) delete process.env.PUSHY_CACHE_DIR;
     else process.env.PUSHY_CACHE_DIR = previousCache;
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   // anything but the bundle and its hermes map is a leftover
@@ -149,7 +150,7 @@ describe.if(hasHermesc)('compileHermesByteCode with a base', () => {
       dir,
       'node_modules/react-native/sdks/hermesc/linux64-bin',
     );
-    fs.ensureDirSync(wrapperDir);
+    ensureDirSync(wrapperDir);
     const wrapper = path.join(wrapperDir, 'hermesc');
     const calls = path.join(dir, 'hermesc-calls.log');
     fs.writeFileSync(
@@ -204,7 +205,7 @@ exec "${hermesc}" "$@"
       dir,
       'node_modules/react-native/sdks/hermesc/linux64-bin',
     );
-    fs.ensureDirSync(wrapperDir);
+    ensureDirSync(wrapperDir);
     const wrapper = path.join(wrapperDir, 'hermesc');
     const calls = path.join(dir, 'deadline-calls');
     fs.writeFileSync(
@@ -254,12 +255,15 @@ exec "${hermesc}" "$@"
       'node_modules/react-native/sdks/hermesc/linux64-bin',
     );
     const scripts = path.join(dir, 'node_modules/react-native/scripts');
-    fs.ensureDirSync(wrapperDir);
-    fs.ensureDirSync(scripts);
-    fs.writeJsonSync(path.join(dir, 'node_modules/react-native/package.json'), {
-      name: 'react-native',
-      version: '0.77.3',
-    });
+    ensureDirSync(wrapperDir);
+    ensureDirSync(scripts);
+    fs.writeFileSync(
+      path.join(dir, 'node_modules/react-native/package.json'),
+      JSON.stringify({
+        name: 'react-native',
+        version: '0.77.3',
+      }),
+    );
     const marker = path.join(dir, 'compose-attempted');
     // The discarded base's composer fails immediately. After verification
     // fails, composing the retained plain output must still succeed.

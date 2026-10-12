@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'child_process';
 import { createHash } from 'crypto';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { removeSync } from '../src/utils/fs-helpers';
 import { compareHermesBytecode } from '../src/utils/hermes-base';
 import { readHermesSemanticData } from '../src/utils/hermes-raw';
 
@@ -55,7 +56,7 @@ describe.if(Boolean(fixtures))('real Metro bundle verification', () => {
     delta = compile('s3-medium-feature.jsbundle', 'delta.hbc', base);
   }, 120_000);
   afterAll(() => {
-    if (dir) fs.removeSync(dir);
+    if (dir) removeSync(dir);
   });
 
   test('self-comparison includes legal zero-byte Static Hermes functions', async () => {

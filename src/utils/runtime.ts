@@ -147,22 +147,14 @@ export function webFetch(
       dispatcher,
     }) as unknown as Promise<Response>;
   }
-  if (typeof globalThis.fetch === 'function') {
-    return globalThis.fetch(url, init);
-  }
-  // Node < 18 only. Loaded on demand so the built-in fetch path never pays
-  // for node-fetch (nor for the punycode deprecation warning it triggers on
-  // Node ≥ 21).
-  const mod = require('node-fetch');
-  const nodeFetch = (mod.default ?? mod) as typeof import('node-fetch').default;
-  return nodeFetch(url, init as any) as unknown as Promise<Response>;
+  return globalThis.fetch(url, init);
 }
 
 const proxyAgents = new Map<string, HttpAgent>();
 
 /**
  * An http.Agent routing `targetUrl` through its proxy, for the core
- * http/https APIs and node-fetch (the streaming uploads); undefined when the
+ * http/https APIs (including the streaming uploads); undefined when the
  * connection is direct. Always a CONNECT tunnel (also for http targets, like
  * undici's ProxyAgent above): the absolute-form alternative rewrites the
  * request head after it was buffered, which garbles a streaming body.

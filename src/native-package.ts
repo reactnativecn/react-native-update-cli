@@ -1,4 +1,4 @@
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import {
@@ -8,6 +8,7 @@ import {
 } from 'yauzl';
 import { ZipFile as YazlZipFile } from 'yazl';
 import type { Platform } from './types';
+import { ensureDir, remove } from './utils/fs-helpers';
 import { fitsRawZip, RawZipWriter } from './utils/zip-raw-writer';
 
 export type NativePackageEntry = {
@@ -164,7 +165,7 @@ class RepackSink implements SlimSink {
   async abort(): Promise<void> {
     this.outputZip.end();
     await this.writePromise.catch(() => {});
-    await fs.remove(this.output).catch(() => {});
+    await remove(this.output).catch(() => {});
   }
 }
 
@@ -216,8 +217,8 @@ async function filterNativePackageArchive(
   platform: Platform,
   options: SlimPackageOptions,
 ): Promise<{ bundles: number; entries: number }> {
-  await fs.ensureDir(path.dirname(output));
-  const scratchDir = await fs.mkdtemp(
+  await ensureDir(path.dirname(output));
+  const scratchDir = await fs.promises.mkdtemp(
     path.join(os.tmpdir(), 'rnu-native-package-entry-'),
   );
   const sourceZip = await openZip(source);
@@ -225,7 +226,7 @@ async function filterNativePackageArchive(
   // entry count decide whether plain (non-zip64) headers are enough
   const rawCopy =
     !options.repack &&
-    fitsRawZip((await fs.stat(source)).size, sourceZip.entryCount);
+    fitsRawZip((await fs.promises.stat(source)).size, sourceZip.entryCount);
   const sink: SlimSink = rawCopy
     ? new RawCopySink(output)
     : new RepackSink(output);
@@ -311,7 +312,7 @@ async function filterNativePackageArchive(
     await sink.abort();
     throw error;
   } finally {
-    await fs.remove(scratchDir);
+    await remove(scratchDir);
   }
 }
 
@@ -332,7 +333,7 @@ export async function createSlimNativePackage(
     options,
   );
   if (result.bundles === 0) {
-    await fs.remove(output);
+    await remove(output);
     throw new Error(`Bundle entry not found in native package: ${source}`);
   }
 }

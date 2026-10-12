@@ -12,13 +12,20 @@
 import { StringDecoder } from 'node:string_decoder';
 import { spawn, spawnSync } from 'child_process';
 import { createHash } from 'crypto';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { PassThrough, Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { tempDir } from './constants';
 import { failureFingerprint, redactFailureDetail } from './failure-fingerprint';
+import {
+  ensureDir,
+  ensureDirSync,
+  pathExists,
+  remove,
+  removeSync,
+} from './fs-helpers';
 import { getHbcVersion } from './hbcTransform';
 import { normalizeCachedObjectInstruction } from './hermes-cached-object';
 import {
@@ -255,14 +262,14 @@ export async function sha256File(file: string): Promise<string> {
 /** HBC version from the first bytes of a file, without reading the rest */
 export async function readFileHbcVersion(file: string): Promise<number | null> {
   const header = Buffer.alloc(128);
-  const fd = await fs.open(file, 'r');
+  const handle = await fs.promises.open(file, 'r');
   try {
-    const { bytesRead } = await fs.read(fd, header, 0, 128, 0);
+    const { bytesRead } = await handle.read(header, 0, 128, 0);
     return getHbcVersion(header.subarray(0, bytesRead));
   } catch {
     return null;
   } finally {
-    await fs.close(fd);
+    await handle.close();
   }
 }
 
@@ -297,7 +304,7 @@ function writeProbeCache(entries: Record<string, number>): void {
     const trimmed = Object.fromEntries(
       keys.slice(-PROBE_CACHE_ENTRIES).map((key) => [key, entries[key]]),
     );
-    fs.ensureDirSync(cacheDir());
+    ensureDirSync(cacheDir());
     fs.writeFileSync(
       path.join(cacheDir(), PROBE_CACHE_FILE),
       JSON.stringify(trimmed),
@@ -359,7 +366,7 @@ function compileProbe(hermesCommand: string): number | null {
   } catch {
     return null;
   } finally {
-    fs.removeSync(dir);
+    removeSync(dir);
   }
 }
 
@@ -402,7 +409,7 @@ export async function extractBundleFromArchive(
     ext === '.bundlejs' ||
     ext === '.js'
   ) {
-    return fs.readFile(filePath);
+    return fs.promises.readFile(filePath);
   }
   if (ext === '.ppk' || ext === '.apk' || ext === '.ipa') {
     return readFirstZipEntry(
@@ -423,7 +430,7 @@ export async function extractBundleFromArchive(
   const fromZip = await readFirstZipEntry(filePath, (name) =>
     BUNDLE_ENTRY_NAMES.includes(name),
   ).catch(() => null);
-  return fromZip ?? fs.readFile(filePath);
+  return fromZip ?? fs.promises.readFile(filePath);
 }
 
 async function readFirstZipEntry(
@@ -469,14 +476,14 @@ export function cacheLimits(overrideMaxMb?: number) {
 export async function cacheLookup(bundleHash: string): Promise<string | null> {
   if (!/^[0-9a-f]{64}$/.test(bundleHash)) return null;
   const file = path.join(cacheDir(), bundleHash);
-  if (!(await fs.pathExists(file))) return null;
+  if (!(await pathExists(file))) return null;
   if ((await sha256File(file).catch(() => '')) !== bundleHash) {
     // corrupt entry: never trust cache content
-    await fs.remove(file).catch(() => {});
+    await remove(file).catch(() => {});
     return null;
   }
   const now = new Date();
-  await fs.utimes(file, now, now).catch(() => {});
+  await fs.promises.utimes(file, now, now).catch(() => {});
   return file;
 }
 
@@ -488,15 +495,15 @@ export async function cachePut(
 ): Promise<{ path: string; bundleHash: string }> {
   const bundleHash = knownHash ?? sha256Hex(bundle);
   const dir = cacheDir();
-  await fs.ensureDir(dir);
+  await ensureDir(dir);
   const file = path.join(dir, bundleHash);
-  if (!(await fs.pathExists(file))) {
+  if (!(await pathExists(file))) {
     const tmp = `${file}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, bundle);
-    await fs.rename(tmp, file);
+    await fs.promises.writeFile(tmp, bundle);
+    await fs.promises.rename(tmp, file);
   } else {
     const now = new Date();
-    await fs.utimes(file, now, now).catch(() => {});
+    await fs.promises.utimes(file, now, now).catch(() => {});
   }
   await enforceCacheLimits(maxMb, bundleHash);
   return { path: file, bundleHash };
@@ -507,19 +514,19 @@ export async function enforceCacheLimits(
   keep?: string,
 ): Promise<void> {
   const dir = cacheDir();
-  if (!(await fs.pathExists(dir))) return;
+  if (!(await pathExists(dir))) return;
   const { maxBytes, maxFiles } = cacheLimits(maxMb);
   const entries: { name: string; size: number; mtime: number }[] = [];
   const staleTmpCutoff = Date.now() - STALE_CACHE_TMP_MS;
-  for (const name of await fs.readdir(dir)) {
+  for (const name of await fs.promises.readdir(dir)) {
     const isTmp = isCacheTmpName(name);
     if (!isTmp && !/^[0-9a-f]{64}$/.test(name)) continue;
-    const stat = await fs.stat(path.join(dir, name)).catch(() => null);
+    const stat = await fs.promises.stat(path.join(dir, name)).catch(() => null);
     if (!stat?.isFile()) continue;
     if (isTmp) {
       // an interrupted cachePut; nothing will ever rename it into place
       if (stat.mtimeMs < staleTmpCutoff)
-        await fs.remove(path.join(dir, name)).catch(() => {});
+        await remove(path.join(dir, name)).catch(() => {});
       continue;
     }
     entries.push({ name, size: stat.size, mtime: stat.mtimeMs });
@@ -531,7 +538,7 @@ export async function enforceCacheLimits(
     total += entry.size;
     count += 1;
     if (entry.name !== keep && (total > maxBytes || count > maxFiles)) {
-      await fs.remove(path.join(dir, entry.name)).catch(() => {});
+      await remove(path.join(dir, entry.name)).catch(() => {});
     }
   }
 }
@@ -544,12 +551,12 @@ function isCacheTmpName(name: string): boolean {
 /** Remove every cached bundle (and staging leftovers); returns the bundle count. */
 export async function cleanCache(): Promise<number> {
   const dir = cacheDir();
-  if (!(await fs.pathExists(dir))) return 0;
+  if (!(await pathExists(dir))) return 0;
   let bundles = 0;
-  for (const name of await fs.readdir(dir)) {
+  for (const name of await fs.promises.readdir(dir)) {
     const isBundle = /^[0-9a-f]{64}$/.test(name);
     if (!isBundle && !isCacheTmpName(name)) continue;
-    await fs.remove(path.join(dir, name));
+    await remove(path.join(dir, name));
     if (isBundle) bundles += 1;
   }
   return bundles;
@@ -563,10 +570,12 @@ export async function cacheStats(): Promise<{
   const dir = cacheDir();
   let files = 0;
   let bytes = 0;
-  if (await fs.pathExists(dir)) {
-    for (const name of await fs.readdir(dir)) {
+  if (await pathExists(dir)) {
+    for (const name of await fs.promises.readdir(dir)) {
       if (!/^[0-9a-f]{64}$/.test(name)) continue;
-      const stat = await fs.stat(path.join(dir, name)).catch(() => null);
+      const stat = await fs.promises
+        .stat(path.join(dir, name))
+        .catch(() => null);
       if (stat?.isFile()) {
         files += 1;
         bytes += stat.size;
@@ -581,12 +590,12 @@ export async function cleanStaleTmp(
   maxAgeMs = 24 * 60 * 60 * 1000,
 ): Promise<void> {
   const dir = tmpDir();
-  if (!(await fs.pathExists(dir))) return;
+  if (!(await pathExists(dir))) return;
   const cutoff = Date.now() - maxAgeMs;
-  for (const name of await fs.readdir(dir)) {
+  for (const name of await fs.promises.readdir(dir)) {
     const file = path.join(dir, name);
-    const stat = await fs.stat(file).catch(() => null);
-    if (stat && stat.mtimeMs < cutoff) await fs.remove(file).catch(() => {});
+    const stat = await fs.promises.stat(file).catch(() => null);
+    if (stat && stat.mtimeMs < cutoff) await remove(file).catch(() => {});
   }
 }
 
@@ -670,7 +679,7 @@ async function saveResponse(
   controller = new AbortController(),
 ): Promise<void> {
   if (!response.body) throw new Error('empty response body');
-  await fs.ensureDir(path.dirname(destination));
+  await ensureDir(path.dirname(destination));
   const abort = () =>
     controller.abort(
       new Error(`download stalled for ${STREAM_IDLE_TIMEOUT_MS / 1000}s`),
@@ -965,7 +974,7 @@ export async function resolveHermesBase(
   // 2. download, extract, verify, cache — transport errors get a second try
   for (let attempt = 1; attempt <= 2; attempt++) {
     const dir = tmpDir();
-    await fs.ensureDir(dir);
+    await ensureDir(dir);
     const artifactType: BaseArtifactType = [
       'ppk',
       'apk',
@@ -1033,7 +1042,7 @@ export async function resolveHermesBase(
         return null;
       }
     } finally {
-      await fs.remove(archive).catch(() => {});
+      await remove(archive).catch(() => {});
     }
   }
   return null;

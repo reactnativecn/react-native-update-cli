@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import { npm, yarn } from 'global-dirs';
 import os from 'os';
 import path from 'path';
@@ -9,6 +9,7 @@ import { resolveNativePackageEntry } from './native-package';
 import type { CommandContext, Platform } from './types';
 import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
+import { ensureDirSync } from './utils/fs-helpers';
 import {
   type HbcTransformMeta,
   transformHbcFile,
@@ -132,7 +133,7 @@ function basename(fn: string): string | undefined {
 }
 
 function createOutputZip(output: string) {
-  fs.ensureDirSync(path.dirname(output));
+  ensureDirSync(path.dirname(output));
   const zipfile = new YazlZipFile();
   const writeStream = fs.createWriteStream(output);
   const writePromise = new Promise<void>((resolve, reject) => {
@@ -158,7 +159,7 @@ function createOutputZip(output: string) {
         }
       });
     }
-    await fs.rm(output, { force: true });
+    await fs.promises.rm(output, { force: true });
   };
   return { zipfile, writePromise, abort };
 }
@@ -228,7 +229,7 @@ const bundleSourceSize = (source: BundleSource) =>
   source.kind === 'buffer' ? source.data.length : source.size;
 
 const bundleSourceBuffer = async (source: BundleSource) =>
-  source.kind === 'buffer' ? source.data : fs.readFile(source.path);
+  source.kind === 'buffer' ? source.data : fs.promises.readFile(source.path);
 
 async function bundleSourceFile(
   source: BundleSource,
@@ -237,7 +238,7 @@ async function bundleSourceFile(
   if (source.kind === 'file') {
     return source.path;
   }
-  await fs.writeFile(outputPath, source.data);
+  await fs.promises.writeFile(outputPath, source.data);
   return outputPath;
 }
 
@@ -251,8 +252,8 @@ async function hashFile(filePath: string): Promise<string> {
 
 async function filesEqual(leftPath: string, rightPath: string) {
   const [leftStat, rightStat] = await Promise.all([
-    fs.stat(leftPath),
-    fs.stat(rightPath),
+    fs.promises.stat(leftPath),
+    fs.promises.stat(rightPath),
   ]);
   if (leftStat.size !== rightStat.size) {
     return false;
@@ -322,7 +323,7 @@ async function buildStreamBundlePatch(
   const rawPatchFile = path.join(tempRoot, 'patch-raw.bin');
   await diffStreamFn(rawOldFile, rawNewFile, rawPatchFile);
   let patchFile = rawPatchFile;
-  let patchBytes = (await fs.stat(rawPatchFile)).size;
+  let patchBytes = (await fs.promises.stat(rawPatchFile)).size;
   let chosenPair: typeof pair = null;
   if (pair) {
     const transformedPatchFile = path.join(tempRoot, 'patch-transformed.bin');
@@ -331,7 +332,8 @@ async function buildStreamBundlePatch(
       transformedNewFile,
       transformedPatchFile,
     );
-    const transformedPatchBytes = (await fs.stat(transformedPatchFile)).size;
+    const transformedPatchBytes = (await fs.promises.stat(transformedPatchFile))
+      .size;
     const metaOverhead = Buffer.byteLength(JSON.stringify(pair.meta));
     if (transformedPatchBytes + metaOverhead < patchBytes) {
       patchFile = transformedPatchFile;

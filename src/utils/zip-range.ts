@@ -6,7 +6,7 @@
 // `openRemoteZip` read just the bundle of a remote archive through HTTP Range
 // requests instead of downloading the whole ppk / apk / ipa. Every helper
 // throws on anything unexpected; callers fall back to a full download.
-import fs from 'fs-extra';
+import fs from 'fs';
 import { PassThrough, Readable } from 'stream';
 import {
   type Entry,
@@ -85,10 +85,9 @@ async function locationOfEntry(
   entry: Entry,
 ): Promise<ZipEntryLocation> {
   const header = Buffer.alloc(LOCAL_HEADER_SIZE);
-  const fd = await fs.open(zipPath, 'r');
+  const handle = await fs.promises.open(zipPath, 'r');
   try {
-    const { bytesRead } = await fs.read(
-      fd,
+    const { bytesRead } = await handle.read(
       header,
       0,
       LOCAL_HEADER_SIZE,
@@ -98,7 +97,7 @@ async function locationOfEntry(
       throw new Error('truncated local file header');
     }
   } finally {
-    await fs.close(fd);
+    await handle.close();
   }
   if (header.readUInt32LE(0) !== LOCAL_HEADER_SIGNATURE) {
     throw new Error('invalid local file header signature');

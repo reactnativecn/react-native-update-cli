@@ -1,4 +1,4 @@
-import * as fs from 'fs-extra';
+import fs from 'fs';
 
 interface PluginConfig {
   name: string;
@@ -17,11 +17,11 @@ export const plugins: PluginConfig[] = [
     },
     detect: async () => {
       try {
-        await fs.access('ios/sentry.properties');
+        await fs.promises.access('ios/sentry.properties');
         return true;
       } catch {
         try {
-          await fs.access('android/sentry.properties');
+          await fs.promises.access('android/sentry.properties');
           return true;
         } catch {
           return false;

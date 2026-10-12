@@ -1,8 +1,9 @@
 import { spawn } from 'child_process';
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { open as openZipFile } from 'yauzl';
+import { pathExists, remove } from '../fs-helpers';
 import { t } from '../i18n';
 import { ResourceFinder } from './resource-finder';
 import { mapInfoResource } from './utils';
@@ -57,7 +58,9 @@ export class AabParser extends Zip {
       });
 
     // Create a temp file for the .apks output
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bundletool-'));
+    const tempDir = await fs.promises.mkdtemp(
+      path.join(os.tmpdir(), 'bundletool-'),
+    );
     const tempApksPath = path.join(tempDir, 'output.apks');
 
     const needsNpxDownload = async () => {
@@ -163,8 +166,8 @@ export class AabParser extends Zip {
       });
     } finally {
       // Cleanup
-      if (await fs.pathExists(tempDir)) {
-        await fs.remove(tempDir);
+      if (await pathExists(tempDir)) {
+        await remove(tempDir);
       }
     }
   }
