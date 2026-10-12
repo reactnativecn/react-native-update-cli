@@ -24,7 +24,7 @@
  * - HBC v87–96 (`split`): arrayBuffer, objKeyBuffer, objValueBuffer.
  *   `NewArrayWithBuffer dst, sizeHint, count, arrayOffset`;
  *   `NewObjectWithBuffer dst, sizeHint, count, keyOffset, valueOffset`.
- * - HBC v98 (`shaped`): literalValueBuffer (array elements and object values
+ * - HBC v98 and v99 (`shaped`): literalValueBuffer (array elements and object values
  *   alike), objKeyBuffer, objShapeTable (8-byte entries: keyOffset u32,
  *   numProps u32). `NewArrayWithBuffer dst, sizeHint, count, valueOffset`;
  *   `NewObjectWithBuffer dst, shapeIndex, valueOffset` and

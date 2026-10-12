@@ -2,7 +2,7 @@
 //
 // Hermes re-sorts its string table by identifier frequency on every compile, so
 // any source change renumbers most string IDs and the bytecode diff explodes
-// (see hermes-base-bytecode-方案.md). Compiling with the previous HBC of the
+// (see docs/hermes-base-verification.md). Compiling with the previous HBC of the
 // same app as `-base-bytecode` keeps old IDs stable and shrinks patches 5-30×.
 // This module resolves that base: gating by hermesc build, HBC version probe,
 // server lookup, a sha256-named local cache, download + verification, and the
@@ -1297,7 +1297,7 @@ export interface HermesEquivalenceResult {
   functions: number;
   /**
    * `instruction`: literals decoded from the binary buffers at each
-   * New*WithBuffer instruction (HBC v87–96 and v98); `buffer`: the dumped
+   * New*WithBuffer instruction (HBC v87–96, v98 and v99); `buffer`: the dumped
    * buffers compared as a whole (unknown layout)
    */
   literals?: 'instruction' | 'buffer';
