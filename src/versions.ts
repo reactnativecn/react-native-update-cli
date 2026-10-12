@@ -398,6 +398,27 @@ async function chooseVersion(appId: string) {
   }
 }
 
+function isNonInteractiveFor(options: VersionCommandOptions) {
+  return (
+    getBooleanOption(options, 'no-interactive', false) || isNonInteractive()
+  );
+}
+
+/** `versionId` when given, else one picked from the list (interactive only). */
+async function versionIdOrChoose(
+  appId: string,
+  versionId: string | undefined,
+  options: VersionCommandOptions,
+): Promise<string> {
+  if (versionId) {
+    return versionId;
+  }
+  if (isNonInteractiveFor(options)) {
+    throw new Error(t('versionIdRequired'));
+  }
+  return String((await chooseVersion(appId)).id);
+}
+
 export const bindVersionToPackages = async ({
   appId,
   versionId,
@@ -518,8 +539,7 @@ export const versionCommands = {
 
     const platform = await getPlatform(options.platform);
     const appId = await resolveAppId({ ...options, platform });
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
+    const nonInteractive = isNonInteractiveFor(options);
 
     // The source map is archived with the version so `pushy symbolicate` can
     // map crashes back to source. An explicit path that does not exist is a
@@ -670,23 +690,16 @@ export const versionCommands = {
   },
   versions: async ({ options }: { options: VersionCommandOptions }) => {
     const appId = await resolveAppId(options);
-    const interactive = !(
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive()
-    );
-    await listVersions(appId, interactive);
+    await listVersions(appId, !isNonInteractiveFor(options));
   },
   update: async ({ options }: { options: VersionCommandOptions }) => {
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
     const appId = await resolveAppId(options);
 
-    let versionId: string | null | undefined = options.versionId;
-    if (!versionId) {
-      if (nonInteractive) {
-        throw new Error(t('versionIdRequired'));
-      }
-      versionId = String((await chooseVersion(appId)).id);
-    }
+    let versionId: string | null = await versionIdOrChoose(
+      appId,
+      options.versionId,
+      options,
+    );
     if (versionId === 'null') {
       versionId = null;
     }
@@ -777,7 +790,7 @@ export const versionCommands = {
       }
     } else {
       if (!pkgId) {
-        if (nonInteractive) {
+        if (isNonInteractiveFor(options)) {
           throw new Error(t('packageIdRequired'));
         }
         // the package list was already fetched above: no second round trip
@@ -818,17 +831,12 @@ export const versionCommands = {
   }: {
     options: VersionCommandOptions;
   }) => {
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
     const appId = await resolveAppId(options);
-
-    let versionId = options.versionId;
-    if (!versionId) {
-      if (nonInteractive) {
-        throw new Error(t('versionIdRequired'));
-      }
-      versionId = String((await chooseVersion(appId)).id);
-    }
+    const versionId = await versionIdOrChoose(
+      appId,
+      options.versionId,
+      options,
+    );
 
     const updateParams: Record<string, string> = {};
     if (options.name) updateParams.name = options.name;
@@ -839,20 +847,11 @@ export const versionCommands = {
     console.log(t('operationSuccess'));
   },
   deleteVersion: async ({ options }: { options: VersionCommandOptions }) => {
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
     const appId = await resolveAppId(options);
-
-    const parsedVersionIds =
-      getStringListOption(options, 'versionIds') ??
-      getStringListOption(options, 'versionId');
-    let versionIds = parsedVersionIds;
-    if (!versionIds) {
-      if (nonInteractive) {
-        throw new Error(t('versionIdRequired'));
-      }
-      versionIds = [String((await chooseVersion(appId)).id)];
-    }
+    const versionIds = getStringListOption(options, 'versionIds') ??
+      getStringListOption(options, 'versionId') ?? [
+        await versionIdOrChoose(appId, undefined, options),
+      ];
 
     await deleteByIds(appId, 'version', versionIds);
   },
