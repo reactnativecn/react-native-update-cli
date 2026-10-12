@@ -111,58 +111,31 @@ function getDepsChanges(oldDeps?: Deps, newDeps?: Deps): DepChange[] {
   for (const key of keys) {
     const oldVersion = oldDeps[key];
     const newVersion = newDeps[key];
-
-    if (oldVersion === undefined && newVersion !== undefined) {
-      rows.push({
-        dependency: key,
-        oldVersion: '-',
-        newVersion,
-        type: 'added',
-      });
+    if (oldVersion === newVersion) {
       continue;
     }
-
-    if (oldVersion !== undefined && newVersion === undefined) {
-      rows.push({
-        dependency: key,
-        oldVersion,
-        newVersion: '-',
-        type: 'removed',
-      });
-      continue;
-    }
-
-    if (
-      oldVersion !== undefined &&
-      newVersion !== undefined &&
-      oldVersion !== newVersion
-    ) {
-      rows.push({
-        dependency: key,
-        oldVersion,
-        newVersion,
-        type: 'changed',
-      });
-    }
+    rows.push({
+      dependency: key,
+      oldVersion: oldVersion ?? '-',
+      newVersion: newVersion ?? '-',
+      type:
+        oldVersion === undefined
+          ? 'added'
+          : newVersion === undefined
+            ? 'removed'
+            : 'changed',
+    });
   }
 
   return rows;
 }
 
 function getDepsChangeSummary(changes: DepChange[]): DepsChangeSummary {
-  return changes.reduce(
-    (acc, item) => {
-      if (item.type === 'added') {
-        acc.added += 1;
-      } else if (item.type === 'removed') {
-        acc.removed += 1;
-      } else {
-        acc.changed += 1;
-      }
-      return acc;
-    },
-    { added: 0, removed: 0, changed: 0 },
-  );
+  const summary = { added: 0, removed: 0, changed: 0 };
+  for (const { type } of changes) {
+    summary[type] += 1;
+  }
+  return summary;
 }
 
 function renderVersionChange(change: DepChange) {
