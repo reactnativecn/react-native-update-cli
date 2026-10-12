@@ -24,7 +24,7 @@ import {
   reportedBytecodeVersion,
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
-import { getStringListOption } from './utils/options';
+import { getBooleanOption, getStringListOption } from './utils/options';
 import { bundleLocationFields, locateZipEntry } from './utils/zip-range';
 
 type PackageCommandOptions = Record<string, unknown> & {
@@ -63,9 +63,6 @@ type NativeUploadConfig = {
   appKeyMismatchKey: string;
   successKey: string;
   getInfo: (filePath: string) => Promise<NativePackageInfo>;
-  normalizeBuildTime?: (
-    buildTime: NativePackageInfo['buildTime'],
-  ) => string | number | undefined;
 };
 
 // the AAB parser drags in protobufjs; load it only for the aab commands
@@ -73,10 +70,6 @@ function loadExtractApk() {
   return (
     require('./utils/app-info-parser/aab') as typeof import('./utils/app-info-parser/aab')
   ).extractApk;
-}
-
-export function normalizeUploadBuildTime(value: unknown): string {
-  return String(value);
 }
 
 function ensureFileByExt(
@@ -88,21 +81,6 @@ function ensureFileByExt(
     throw new Error(t(usageKey));
   }
   return filePath;
-}
-
-function parseBooleanOption(value: unknown): boolean {
-  return value === true || value === 'true';
-}
-
-function parseCsvOption(value: unknown): string[] | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const parsed = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return parsed.length > 0 ? parsed : null;
 }
 
 export function toNumericIds(ids: string[]) {
@@ -232,15 +210,11 @@ async function uploadNativePackage(
       // already hashed the bundle, so pass that hash instead of hashing twice
       await cachePut(bundleFile, undefined, bundleHash).catch(() => {});
     }
-    const normalizedBuildTime = config.normalizeBuildTime
-      ? config.normalizeBuildTime(buildTime)
-      : buildTime;
-    const uploadBuildTime = normalizeUploadBuildTime(normalizedBuildTime);
 
     const { id } = await post(`/app/${appId}/package/create`, {
       name: versionName,
       hash,
-      buildTime: uploadBuildTime,
+      buildTime: String(buildTime),
       // Content identity of the embedded JS bundle; the server matches it
       // against the client-reported bundleHash to decide pdiff applicability.
       // Old servers strip unknown fields, so this is forward-compatible.
@@ -258,7 +232,7 @@ async function uploadNativePackage(
       t(config.successKey, {
         id,
         version: versionName,
-        buildTime: uploadBuildTime,
+        buildTime: String(buildTime),
       }),
     );
   } finally {
@@ -374,8 +348,8 @@ export const packageCommands = {
     );
     const output = path.join(tempRoot, 'universal.apk');
 
-    const includeAllSplits = parseBooleanOption(options.includeAllSplits);
-    const splits = parseCsvOption(options.splits);
+    const includeAllSplits = getBooleanOption(options, 'includeAllSplits');
+    const splits = getStringListOption(options, 'splits');
 
     try {
       await loadExtractApk()(source, output, {
@@ -405,7 +379,6 @@ export const packageCommands = {
       appKeyMismatchKey: 'appKeyMismatchApp',
       successKey: 'appUploadSuccess',
       getInfo: (filePath) => getAppInfo(filePath),
-      normalizeBuildTime: (buildTime) => String(buildTime),
     });
   },
   parseApp: async ({ args }: { args: string[] }) => {
@@ -452,8 +425,8 @@ export const packageCommands = {
         `${path.basename(source, path.extname(source))}.apk`,
       );
 
-    const includeAllSplits = parseBooleanOption(options.includeAllSplits);
-    const splits = parseCsvOption(options.splits);
+    const includeAllSplits = getBooleanOption(options, 'includeAllSplits');
+    const splits = getStringListOption(options, 'splits');
 
     await loadExtractApk()(source, output, {
       includeAllSplits,
