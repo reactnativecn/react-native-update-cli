@@ -9,6 +9,7 @@ import { IS_CRESC } from './constants';
 import { getDepVersion } from './dep-versions';
 import { sha256Hex as sha256 } from './hash';
 import { t } from './i18n';
+import { isTruthyEnv } from './options';
 import { readFirstEntry } from './zip-entries';
 
 // app-info-parser (and its zip/plist/protobuf stack) is only needed by the
@@ -91,11 +92,9 @@ export function isNonInteractive(
   stdinIsTTY: boolean | undefined = process.stdin.isTTY,
   globalFlag: boolean | undefined = global.NO_INTERACTIVE,
 ) {
-  const envValue = env.NO_INTERACTIVE?.toLowerCase();
   return (
     globalFlag === true ||
-    envValue === 'true' ||
-    envValue === '1' ||
+    isTruthyEnv(env.NO_INTERACTIVE) ||
     stdinIsTTY !== true
   );
 }

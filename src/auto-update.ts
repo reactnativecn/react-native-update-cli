@@ -13,8 +13,8 @@ import {
 } from 'fs';
 import path from 'path';
 import { userCacheDir } from './utils/fs-helpers';
-
-export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
+import { isTruthyEnv } from './utils/options';
+import type { PackageManager } from './utils/runtime';
 
 interface AutoUpdateCandidate {
   currentVersion: string;
@@ -304,13 +304,11 @@ function inferNpmPrefix(
 function isDisabled(env: NodeJS.ProcessEnv): boolean {
   const disabled = (value: string | undefined) =>
     value === '0' || value?.toLowerCase() === 'false';
-  const enabled = (value: string | undefined) =>
-    value === '1' || value?.toLowerCase() === 'true';
   return (
     disabled(env.RNU_AUTO_UPDATE) ||
-    enabled(env.RNU_DISABLE_AUTO_UPDATE) ||
-    enabled(env.NO_UPDATE_NOTIFIER) ||
-    enabled(env.CI)
+    isTruthyEnv(env.RNU_DISABLE_AUTO_UPDATE) ||
+    isTruthyEnv(env.NO_UPDATE_NOTIFIER) ||
+    isTruthyEnv(env.CI)
   );
 }
 

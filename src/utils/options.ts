@@ -1,3 +1,8 @@
+/** `1` or `true` (any case), the usual spelling of an enabled env flag */
+export function isTruthyEnv(value: string | undefined): boolean {
+  return value === '1' || value?.toLowerCase() === 'true';
+}
+
 export function getBooleanOption(
   options: Record<string, unknown>,
   key: string,
