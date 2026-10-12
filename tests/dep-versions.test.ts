@@ -40,7 +40,7 @@ describe('depVersions utility', () => {
     return module.getDepVersions();
   };
 
-  test('resolves lazily, once, and exposes the same data through depVersions', async () => {
+  test('resolves lazily and once', async () => {
     fs.writeFileSync(
       path.join(testDir, 'package.json'),
       JSON.stringify({ dependencies: { lazy: '^1.0.0' } }),
@@ -63,9 +63,6 @@ describe('depVersions utility', () => {
     expect(cwdSpy).not.toHaveBeenCalled();
 
     expect(module.getDepVersions()).toEqual({ lazy: '1.2.3' });
-    expect(module.depVersions.lazy).toBe('1.2.3');
-    expect(Object.keys(module.depVersions)).toEqual(['lazy']);
-    expect({ ...module.depVersions }).toEqual({ lazy: '1.2.3' });
 
     // memoized while the project directory is unchanged
     expect(module.getDepVersions()).toBe(module.getDepVersions());

@@ -12,7 +12,7 @@ import { checkPlugins, question, translateOptions } from './utils';
 import { addGitIgnore } from './utils/add-gitignore';
 import { checkLockFiles } from './utils/check-lockfile';
 import { tempDir } from './utils/constants';
-import { depVersions } from './utils/dep-versions';
+import { getDepVersion } from './utils/dep-versions';
 import {
   cleanStaleTmp,
   type HermesBaseMeta,
@@ -294,7 +294,11 @@ export const bundleCommands = {
       `${Date.now()}`,
     );
 
-    console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
+    const sourcemap = normalized.sourcemap || bundleParams.sourcemap;
+
+    console.log(
+      t('bundlingWithRN', { version: getDepVersion('react-native') }),
+    );
 
     const hermesResult = await runReactNativeBundleCommand({
       bundleName: normalized.bundleName,
@@ -302,8 +306,7 @@ export const bundleCommands = {
       entryFile: normalized.entryFile,
       outputFolder: normalized.intermediaDir,
       platform,
-      sourcemapOutput:
-        normalized.sourcemap || bundleParams.sourcemap ? sourcemapOutput : '',
+      sourcemapOutput: sourcemap ? sourcemapOutput : '',
       forceHermes: normalized.hermes,
       hermesBase: hermesBase ? { ...hermesBase, appId } : undefined,
       resetCache: normalized.resetCache,
@@ -327,24 +330,17 @@ export const bundleCommands = {
         })
       : undefined;
 
-    if (normalized.name) {
+    const publishAndUploadSentry = async (
+      payload: Omit<
+        PublishBundlePayload,
+        'appId' | 'hermesBase' | 'sourcemap'
+      > = {},
+    ) => {
       await publishBundleVersion(realOutput, platform, {
         appId: await getAppId(),
-        name: normalized.name,
-        description: normalized.description,
-        metaInfo: normalized.metaInfo,
-        packageId: normalized.packageId,
-        packageVersion: normalized.packageVersion,
-        minPackageVersion: normalized.minPackageVersion,
-        maxPackageVersion: normalized.maxPackageVersion,
-        packageVersionRange: normalized.packageVersionRange,
-        rollout: normalized.rollout,
-        dryRun: normalized.dryRun,
         hermesBase: baseMeta,
-        sourcemap:
-          normalized.sourcemap || bundleParams.sourcemap
-            ? sourcemapOutput
-            : undefined,
+        sourcemap: sourcemap ? sourcemapOutput : undefined,
+        ...payload,
       });
       await uploadSentryArtifactsIfNeeded(
         bundleParams.sentry,
@@ -357,32 +353,29 @@ export const bundleCommands = {
           sentryDist: normalized.sentryDist,
         },
       );
+    };
+
+    if (normalized.name) {
+      await publishAndUploadSentry({
+        name: normalized.name,
+        description: normalized.description,
+        metaInfo: normalized.metaInfo,
+        packageId: normalized.packageId,
+        packageVersion: normalized.packageVersion,
+        minPackageVersion: normalized.minPackageVersion,
+        maxPackageVersion: normalized.maxPackageVersion,
+        packageVersionRange: normalized.packageVersionRange,
+        rollout: normalized.rollout,
+        dryRun: normalized.dryRun,
+      });
       return;
     }
 
-    if (!getBooleanOption(options, 'no-interactive', false)) {
-      const v = await question(t('uploadBundlePrompt'));
-      if (v.toLowerCase() === 'y') {
-        await publishBundleVersion(realOutput, platform, {
-          appId: await getAppId(),
-          hermesBase: baseMeta,
-          sourcemap:
-            normalized.sourcemap || bundleParams.sourcemap
-              ? sourcemapOutput
-              : undefined,
-        });
-        await uploadSentryArtifactsIfNeeded(
-          bundleParams.sentry,
-          normalized.bundleName,
-          normalized.intermediaDir,
-          sourcemapOutput,
-          platform,
-          {
-            sentryRelease: normalized.sentryRelease,
-            sentryDist: normalized.sentryDist,
-          },
-        );
-      }
+    if (
+      !getBooleanOption(options, 'no-interactive', false) &&
+      (await question(t('uploadBundlePrompt'))).toLowerCase() === 'y'
+    ) {
+      await publishAndUploadSentry();
     }
   },
 };

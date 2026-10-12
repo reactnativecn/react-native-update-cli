@@ -11,7 +11,6 @@
 
 import { StringDecoder } from 'node:string_decoder';
 import { spawn, spawnSync } from 'child_process';
-import { createHash } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -26,7 +25,12 @@ import {
   remove,
   removeSync,
 } from './fs-helpers';
-import { getHbcVersion } from './hbcTransform';
+import { sha256File, sha256Hex } from './hash';
+import {
+  getHbcVersion,
+  HBC_HEADER_SIZE,
+  readHbcFileHeader,
+} from './hbcTransform';
 import { normalizeCachedObjectInstruction } from './hermes-cached-object';
 import {
   type LiteralBuffers,
@@ -37,7 +41,7 @@ import { auditRawHermesBytecode, readHermesSemanticData } from './hermes-raw';
 import { hermesTimeout } from './hermes-timeout';
 import { t } from './i18n';
 import { webFetch } from './runtime';
-import { enumZipEntries, readEntry } from './zip-entries';
+import { readFirstEntry } from './zip-entries';
 import {
   fetchZipEntryData,
   fetchZipEntryHead,
@@ -92,9 +96,6 @@ const describeBytecodeVersion = (version: number | null) =>
   version === PLAIN_JS_BYTECODE_VERSION
     ? 'plain JS'
     : `HBC ${version ?? 'n/a'}`;
-
-/** bytes `getHbcVersion` needs to read the version */
-const HBC_HEAD_BYTES = 128;
 
 /** time allowed for a response to start (headers) */
 const FETCH_HEADERS_TIMEOUT_MS = 30_000;
@@ -248,29 +249,10 @@ export function classifyHermesCommand(hermesCommand: string): {
 // HBC helpers
 // ---------------------------------------------------------------------------
 
-export function sha256Hex(data: Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
-/** sha256 of a file, streamed (a cached base can be tens of MB) */
-export async function sha256File(file: string): Promise<string> {
-  const hash = createHash('sha256');
-  for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
-  return hash.digest('hex');
-}
-
 /** HBC version from the first bytes of a file, without reading the rest */
 export async function readFileHbcVersion(file: string): Promise<number | null> {
-  const header = Buffer.alloc(128);
-  const handle = await fs.promises.open(file, 'r');
-  try {
-    const { bytesRead } = await handle.read(header, 0, 128, 0);
-    return getHbcVersion(header.subarray(0, bytesRead));
-  } catch {
-    return null;
-  } finally {
-    await handle.close();
-  }
+  const info = await readHbcFileHeader(file);
+  return info && getHbcVersion(info.header);
 }
 
 const PROBE_CACHE_FILE = 'hbc-versions.json';
@@ -355,14 +337,8 @@ function compileProbe(hermesCommand: string): number | null {
     if (result.status !== 0 || !fs.existsSync(output)) {
       return null;
     }
-    const header = Buffer.alloc(128);
-    const fd = fs.openSync(output, 'r');
-    try {
-      fs.readSync(fd, header, 0, 128, 0);
-    } finally {
-      fs.closeSync(fd);
-    }
-    return getHbcVersion(header);
+    // the probe output is a few hundred bytes
+    return getHbcVersion(fs.readFileSync(output));
   } catch {
     return null;
   } finally {
@@ -412,38 +388,24 @@ export async function extractBundleFromArchive(
     return fs.promises.readFile(filePath);
   }
   if (ext === '.ppk' || ext === '.apk' || ext === '.ipa') {
-    return readFirstZipEntry(
+    return readFirstEntry(
       filePath,
       bundleEntryMatcher(ext.slice(1) as BaseArtifactType),
     );
   }
   if (ext === '.app') {
-    // harmony .app wraps .hap archives; reuse the existing parser
-    const { default: AppInfoParser } = await import('./app-info-parser');
-    const parser = new AppInfoParser(filePath);
-    const [bundle] = await parser.parser.getEntriesFromHarmonyApp([
+    // harmony .app wraps .hap archives; readZipEntries walks into them
+    const { readZipEntries } = await import('./app-info-parser/zip');
+    const [bundle] = await readZipEntries(filePath, [
       /^resources\/rawfile\/bundle\.harmony\.js$/,
     ]);
     return bundle ?? null;
   }
   // unknown extension: try as zip, then as raw file
-  const fromZip = await readFirstZipEntry(filePath, (name) =>
+  const fromZip = await readFirstEntry(filePath, (name) =>
     BUNDLE_ENTRY_NAMES.includes(name),
   ).catch(() => null);
   return fromZip ?? fs.promises.readFile(filePath);
-}
-
-async function readFirstZipEntry(
-  zipPath: string,
-  matches: (name: string) => boolean,
-): Promise<Buffer | null> {
-  let found: Buffer | null = null;
-  await enumZipEntries(zipPath, async (entry, zipFile) => {
-    if (!found && matches(entry.fileName)) {
-      found = await readEntry(entry, zipFile);
-    }
-  });
-  return found;
 }
 
 // ---------------------------------------------------------------------------
@@ -768,7 +730,7 @@ export async function fetchBaseBundle(
       const headMatches =
         expectHbcVersion === undefined ||
         getHbcVersion(
-          await fetchZipEntryHead(record.url, location, HBC_HEAD_BYTES),
+          await fetchZipEntryHead(record.url, location, HBC_HEADER_SIZE),
         ) === expectHbcVersion;
       if (!headMatches) throw new StaleHeadError();
       const { data, fetchedBytes, totalBytes } = await fetchZipEntryData(
@@ -807,7 +769,7 @@ export async function fetchBaseBundle(
         expectHbcVersion === undefined
           ? undefined
           : {
-              bytes: HBC_HEAD_BYTES,
+              bytes: HBC_HEADER_SIZE,
               check: (head) => {
                 const version = getHbcVersion(head);
                 if (version !== expectHbcVersion) {

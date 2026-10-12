@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { ZipFile } from 'yazl';
 import { removeSync } from '../src/utils/fs-helpers';
-import { enumZipEntries } from '../src/utils/zip-entries';
+import { createOutputZip, enumZipEntries } from '../src/utils/zip-entries';
 
 function zipBuffer(entries: Record<string, Buffer>): Promise<Buffer> {
   const zip = new ZipFile();
@@ -79,5 +79,28 @@ describe('enumZipEntries', () => {
     }
     expect(logged).toEqual([]);
     expect(nestedTempDirs()).toEqual(before);
+  });
+});
+
+describe('createOutputZip', () => {
+  test('a write error before writePromise is awaited is not an unhandled rejection', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-output-zip-'));
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      // a directory where the zip should go: the write stream fails at once,
+      // while the caller would still be adding entries
+      const output = path.join(dir, 'out.ppk');
+      fs.mkdirSync(output);
+      const { writePromise, abort } = createOutputZip(output);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(unhandled).toEqual([]);
+      await expect(writePromise).rejects.toMatchObject({ code: 'EISDIR' });
+      await abort();
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+      removeSync(dir);
+    }
   });
 });

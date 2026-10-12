@@ -31,9 +31,7 @@
  *   `NewObjectWithBufferAndParent dst, parent, shapeIndex, valueOffset`.
  */
 import { open as openFile } from 'node:fs/promises';
-import { resolveHbcSections } from './hbcTransform';
-
-const HBC_HEADER_SIZE = 128;
+import { HBC_HEADER_SIZE, resolveHbcSections } from './hbcTransform';
 
 const TAG_TYPE_MASK = 0x70;
 const TAG_LENGTH_CONTINUES = 0x80;

@@ -24,7 +24,7 @@ import {
   reportedBytecodeVersion,
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
-import { getStringListOption } from './utils/options';
+import { getBooleanOption, getStringListOption } from './utils/options';
 import { bundleLocationFields, locateZipEntry } from './utils/zip-range';
 
 type PackageCommandOptions = Record<string, unknown> & {
@@ -63,20 +63,13 @@ type NativeUploadConfig = {
   appKeyMismatchKey: string;
   successKey: string;
   getInfo: (filePath: string) => Promise<NativePackageInfo>;
-  normalizeBuildTime?: (
-    buildTime: NativePackageInfo['buildTime'],
-  ) => string | number | undefined;
 };
 
 // the AAB parser drags in protobufjs; load it only for the aab commands
-function createAabParser(source: string) {
-  const { AabParser } =
-    require('./utils/app-info-parser/aab') as typeof import('./utils/app-info-parser/aab');
-  return new AabParser(source);
-}
-
-export function normalizeUploadBuildTime(value: unknown): string {
-  return String(value);
+function loadExtractApk() {
+  return (
+    require('./utils/app-info-parser/aab') as typeof import('./utils/app-info-parser/aab')
+  ).extractApk;
 }
 
 function ensureFileByExt(
@@ -90,22 +83,7 @@ function ensureFileByExt(
   return filePath;
 }
 
-function parseBooleanOption(value: unknown): boolean {
-  return value === true || value === 'true';
-}
-
-function parseCsvOption(value: unknown): string[] | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const parsed = value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return parsed.length > 0 ? parsed : null;
-}
-
-function toNumericIds(ids: string[]) {
+export function toNumericIds(ids: string[]) {
   return ids.map((id) => {
     const numericId = Number(id);
     if (!Number.isInteger(numericId) || numericId <= 0) {
@@ -113,6 +91,50 @@ function toNumericIds(ids: string[]) {
     }
     return numericId;
   });
+}
+
+const deleteMessages = {
+  version: {
+    one: 'deleteVersionSuccess',
+    many: 'deleteVersionsSuccess',
+    error: 'deleteVersionError',
+  },
+  package: {
+    one: 'deletePackageSuccess',
+    many: 'deletePackagesSuccess',
+    error: 'deletePackageError',
+  },
+} as const;
+
+/**
+ * Delete versions or packages of an app: one id through
+ * `DELETE /app/:appId/<kind>/:id`, several in one `DELETE /app/:appId/<kind>`.
+ */
+export async function deleteByIds(
+  appId: string | number,
+  kind: 'version' | 'package',
+  ids: string[],
+) {
+  const messages = deleteMessages[kind];
+  try {
+    if (ids.length === 1) {
+      const [id] = ids;
+      await doDelete(`/app/${appId}/${kind}/${id}`);
+      console.log(t(messages.one, { [`${kind}Id`]: id }));
+    } else {
+      await doDelete(`/app/${appId}/${kind}`, {
+        [`${kind}Ids`]: toNumericIds(ids),
+      });
+      console.log(
+        t(messages.many, { count: ids.length, [`${kind}Ids`]: ids.join(', ') }),
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      t(messages.error, { [`${kind}Id`]: ids.join(', '), error: message }),
+    );
+  }
 }
 
 function getVersionBinding(version: unknown): PackageVersionRef | undefined {
@@ -168,7 +190,7 @@ async function uploadNativePackage(
   const slimPackagePath = path.join(tempRoot, `package${config.extension}`);
   try {
     await createSlimNativePackage(filePath, slimPackagePath, config.platform);
-    const { hash } = await uploadFile(slimPackagePath, undefined, appId);
+    const { hash } = await uploadFile(slimPackagePath, appId);
     // where the bundle sits inside the uploaded (slim) archive, so a later
     // `bundle` that falls back to this package as hermes base fetches only
     // the bundle with one HTTP Range request. Harmony .app nests a second
@@ -188,15 +210,11 @@ async function uploadNativePackage(
       // already hashed the bundle, so pass that hash instead of hashing twice
       await cachePut(bundleFile, undefined, bundleHash).catch(() => {});
     }
-    const normalizedBuildTime = config.normalizeBuildTime
-      ? config.normalizeBuildTime(buildTime)
-      : buildTime;
-    const uploadBuildTime = normalizeUploadBuildTime(normalizedBuildTime);
 
     const { id } = await post(`/app/${appId}/package/create`, {
       name: versionName,
       hash,
-      buildTime: uploadBuildTime,
+      buildTime: String(buildTime),
       // Content identity of the embedded JS bundle; the server matches it
       // against the client-reported bundleHash to decide pdiff applicability.
       // Old servers strip unknown fields, so this is forward-compatible.
@@ -214,7 +232,7 @@ async function uploadNativePackage(
       t(config.successKey, {
         id,
         version: versionName,
-        buildTime: uploadBuildTime,
+        buildTime: String(buildTime),
       }),
     );
   } finally {
@@ -330,12 +348,11 @@ export const packageCommands = {
     );
     const output = path.join(tempRoot, 'universal.apk');
 
-    const includeAllSplits = parseBooleanOption(options.includeAllSplits);
-    const splits = parseCsvOption(options.splits);
+    const includeAllSplits = getBooleanOption(options, 'includeAllSplits');
+    const splits = getStringListOption(options, 'splits');
 
-    const parser = createAabParser(source);
     try {
-      await parser.extractApk(output, {
+      await loadExtractApk()(source, output, {
         includeAllSplits,
         splits,
       });
@@ -362,7 +379,6 @@ export const packageCommands = {
       appKeyMismatchKey: 'appKeyMismatchApp',
       successKey: 'appUploadSuccess',
       getInfo: (filePath) => getAppInfo(filePath),
-      normalizeBuildTime: (buildTime) => String(buildTime),
     });
   },
   parseApp: async ({ args }: { args: string[] }) => {
@@ -409,11 +425,10 @@ export const packageCommands = {
         `${path.basename(source, path.extname(source))}.apk`,
       );
 
-    const includeAllSplits = parseBooleanOption(options.includeAllSplits);
-    const splits = parseCsvOption(options.splits);
+    const includeAllSplits = getBooleanOption(options, 'includeAllSplits');
+    const splits = getStringListOption(options, 'splits');
 
-    const parser = createAabParser(source);
-    await parser.extractApk(output, {
+    await loadExtractApk()(source, output, {
       includeAllSplits,
       splits,
     });
@@ -455,43 +470,6 @@ export const packageCommands = {
       });
     }
 
-    // Confirm deletion
-    // const confirmDelete = await question(
-    //   t('confirmDeletePackage', { packageId }),
-    // );
-
-    // if (
-    //   confirmDelete.toLowerCase() !== 'y' &&
-    //   confirmDelete.toLowerCase() !== 'yes'
-    // ) {
-    //   console.log(t('cancelled'));
-    //   return;
-    // }
-
-    try {
-      if (packageIds.length === 1) {
-        const [packageId] = packageIds;
-        await doDelete(`/app/${appId}/package/${packageId}`);
-        console.log(t('deletePackageSuccess', { packageId }));
-      } else {
-        await doDelete(`/app/${appId}/package`, {
-          packageIds: toNumericIds(packageIds),
-        });
-        console.log(
-          t('deletePackagesSuccess', {
-            count: packageIds.length,
-            packageIds: packageIds.join(', '),
-          }),
-        );
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        t('deletePackageError', {
-          packageId: packageIds.join(', '),
-          error: message,
-        }),
-      );
-    }
+    await deleteByIds(appId, 'package', packageIds);
   },
 };

@@ -130,4 +130,17 @@ describe('bundle-pack', () => {
       'custom.bundle.map',
     );
   });
+
+  test('rejects instead of hanging when the output cannot be written', async () => {
+    const sourceDir = path.join(tempRoot, 'bundle');
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.writeFileSync(path.join(sourceDir, 'index.bundlejs'), 'bundle');
+    // a directory where the zip file should go: the write stream fails
+    const output = path.join(tempRoot, 'out.ppk');
+    fs.mkdirSync(output);
+
+    await expect(packBundle(sourceDir, output)).rejects.toMatchObject({
+      code: 'EISDIR',
+    });
+  });
 });

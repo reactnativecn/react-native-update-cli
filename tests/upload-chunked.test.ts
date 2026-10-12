@@ -104,7 +104,7 @@ describe('chunked upload', () => {
 
   test('announces the size, posts every byte range once, then completes', async () => {
     const apiCalls = setup(chunkedInstruction);
-    const result = await uploadFile(tmp, undefined, 9);
+    const result = await uploadFile(tmp, 9);
 
     expect(apiCalls[0].url).toBe('https://api.test/upload');
     expect(apiCalls[0].body).toEqual({

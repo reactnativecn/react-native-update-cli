@@ -165,6 +165,18 @@ function isProxyRelatedError(error: unknown): boolean {
   return PROXY_ERROR_PATTERNS.some((p) => lower.includes(p.toLowerCase()));
 }
 
+/** A request error for `url`, with the proxy hints when a proxy is the likely cause. */
+function networkError(error: unknown, url: string): Error {
+  const baseError = createRequestError(error, url);
+  if (isProxyRelatedError(error)) {
+    return new Error(
+      `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
+      { cause: baseError },
+    );
+  }
+  return baseError;
+}
+
 async function query(url: string, options: RuntimeRequestInit) {
   const baseUrl = await getBaseUrl();
   const fullUrl = `${baseUrl}${url}`;
@@ -172,14 +184,7 @@ async function query(url: string, options: RuntimeRequestInit) {
   try {
     resp = await runtimeFetch(fullUrl, options);
   } catch (error) {
-    const baseError = createRequestError(error, fullUrl);
-    if (isProxyRelatedError(error)) {
-      throw new Error(
-        `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
-        { cause: baseError },
-      );
-    }
-    throw baseError;
+    throw networkError(error, fullUrl);
   }
   const text = await resp.text();
   let json: any;
@@ -207,29 +212,12 @@ async function query(url: string, options: RuntimeRequestInit) {
   return json;
 }
 
-function queryWithoutBody(method: string) {
-  return (api: string) => {
-    const headers: Record<string, string> = {
-      'User-Agent': userAgent,
-    };
-    if (apiToken) {
-      headers['x-api-token'] = apiToken;
-    } else if (session?.token) {
-      headers['X-AccessToken'] = session.token;
-    }
-    return query(api, {
-      method,
-      headers,
-    });
-  };
-}
-
-function queryWithBody(method: string) {
+function queryWith(method: string, withBody: boolean) {
   return (api: string, body?: Record<string, any>) => {
-    const headers: Record<string, string> = {
-      'User-Agent': userAgent,
-      'Content-Type': 'application/json',
-    };
+    const headers: Record<string, string> = { 'User-Agent': userAgent };
+    if (withBody) {
+      headers['Content-Type'] = 'application/json';
+    }
     if (apiToken) {
       headers['x-api-token'] = apiToken;
     } else if (session?.token) {
@@ -238,15 +226,15 @@ function queryWithBody(method: string) {
     return query(api, {
       method,
       headers,
-      body: JSON.stringify(body),
+      ...(withBody ? { body: JSON.stringify(body) } : {}),
     });
   };
 }
 
-export const get = queryWithoutBody('GET');
-export const post = queryWithBody('POST');
-export const put = queryWithBody('PUT');
-export const doDelete = queryWithBody('DELETE');
+export const get: (api: string) => Promise<any> = queryWith('GET', false);
+export const post = queryWith('POST', true);
+export const put = queryWith('PUT', true);
+export const doDelete = queryWith('DELETE', true);
 
 // Upload deadline: generous for a slow link (5 s/MB, i.e. ~200 KB/s, on top
 // of a 30 s base, never below 60 s) but bounded, so a stalled connection cannot
@@ -428,11 +416,7 @@ async function sendChunks(
   }
 }
 
-export async function uploadFile(
-  fn: string,
-  key?: string,
-  appId?: string | number,
-) {
+export async function uploadFile(fn: string, appId?: string | number) {
   const fileSize = fs.statSync(fn).size;
   // appId 用于服务端路由:绑定了自托管节点(rnu-node)的应用,
   // 上传指令会指向节点或其对象存储。chunked + size 让支持的服务端(GCS)
@@ -440,7 +424,8 @@ export async function uploadFile(
   const resp = await post('/upload', {
     ext: path.extname(fn),
     ...(appId ? { appId: Number(appId) } : {}),
-    ...(key ? {} : { chunked: true, size: fileSize }),
+    chunked: true,
+    size: fileSize,
   });
   const { url, backupUrl, formData, maxSize } = resp;
   let realUrl = url;
@@ -459,7 +444,6 @@ export async function uploadFile(
         realUrl = backupUrl;
       }
     }
-    // console.log({realUrl});
   }
 
   if (maxSize && fileSize > filesizeParser(maxSize)) {
@@ -484,14 +468,7 @@ export async function uploadFile(
   });
 
   const rethrowUploadError = (error: unknown): never => {
-    const baseError = createRequestError(error, realUrl);
-    if (isProxyRelatedError(error)) {
-      throw new Error(
-        `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
-        { cause: baseError },
-      );
-    }
-    throw baseError;
+    throw networkError(error, realUrl);
   };
 
   // 自托管节点的 s3 直传:服务端下发预签名 PUT,字节直达用户的对象存储
@@ -528,7 +505,7 @@ export async function uploadFile(
         stream: fileStream,
       });
 
-  if (resp.chunked && !key) {
+  if (resp.chunked) {
     try {
       await sendChunks(fn, realUrl, fileSize, bar, resp.chunked, postForm);
     } catch (error) {
@@ -551,7 +528,7 @@ export async function uploadFile(
       realUrl,
       fileSize,
       bar,
-      postForm(key ? { ...formData, key } : formData, fileSize),
+      postForm(formData, fileSize),
     );
   } catch (error) {
     return rethrowUploadError(error);
@@ -564,8 +541,7 @@ export async function uploadFile(
     );
   }
 
-  // const body = await response.json();
-  return { hash: key || formData.key };
+  return { hash: formData.key };
 }
 
 /**

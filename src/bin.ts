@@ -5,15 +5,12 @@ import { loadSession } from './api';
 import { commandNames, loadCommandHandler } from './commands';
 import { printVersionCommand } from './utils';
 import { t } from './utils/i18n';
+import { isTruthyEnv } from './utils/options';
 
 interface CliArgv {
   command: string;
   args: string[];
   options: Record<string, any>;
-}
-
-function isTruthyEnv(value: string | undefined): boolean {
-  return value === '1' || value?.toLowerCase() === 'true';
 }
 
 function printUsage(exitCode = 1) {

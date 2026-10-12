@@ -5,20 +5,12 @@ export default {
   accountNoExpiry: '未设置有效期',
   accountRenewalWarning:
     '[注意] 您的 Pushy 付费套餐将在 {{days}} 天内到期，请及时续费，以免影响服务：{{url}}',
-  accountLookupFailed: '[警告] 暂时无法获取账号信息，将继续执行命令。',
   addedToGitignore: '已将 {{line}} 添加到 .gitignore',
   androidCrunchPngsWarning:
     'android 的 crunchPngs 选项似乎尚未禁用（如已禁用则请忽略此提示），这可能导致热更包体积异常增大，具体请参考 https://pushy.reactnative.cn/docs/getting-started.html#%E7%A6%81%E7%94%A8-android-%E7%9A%84-crunch-%E4%BC%98%E5%8C%96 \n',
-  aabOpenApksFailed: '无法打开生成的 .apks 文件',
-  aabReadUniversalApkFailed: '无法读取 universal.apk',
   aabUniversalApkNotFound: '在生成的 .apks 中未找到 universal.apk',
   aabBundletoolDownloadHint:
     '未找到 bundletool，正在通过 npx 下载 node-bundletool（首次下载可能需要一些时间）。',
-  aabManifestNotFound: '在 AAB 的 base/manifest/ 中找不到 AndroidManifest.xml',
-  aabParseResourcesWarning: '[警告] 解析 resources.arsc 失败：{{error}}',
-  aabParseFailed: '解析 AAB 失败：{{error}}',
-  aabParseManifestError: '解析 AndroidManifest.xml 出错：{{error}}',
-  aabParseResourcesError: '解析 resources.arsc 出错：{{error}}',
   appId: '应用 id',
   appIdMismatchApk:
     'appId不匹配！当前apk: {{appIdInPkg}}, 当前{{- source}}: {{appId}}',
@@ -116,7 +108,6 @@ export default {
   pausedStatus: '(已暂停)',
   platform: '平台',
   platformQuestion: '平台(ios/android/harmony):',
-  pluginDetectionError: '检测 {{name}} 插件时出错：{{error}}',
   pluginDetected: '检测到 {{name}} 插件',
   sourceMapNotFound: '找不到 source map：{{path}}',
   sourceMapMissingWarning:
@@ -170,7 +161,6 @@ export default {
   unnamed: '(未命名)',
   dryRun: '以下是 dry-run 模拟运行结果，不会实际执行任何操作：',
   usingCustomVersion: '使用自定义版本：{{version}}',
-  confirmDeletePackage: '确认删除原生包 {{packageId}}? 此操作不可撤销 (Y/N):',
   deletePackageSuccess: '原生包 {{packageId}} 删除成功',
   deletePackagesSuccess: '已删除 {{count}} 个原生包：{{packageIds}}',
   deletePackageError: '删除原生包 {{packageId}} 失败: {{error}}',

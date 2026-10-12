@@ -1,11 +1,11 @@
 import chalk from 'chalk';
 import { fork } from 'child_process';
-import { createHash } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { getApiToken, getSession } from './api';
 import { IS_CRESC, pricingPageUrl } from './utils/constants';
+import { sha256Hex } from './utils/hash';
 import { t } from './utils/i18n';
 
 export interface AccountInfo {
@@ -62,9 +62,9 @@ interface AccountCache {
 }
 
 export function accountCacheFile(token: string, apiToken = '') {
-  const key = createHash('sha256')
-    .update(JSON.stringify([IS_CRESC, process.cwd(), token, apiToken]))
-    .digest('hex');
+  const key = sha256Hex(
+    JSON.stringify([IS_CRESC, process.cwd(), token, apiToken]),
+  );
   return path.join(
     os.homedir(),
     '.cache',

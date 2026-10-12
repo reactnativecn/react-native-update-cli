@@ -62,7 +62,6 @@
   "homepage": "https://github.com/reactnativecn/react-native-update-cli",
   "dependencies": {
     "bplist-parser": "^0.3.2",
-    "cgbi-to-png": "^1.0.7",
     "chalk": "4",
     "cli-arguments": "^0.2.1",
     "compare-versions": "^6.1.1",
@@ -73,7 +72,6 @@
     "i18next": "^26.4.0",
     "plist": "^5.0.0",
     "progress": "^2.0.3",
-    "properties": "^1.2.1",
     "protobufjs": "^8.7.2",
     "read": "^4.1.0",
     "registry-auth-token": "^5.1.1",

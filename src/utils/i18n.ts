@@ -19,8 +19,6 @@ export function resolveLanguage(
 
 i18next.init({
   lng: resolveLanguage(),
-  // debug: process.env.NODE_ENV !== 'production',
-  // debug: true,
   resources: {
     en: {
       translation: en,

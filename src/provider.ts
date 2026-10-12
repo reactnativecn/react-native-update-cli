@@ -52,15 +52,13 @@ export class CLIProviderImpl implements CLIProvider {
     successMessage: string,
     requireSession = true,
   ): Promise<CommandResult> {
-    return runAsCommandResult(
+    return this.runDataCommand(
       async () => {
-        if (requireSession) {
-          await this.ensureInitialized();
-        }
         await task();
+        return { message: successMessage };
       },
       fallbackError,
-      () => ({ message: successMessage }),
+      requireSession,
     );
   }
 

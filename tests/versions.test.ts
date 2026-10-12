@@ -241,7 +241,7 @@ describe('versionCommands.publish', () => {
 
     expect(getSelectedAppSpy).not.toHaveBeenCalled();
     expect(appGetSpy).toHaveBeenCalledWith('/app/777');
-    expect(uploadFileSpy).toHaveBeenCalledWith('bundle.ppk', undefined, '777');
+    expect(uploadFileSpy).toHaveBeenCalledWith('bundle.ppk', '777');
     expect(postSpy).toHaveBeenCalledWith(
       '/app/777/version/create',
       expect.any(Object),

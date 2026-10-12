@@ -14,9 +14,7 @@
  * leaves the machine. The local console keeps the unredacted text: that is
  * where the name is actually useful.
  */
-import { createHash } from 'node:crypto';
-
-const sha = (value: string) => createHash('sha256').update(value).digest('hex');
+import { sha256Hex as sha } from './hash';
 
 /** stable stand-in for one redacted value; the same input always yields it */
 const token = (kind: string, value: string) =>

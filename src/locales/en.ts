@@ -5,23 +5,12 @@ export default {
   accountNoExpiry: 'No expiry specified',
   accountRenewalWarning:
     '[Notice] Your Pushy paid plan expires in {{days}} days. Renew soon to avoid service disruption: {{url}}',
-  accountLookupFailed:
-    '[Warning] Unable to retrieve account information. Continuing with the command.',
   addedToGitignore: 'Added {{line}} to .gitignore',
   androidCrunchPngsWarning:
     'The crunchPngs option of android seems not disabled (Please ignore this warning if already disabled), which may cause abnormal consumption of mobile network traffic. Please refer to https://cresc.dev/docs/getting-started#disable-crunchpngs-on-android \n',
-  aabOpenApksFailed: 'Failed to open generated .apks file',
-  aabReadUniversalApkFailed: 'Failed to read universal.apk',
   aabUniversalApkNotFound: 'universal.apk not found in generated .apks',
   aabBundletoolDownloadHint:
     'bundletool not found. Downloading node-bundletool via npx (first run may take a while).',
-  aabManifestNotFound:
-    "AndroidManifest.xml can't be found in AAB base/manifest/",
-  aabParseResourcesWarning:
-    '[Warning] Failed to parse resources.arsc: {{error}}',
-  aabParseFailed: 'Failed to parse AAB: {{error}}',
-  aabParseManifestError: 'Parse AndroidManifest.xml error: {{error}}',
-  aabParseResourcesError: 'Parser resources.arsc error: {{error}}',
   appId: 'App ID',
   appIdMismatchApk:
     'App ID mismatch! Current APK: {{appIdInPkg}}, current {{- source}}: {{appId}}',
@@ -128,7 +117,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   pausedStatus: '(Paused)',
   platform: 'Platform',
   platformQuestion: 'Platform(ios/android/harmony):',
-  pluginDetectionError: 'error while detecting {{name}} plugin: {{error}}',
   pluginDetected: 'detected {{name}} plugin',
   publishUsage:
     'Usage: pushy publish <ppk file> --platform ios|android|harmony',
@@ -187,8 +175,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   unnamed: '(Unnamed)',
   dryRun: 'Below is the dry-run result, no actual operation will be performed:',
   usingCustomVersion: 'Using custom version: {{version}}',
-  confirmDeletePackage:
-    'Confirm delete native package {{packageId}}? This operation cannot be undone (Y/N):',
   deletePackageSuccess: 'Native package {{packageId}} deleted successfully',
   deletePackagesSuccess: 'Deleted {{count}} native packages: {{packageIds}}',
   deletePackageError:

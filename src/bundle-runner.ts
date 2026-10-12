@@ -31,7 +31,6 @@ import {
 } from './utils/runtime';
 
 const g2js = require('gradle-to-js/lib/parser');
-const properties = require('properties');
 
 export interface BundleCliOptions {
   taro?: boolean;
@@ -298,15 +297,14 @@ export async function runReactNativeBundleCommand({
   }
 
   if (isSentry) {
-    if (platform === 'ios') {
-      process.env.SENTRY_PROPERTIES = 'ios/sentry.properties';
-    } else if (platform === 'android') {
-      process.env.SENTRY_PROPERTIES = 'android/sentry.properties';
-    } else if (
-      platform === 'harmony' &&
-      fs.existsSync('harmony/sentry.properties')
+    // optional only on harmony
+    const sentryProperties = `${platform}/sentry.properties`;
+    if (
+      platform === 'ios' ||
+      platform === 'android' ||
+      (platform === 'harmony' && fs.existsSync(sentryProperties))
     ) {
-      process.env.SENTRY_PROPERTIES = 'harmony/sentry.properties';
+      process.env.SENTRY_PROPERTIES = sentryProperties;
     }
   }
 
@@ -506,11 +504,8 @@ export function assertSafeToEmpty(dir: string, cwd = process.cwd()): string {
     [lexicalHome, canonicalHome],
     [lexicalTmp, canonicalTmp],
   ] as const) {
-    const relative = path.relative(lexicalBase, requested);
-    if (
-      relative === '' ||
-      (!relative.startsWith('..') && !path.isAbsolute(relative))
-    ) {
+    if (contains(lexicalBase, requested)) {
+      const relative = path.relative(lexicalBase, requested);
       if (!samePath(path.resolve(canonicalBase, relative), target)) {
         reject(target);
       }
@@ -545,11 +540,11 @@ export async function detectHermesEnabled(
     return true;
   }
   if (platform === 'android') {
-    const gradleProperties = await readGradleProperties(
+    const hermesEnabled = await readGradleHermesEnabled(
       path.join(projectRoot, 'android', 'gradle.properties'),
     );
-    if (typeof gradleProperties.hermesEnabled === 'boolean') {
-      return gradleProperties.hermesEnabled;
+    if (hermesEnabled !== undefined) {
+      return hermesEnabled;
     }
     if (typeof gradleConfig.enableHermes === 'boolean') {
       return gradleConfig.enableHermes;
@@ -562,29 +557,30 @@ export async function detectHermesEnabled(
   return false;
 }
 
-/** parsed gradle.properties; a missing file is simply empty */
-function readGradleProperties(
+/**
+ * `hermesEnabled` from gradle.properties (the last assignment wins, as in
+ * Gradle); undefined when the file, the key or a boolean value is missing.
+ */
+async function readGradleHermesEnabled(
   file: string,
-): Promise<{ hermesEnabled?: boolean }> {
-  return new Promise((resolve) => {
-    properties.parse(
-      file,
-      { path: true },
-      (
-        error: (Error & { code?: string }) | null,
-        props: { hermesEnabled?: boolean } = {},
-      ) => {
-        if (error) {
-          if (error.code !== 'ENOENT') {
-            console.warn(`${file}: ${error.message ?? error}`);
-          }
-          resolve({});
-          return;
-        }
-        resolve(props);
-      },
-    );
-  });
+): Promise<boolean | undefined> {
+  let content: string;
+  try {
+    content = await fs.promises.readFile(file, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn(`${file}: ${(error as Error).message ?? error}`);
+    }
+    return undefined;
+  }
+  let value: boolean | undefined;
+  for (const match of content.matchAll(
+    /^[ \t\f]*hermesEnabled[ \t\f]*[=: \t\f][ \t\f]*(.*?)[ \t\f]*\r?$/gm,
+  )) {
+    value =
+      match[1] === 'true' ? true : match[1] === 'false' ? false : undefined;
+  }
+  return value;
 }
 
 /** React Native's gradle plugin (0.71+) enables Hermes unless a property says otherwise */
@@ -1575,28 +1571,34 @@ export function buildSentrySourcemapsUploadArgs({
   ];
 }
 
-function supportsStandaloneSentrySourcemapsUpload(sentryCliPath: string) {
+/**
+ * What the installed sentry-cli supports, from one `sourcemaps upload --help`
+ * run: the standalone `sourcemaps upload` command (else the legacy
+ * `releases files upload-sourcemaps`), and its `--debug-id-reference` flag.
+ */
+function probeSentryCli(sentryCliPath: string) {
   const result = spawnJavaScriptSync(
     [sentryCliPath, 'sourcemaps', 'upload', '--help'],
-    {
-      stdio: 'ignore',
-    },
+    { encoding: 'utf8' },
   );
-  return !result.error && result.status === 0;
+  const standalone = !result.error && result.status === 0;
+  return {
+    standalone,
+    debugIdReference:
+      standalone &&
+      typeof result.stdout === 'string' &&
+      result.stdout.includes('--debug-id-reference'),
+  };
 }
 
-function supportsSentryDebugIdReference(sentryCliPath: string) {
-  const result = spawnJavaScriptSync(
-    [sentryCliPath, 'sourcemaps', 'upload', '--help'],
-    {
-      encoding: 'utf8',
-    },
-  );
+/** --sentry-release/--sentry-dist, else SENTRY_RELEASE/SENTRY_DIST */
+function explicitSentryRelease(options: SentryUploadOptions) {
   return (
-    !result.error &&
-    result.status === 0 &&
-    typeof result.stdout === 'string' &&
-    result.stdout.includes('--debug-id-reference')
+    resolveSentryReleaseFromValues(options.sentryRelease, options.sentryDist) ??
+    resolveSentryReleaseFromValues(
+      process.env.SENTRY_RELEASE,
+      process.env.SENTRY_DIST,
+    )
   );
 }
 
@@ -1664,10 +1666,6 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  if (!fs.existsSync(sentryCliPath)) {
-    return;
-  }
-
   const { bundlePath, sourcemapPath } = await prepareSentryUploadArtifacts(
     bundleName,
     outputFolder,
@@ -1677,8 +1675,8 @@ export async function uploadSourcemapForSentry(
     sourcemapPath,
     sentryOptions,
   );
-  const useStandaloneSourcemapsCommand =
-    supportsStandaloneSentrySourcemapsUpload(sentryCliPath);
+  const sentryCli = probeSentryCli(sentryCliPath);
+  const useStandaloneSourcemapsCommand = sentryCli.standalone;
 
   if (uploadMode.type === 'release') {
     uploadSourcemapsWithRelease({
@@ -1693,19 +1691,8 @@ export async function uploadSourcemapForSentry(
   }
 
   console.log(t('uploadingSourcemap'));
-  if (
-    !useStandaloneSourcemapsCommand ||
-    !supportsSentryDebugIdReference(sentryCliPath)
-  ) {
-    const explicitRelease =
-      resolveSentryReleaseFromValues(
-        sentryOptions.sentryRelease,
-        sentryOptions.sentryDist,
-      ) ??
-      resolveSentryReleaseFromValues(
-        process.env.SENTRY_RELEASE,
-        process.env.SENTRY_DIST,
-      );
+  if (!sentryCli.debugIdReference) {
+    const explicitRelease = explicitSentryRelease(sentryOptions);
     if (!explicitRelease) {
       throw new Error(
         '[pushy/sentry] sentry-cli does not support Debug ID source map upload. ' +
@@ -1740,15 +1727,7 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  const explicitRelease =
-    resolveSentryReleaseFromValues(
-      sentryOptions.sentryRelease,
-      sentryOptions.sentryDist,
-    ) ??
-    resolveSentryReleaseFromValues(
-      process.env.SENTRY_RELEASE,
-      process.env.SENTRY_DIST,
-    );
+  const explicitRelease = explicitSentryRelease(sentryOptions);
   if (!explicitRelease) {
     assertSuccessfulSyncProcess(debugIdResult, sentryCliPath);
     return;

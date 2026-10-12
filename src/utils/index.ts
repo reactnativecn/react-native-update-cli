@@ -1,23 +1,25 @@
 import chalk from 'chalk';
 import { compare, satisfies } from 'compare-versions';
-import { createHash } from 'crypto';
 import path from 'path';
 import type { Root as ProtobufRoot } from 'protobufjs';
 import { read } from 'read';
-import { open as openZipFile, type Entry as YauzlEntry } from 'yauzl';
 import pkg from '../../package.json';
-import type AppInfoParserType from './app-info-parser';
 import { checkPlugins } from './check-plugin';
 import { IS_CRESC } from './constants';
 import { getDepVersion } from './dep-versions';
+import { sha256Hex as sha256 } from './hash';
 import { t } from './i18n';
+import { isTruthyEnv } from './options';
+import { readFirstEntry } from './zip-entries';
 
 // app-info-parser (and its zip/plist/protobuf stack) is only needed by the
 // package commands; load it on first use instead of on every CLI start.
-function createAppInfoParser(fn: string): AppInfoParserType {
-  const { default: AppInfoParser } =
-    require('./app-info-parser') as typeof import('./app-info-parser');
-  return new AppInfoParser(fn);
+function loadAppInfoParser() {
+  return {
+    ...(require('./app-info-parser/apk') as typeof import('./app-info-parser/apk')),
+    ...(require('./app-info-parser/ipa') as typeof import('./app-info-parser/ipa')),
+    ...(require('./app-info-parser/zip') as typeof import('./app-info-parser/zip')),
+  };
 }
 
 /**
@@ -28,22 +30,6 @@ export function loadTtyTable(): typeof import('tty-table') {
   const mod = require('tty-table');
   return (mod.default ?? mod) as typeof import('tty-table');
 }
-
-type ApkMetaEntry = {
-  name?: string;
-  value?: string | number | Array<string | number>;
-};
-
-type ParsedApkInfo = {
-  versionName: string;
-  application: {
-    metaData?: ApkMetaEntry[];
-  };
-};
-
-type ParsedIpaInfo = {
-  CFBundleShortVersionString: string;
-};
 
 type ParsedAppMetaInfo = {
   versionName?: string;
@@ -106,11 +92,9 @@ export function isNonInteractive(
   stdinIsTTY: boolean | undefined = process.stdin.isTTY,
   globalFlag: boolean | undefined = global.NO_INTERACTIVE,
 ) {
-  const envValue = env.NO_INTERACTIVE?.toLowerCase();
   return (
     globalFlag === true ||
-    envValue === 'true' ||
-    envValue === '1' ||
+    isTruthyEnv(env.NO_INTERACTIVE) ||
     stdinIsTTY !== true
   );
 }
@@ -126,55 +110,73 @@ export async function question(query: string, password?: boolean) {
   });
 }
 
+/** Expand `${name}` placeholders in string options from other options or the environment. */
 export function translateOptions<T extends Record<string, unknown>>(
   options: T,
-  map?: Record<string, string>,
 ): T & Record<string, unknown> {
-  if (!map) {
-    // Existing logic for template replacement if no map is provided
-    const ret: Record<string, unknown> = {};
-    for (const key in options) {
-      const value = options[key];
-      if (typeof value === 'string') {
-        ret[key] = value.replace(/\$\{(\w+)\}/g, (placeholder, name) => {
-          const replacement = options[name] ?? process.env[name];
-          if (
-            typeof replacement === 'string' ||
-            typeof replacement === 'number' ||
-            typeof replacement === 'boolean'
-          ) {
-            return String(replacement);
-          }
-          return placeholder;
-        });
-      } else {
-        ret[key] = value;
-      }
-    }
-    return ret as T & Record<string, unknown>;
-  }
-
-  const result: Record<string, unknown> = { ...options };
-  for (const [key, value] of Object.entries(map)) {
-    if (result[key] !== undefined) {
-      result[value] = result[key];
-      delete result[key];
+  const ret: Record<string, unknown> = {};
+  for (const key in options) {
+    const value = options[key];
+    if (typeof value === 'string') {
+      ret[key] = value.replace(/\$\{(\w+)\}/g, (placeholder, name) => {
+        const replacement = options[name] ?? process.env[name];
+        if (
+          typeof replacement === 'string' ||
+          typeof replacement === 'number' ||
+          typeof replacement === 'boolean'
+        ) {
+          return String(replacement);
+        }
+        return placeholder;
+      });
+    } else {
+      ret[key] = value;
     }
   }
-  return result as T;
+  return ret as T & Record<string, unknown>;
 }
 
 // bundleHash: sha256 of the raw bundle bytes extracted from the package. Must
 // stay byte-identical with what the client hashes at runtime (its embedded
 // bundle, which is also the pdiff source) — the server compares the two to
 // decide pdiff applicability. Raw bytes, no normalization of any kind.
-// getEntries is typed Buffer | Blob (app-info-parser's browser/node duality);
-// under Node it is always a Buffer, but handle both.
-async function sha256(data: Buffer | Blob): Promise<string> {
-  const buffer = Buffer.isBuffer(data)
-    ? data
-    : Buffer.from(await data.arrayBuffer());
-  return createHash('sha256').update(buffer).digest('hex');
+function requireBundle(
+  bundleFile: Buffer | undefined,
+  packageType: string,
+  entryFile: string,
+): Buffer {
+  if (!bundleFile) {
+    throw new Error(t('bundleNotFound', { packageType, entryFile }));
+  }
+  return bundleFile;
+}
+
+function requireBuildTime(value: unknown): number {
+  const buildTime = Number(value);
+  if (!Number.isFinite(buildTime) || buildTime === 0) {
+    throw new Error(t('buildTimeNotFound'));
+  }
+  return buildTime;
+}
+
+/** The common shape of getApkInfo / getAppInfo / getIpaInfo. */
+function nativePackageInfo(
+  versionName: unknown,
+  buildTime: number | string,
+  bundleFile: Buffer,
+  updateJson: Buffer | undefined,
+  platform: 'android' | 'harmony' | 'ios',
+) {
+  const appCredential = updateJson
+    ? JSON.parse(updateJson.toString())[platform]
+    : {};
+  return {
+    versionName,
+    buildTime,
+    bundleHash: sha256(bundleFile),
+    bundleFile,
+    ...appCredential,
+  };
 }
 
 // Anchored exact paths: unanchored/unescaped patterns also matched entries
@@ -182,145 +184,94 @@ async function sha256(data: Buffer | Blob): Promise<string> {
 // overwrite the real bundle, registering a wrong bundleHash.
 export const ApkBundleFileName = /^assets\/index\.android\.bundle$/;
 const ApkUpdateJsonName = /^res\/raw\/update\.json$/;
+const ApkManifestName = /^androidmanifest\.xml$/;
+const ApkResourcesName = /^resources\.arsc$/;
 
 export async function getApkInfo(fn: string) {
-  const appInfoParser = createAppInfoParser(fn);
-  // read both entries in a single scan over the archive
-  const entries = await appInfoParser.parser.getEntries([
-    ApkBundleFileName,
-    ApkUpdateJsonName,
-  ]);
-  const bundleFile = entries[String(ApkBundleFileName)];
-  if (!bundleFile) {
-    throw new Error(
-      t('bundleNotFound', {
-        packageType: 'apk',
-        entryFile: 'index.android.bundle',
-      }),
-    );
+  const { parseApkManifest, readZipEntries } = loadAppInfoParser();
+  // read every entry in a single scan over the archive
+  const [bundleFile, updateJson, manifest, resources] = await readZipEntries(
+    fn,
+    [ApkBundleFileName, ApkUpdateJsonName, ApkManifestName, ApkResourcesName],
+  );
+  const bundle = requireBundle(bundleFile, 'apk', 'index.android.bundle');
+  if (!manifest) {
+    throw new Error("AndroidManifest.xml can't be found.");
   }
-  const updateJsonFile = entries[String(ApkUpdateJsonName)];
-  let appCredential = {};
-  if (updateJsonFile) {
-    appCredential = JSON.parse(updateJsonFile.toString()).android;
-  }
-  const { versionName, application } =
-    await appInfoParser.parse<ParsedApkInfo>();
-  let buildTime = 0;
-  if (Array.isArray(application.metaData)) {
-    for (const meta of application.metaData) {
-      if (meta.name === 'pushy_build_time') {
-        if (Array.isArray(meta.value)) {
-          const firstValue = meta.value[0];
-          buildTime = Number(firstValue);
-        } else if (meta.value !== undefined) {
-          buildTime = Number(meta.value);
-        }
-      }
+  const { versionName, metaData } = parseApkManifest(manifest, resources);
+  let buildTime: unknown;
+  for (const meta of metaData) {
+    if (meta.name === 'pushy_build_time') {
+      buildTime = Array.isArray(meta.value) ? meta.value[0] : meta.value;
     }
   }
-  if (!Number.isFinite(buildTime) || buildTime === 0) {
-    throw new Error(t('buildTimeNotFound'));
-  }
-  return {
+  return nativePackageInfo(
     versionName,
-    buildTime,
-    bundleHash: await sha256(bundleFile),
-    bundleFile,
-    ...appCredential,
-  };
+    requireBuildTime(buildTime),
+    bundle,
+    updateJson,
+    'android',
+  );
 }
 
 export async function getAppInfo(fn: string) {
-  const appInfoParser = createAppInfoParser(fn);
+  const { readZipEntries } = loadAppInfoParser();
   // single scan (and single nested .hap extraction) for all three entries
-  const [bundleFile, updateJsonFile, metaJsonFile] =
-    await appInfoParser.parser.getEntriesFromHarmonyApp([
-      /^resources\/rawfile\/bundle\.harmony\.js$/,
-      /^resources\/rawfile\/update\.json$/,
-      /^resources\/rawfile\/meta\.json$/,
-    ]);
-  if (!bundleFile) {
-    throw new Error(
-      t('bundleNotFound', {
-        packageType: 'app',
-        entryFile: 'bundle.harmony.js',
-      }),
-    );
-  }
-  let appCredential = {};
-  if (updateJsonFile) {
-    appCredential = JSON.parse(updateJsonFile.toString()).harmony;
-  }
-  let metaData: ParsedAppMetaInfo = {};
-  if (metaJsonFile) {
-    metaData = JSON.parse(metaJsonFile.toString()) as ParsedAppMetaInfo;
-  }
-  const { versionName, pushy_build_time } = metaData;
-  let buildTime = 0;
-  if (pushy_build_time) {
-    buildTime = Number(pushy_build_time);
-  }
-  if (!Number.isFinite(buildTime) || buildTime === 0) {
-    throw new Error(t('buildTimeNotFound'));
-  }
-  return {
+  const [bundleFile, updateJson, metaJson] = await readZipEntries(fn, [
+    /^resources\/rawfile\/bundle\.harmony\.js$/,
+    /^resources\/rawfile\/update\.json$/,
+    /^resources\/rawfile\/meta\.json$/,
+  ]);
+  const bundle = requireBundle(bundleFile, 'app', 'bundle.harmony.js');
+  const { versionName, pushy_build_time }: ParsedAppMetaInfo = metaJson
+    ? JSON.parse(metaJson.toString())
+    : {};
+  return nativePackageInfo(
     versionName,
-    buildTime,
-    bundleHash: await sha256(bundleFile),
-    bundleFile,
-    ...appCredential,
-  };
+    requireBuildTime(pushy_build_time),
+    bundle,
+    updateJson,
+    'harmony',
+  );
 }
 
 // lowercase because the zip reader also matches against the lowercased entry
 // name (real IPAs use "Payload/")
 export const IpaBundleFileName = /^payload\/[^/]+\.app\/main\.jsbundle$/;
 const IpaUpdateJsonName = /^payload\/[^/]+\.app\/assets\/update\.json$/;
+const IpaPlistName = /payload\/[^/]+?.app\/info.plist$/i;
 const IpaBuildTimeName = /^payload\/[^/]+\.app\/pushy_build_time\.txt$/;
 // Not in root bundle when use `use_frameworks`
 const IpaBuildTimeFrameworkName =
   /^payload\/[^/]+\.app\/frameworks\/react_native_update\.framework\/pushy_build_time\.txt$/;
 
 export async function getIpaInfo(fn: string) {
-  const appInfoParser = createAppInfoParser(fn);
-  // read all four entries in a single scan over the archive
-  const entries = await appInfoParser.parser.getEntries([
-    IpaBundleFileName,
-    IpaUpdateJsonName,
-    IpaBuildTimeName,
-    IpaBuildTimeFrameworkName,
-  ]);
-  const bundleFile = entries[String(IpaBundleFileName)];
-  if (!bundleFile) {
-    throw new Error(
-      t('bundleNotFound', {
-        packageType: 'ipa',
-        entryFile: 'main.jsbundle',
-      }),
-    );
+  const { parsePlist, readZipEntries } = loadAppInfoParser();
+  // read every entry in a single scan over the archive
+  const [bundleFile, updateJson, plist, buildTimeTxt, frameworkBuildTimeTxt] =
+    await readZipEntries(fn, [
+      IpaBundleFileName,
+      IpaUpdateJsonName,
+      IpaPlistName,
+      IpaBuildTimeName,
+      IpaBuildTimeFrameworkName,
+    ]);
+  const bundle = requireBundle(bundleFile, 'ipa', 'main.jsbundle');
+  if (!plist) {
+    throw new Error("Info.plist can't be found.");
   }
-  const updateJsonFile = entries[String(IpaUpdateJsonName)];
-  let appCredential = {};
-  if (updateJsonFile) {
-    appCredential = JSON.parse(updateJsonFile.toString()).ios;
-  }
-  const { CFBundleShortVersionString: versionName } =
-    await appInfoParser.parse<ParsedIpaInfo>();
-  const buildTimeTxtBuffer =
-    entries[String(IpaBuildTimeName)] ??
-    entries[String(IpaBuildTimeFrameworkName)];
+  const { CFBundleShortVersionString: versionName } = await parsePlist(plist);
+  const buildTimeTxtBuffer = buildTimeTxt ?? frameworkBuildTimeTxt;
   if (!buildTimeTxtBuffer) {
     throw new Error(t('buildTimeNotFound'));
   }
-  const buildTime = buildTimeTxtBuffer.toString().trim();
-  return {
+  return nativePackageInfo(
     versionName,
-    buildTime,
-    bundleHash: await sha256(bundleFile),
-    bundleFile,
-    ...appCredential,
-  };
+    buildTimeTxtBuffer.toString().trim(),
+    bundle,
+    updateJson,
+    'ios',
+  );
 }
 
 export async function getAabInfo(fn: string) {
@@ -411,7 +362,7 @@ export async function getAabInfo(fn: string) {
   // through extractApk → getApkInfo which enforces the bundle's presence.
   let bundleHash: string | undefined;
   try {
-    bundleHash = await sha256(
+    bundleHash = sha256(
       await readZipEntry(fn, 'base/assets/index.android.bundle'),
     );
   } catch {
@@ -427,44 +378,9 @@ export async function getAabInfo(fn: string) {
 }
 
 async function readZipEntry(fn: string, entryName: string): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    openZipFile(fn, { lazyEntries: true }, (err, zipfile) => {
-      if (err || !zipfile) {
-        reject(err ?? new Error('Failed to open zip file'));
-        return;
-      }
-      let found = false;
-      zipfile.readEntry();
-      zipfile.on('entry', (entry: YauzlEntry) => {
-        if (entry.fileName === entryName) {
-          found = true;
-          zipfile.openReadStream(entry, (streamError, readStream) => {
-            if (streamError || !readStream) {
-              zipfile.close();
-              reject(streamError ?? new Error('Failed to read zip entry'));
-              return;
-            }
-            const chunks: Buffer[] = [];
-            readStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-            readStream.on('end', () => {
-              zipfile.close();
-              resolve(Buffer.concat(chunks));
-            });
-            readStream.on('error', (error) => {
-              zipfile.close();
-              reject(error);
-            });
-          });
-        } else {
-          zipfile.readEntry();
-        }
-      });
-      zipfile.on('end', () => {
-        if (!found) reject(new Error(`${entryName} not found in AAB`));
-      });
-      zipfile.on('error', reject);
-    });
-  });
+  const data = await readFirstEntry(fn, (name) => name === entryName);
+  if (!data) throw new Error(`${entryName} not found in AAB`);
+  return data;
 }
 
 async function resolveResource(
@@ -531,19 +447,15 @@ const VERSION_CHECK_PACKAGES = [
 async function getLatestVersions(
   background: boolean,
 ): Promise<Array<string | undefined>> {
-  // the registry client pulls in global-dirs/registry-auth-token/semver: only
-  // pay for them when actually checking
-  const { default: latestVersion } =
+  // the registry client pulls in registry-auth-token: only pay for it when
+  // actually checking
+  const { getLatestVersions: fetchLatestVersions } =
     require('./latest-version') as typeof import('./latest-version');
-  return latestVersion(VERSION_CHECK_PACKAGES, {
+  return fetchLatestVersions(VERSION_CHECK_PACKAGES, {
     useCache: true,
     ...(background ? { unref: true } : { cacheMaxAge: 0 }),
-    requestOptions: {
-      timeout: 2000,
-    },
-  })
-    .then((pkgs) => pkgs.map((pkg) => pkg.latest))
-    .catch(() => VERSION_CHECK_PACKAGES.map(() => undefined));
+    timeout: 2000,
+  });
 }
 
 function isNewer(latest: string | undefined, current: string | undefined) {

@@ -1,11 +1,4 @@
 const parseBplist = require('bplist-parser').parseBuffer;
-const cgbiToPng = require('cgbi-to-png');
-
-import { findIpaIconPath, getBase64FromBuffer, isBrowser } from './utils';
-import { Zip } from './zip';
-
-const PlistName = /payload\/[^/]+?.app\/info.plist$/i;
-const ProvisionName = /payload\/.+?\.app\/embedded.mobileprovision/;
 
 type ParsePlist = (content: string) => Record<string, any>;
 
@@ -36,74 +29,14 @@ function loadParsePlist(): Promise<ParsePlist> {
   return parsePlistPromise;
 }
 
-export class IpaParser extends Zip {
-  async parse(): Promise<any> {
-    const parsePlist = await loadParsePlist();
-    const buffers = await this.getEntries([PlistName, ProvisionName]);
-    if (!buffers[PlistName as any]) {
-      throw new Error("Info.plist can't be found.");
-    }
-    const plistInfo = this._parsePlist(
-      buffers[PlistName as any] as Buffer,
-      parsePlist,
-    );
-    const provisionInfo = this._parseProvision(
-      buffers[ProvisionName as any] as Buffer | undefined,
-      parsePlist,
-    );
-    plistInfo.mobileProvision = provisionInfo;
-
-    const iconRegex = new RegExp(findIpaIconPath(plistInfo).toLowerCase());
-    const iconBuffer = await this.getEntry(iconRegex);
-    try {
-      plistInfo.icon = iconBuffer
-        ? getBase64FromBuffer(cgbiToPng.revert(iconBuffer))
-        : null;
-    } catch (err) {
-      if (isBrowser()) {
-        plistInfo.icon = iconBuffer
-          ? getBase64FromBuffer(
-              window.btoa(String.fromCharCode(...(iconBuffer as Buffer))),
-            )
-          : null;
-      } else {
-        plistInfo.icon = null;
-        console.warn('[Warning] failed to parse icon: ', err);
-      }
-    }
-    return plistInfo;
+/** Parse an Info.plist in XML or binary form. */
+export async function parsePlist(buffer: Buffer): Promise<Record<string, any>> {
+  const bufferType = buffer[0];
+  if (bufferType === 60 || bufferType === 239) {
+    return (await loadParsePlist())(buffer.toString());
   }
-  /**
-   * Parse plist
-   * @param {Buffer} buffer // plist file's buffer
-   */
-  private _parsePlist(buffer: Buffer, parsePlist: ParsePlist) {
-    let result: any;
-    const bufferType = buffer[0];
-    if (bufferType === 60 || bufferType === 239) {
-      result = parsePlist(buffer.toString());
-    } else if (bufferType === 98) {
-      result = parseBplist(buffer)[0];
-    } else {
-      throw new Error('Unknown plist buffer type.');
-    }
-    return result;
+  if (bufferType === 98) {
+    return parseBplist(buffer)[0];
   }
-  /**
-   * parse provision
-   * @param {Buffer} buffer // provision file's buffer
-   */
-  private _parseProvision(buffer: Buffer | undefined, parsePlist: ParsePlist) {
-    let info: Record<string, any> = {};
-    if (buffer) {
-      let content = buffer.toString('utf-8');
-      const firstIndex = content.indexOf('<?xml');
-      const endIndex = content.indexOf('</plist>');
-      content = content.slice(firstIndex, endIndex + 8);
-      if (content) {
-        info = parsePlist(content);
-      }
-    }
-    return info;
-  }
+  throw new Error('Unknown plist buffer type.');
 }

@@ -17,9 +17,11 @@
 
 import { copyFile, open as openFile, rm, stat } from 'node:fs/promises';
 
-const HBC_MAGIC = Buffer.from([0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f]);
+export const HBC_MAGIC = Buffer.from([
+  0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f,
+]);
 const HEADER_COUNTS_OFFSET = 32; // magic(8) + version(4) + sourceHash(20)
-const HBC_HEADER_SIZE = 128;
+export const HBC_HEADER_SIZE = 128;
 
 /** 差分字段:条目内 byte 偏移处按小端读 u32,取 [bit, bit+bits) 位。 */
 type DeltaField = { byte: number; bit: number; bits: number };
@@ -502,7 +504,7 @@ function applyDeltaSections(
 type HbcFileHeader = { header: Buffer; size: number };
 
 /** 读取文件头 128 字节与总长;文件过短或非 HBC 时返回 null。 */
-async function readHbcFileHeader(
+export async function readHbcFileHeader(
   filePath: string,
 ): Promise<HbcFileHeader | null> {
   const { size } = await stat(filePath);

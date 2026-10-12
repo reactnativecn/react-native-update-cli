@@ -3,20 +3,20 @@ import { compare, satisfies } from 'compare-versions';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { doDelete, get, getAllPackages, post, put, uploadFile } from './api';
+import { get, getAllPackages, post, put, uploadFile } from './api';
 import { getPlatform, resolveAppId } from './app';
-import { choosePackage } from './package';
+import { choosePackage, deleteByIds, toNumericIds } from './package';
 import type { Package, Platform, Version } from './types';
 import { isNonInteractive, loadTtyTable, question } from './utils';
 import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import { sha256Hex } from './utils/hash';
 import {
   BUNDLE_ENTRY_NAMES,
   cachePut,
   extractBundleFromArchive,
   type HermesBaseMeta,
   reportedBytecodeVersion,
-  sha256Hex,
   truncateHermesBaseDetail,
 } from './utils/hermes-base';
 import { t } from './utils/i18n';
@@ -111,68 +111,31 @@ function getDepsChanges(oldDeps?: Deps, newDeps?: Deps): DepChange[] {
   for (const key of keys) {
     const oldVersion = oldDeps[key];
     const newVersion = newDeps[key];
-
-    if (oldVersion === undefined && newVersion !== undefined) {
-      rows.push({
-        dependency: key,
-        oldVersion: '-',
-        newVersion,
-        type: 'added',
-      });
+    if (oldVersion === newVersion) {
       continue;
     }
-
-    if (oldVersion !== undefined && newVersion === undefined) {
-      rows.push({
-        dependency: key,
-        oldVersion,
-        newVersion: '-',
-        type: 'removed',
-      });
-      continue;
-    }
-
-    if (
-      oldVersion !== undefined &&
-      newVersion !== undefined &&
-      oldVersion !== newVersion
-    ) {
-      rows.push({
-        dependency: key,
-        oldVersion,
-        newVersion,
-        type: 'changed',
-      });
-    }
+    rows.push({
+      dependency: key,
+      oldVersion: oldVersion ?? '-',
+      newVersion: newVersion ?? '-',
+      type:
+        oldVersion === undefined
+          ? 'added'
+          : newVersion === undefined
+            ? 'removed'
+            : 'changed',
+    });
   }
 
   return rows;
 }
 
-function toNumericIds(ids: string[]) {
-  return ids.map((id) => {
-    const numericId = Number(id);
-    if (!Number.isInteger(numericId) || numericId <= 0) {
-      throw new Error(t('invalidId', { id }));
-    }
-    return numericId;
-  });
-}
-
 function getDepsChangeSummary(changes: DepChange[]): DepsChangeSummary {
-  return changes.reduce(
-    (acc, item) => {
-      if (item.type === 'added') {
-        acc.added += 1;
-      } else if (item.type === 'removed') {
-        acc.removed += 1;
-      } else {
-        acc.changed += 1;
-      }
-      return acc;
-    },
-    { added: 0, removed: 0, changed: 0 },
-  );
+  const summary = { added: 0, removed: 0, changed: 0 };
+  for (const { type } of changes) {
+    summary[type] += 1;
+  }
+  return summary;
 }
 
 function renderVersionChange(change: DepChange) {
@@ -245,31 +208,6 @@ function printDepsChangesForPackage({
   return true;
 }
 
-async function findVersionDeps(appId: string, versionId: string) {
-  const targetId = String(versionId);
-  const limit = 100;
-  let offset = 0;
-
-  while (true) {
-    const { data, count } = await get(
-      `/app/${appId}/version/list?offset=${offset}&limit=${limit}`,
-    );
-    const versions: Version[] = Array.isArray(data) ? data : [];
-    const version = versions.find((item) => String(item.id) === targetId);
-
-    if (version) {
-      return normalizeDeps(version.deps);
-    }
-
-    offset += versions.length;
-    if (versions.length === 0 || offset >= Number(count || 0)) {
-      break;
-    }
-  }
-
-  return undefined;
-}
-
 async function printDepsChangesForPublish({
   appId,
   versionId,
@@ -288,7 +226,11 @@ async function printDepsChangesForPublish({
   let versionDeps = normalizeDeps(providedVersionDeps);
   if (!versionDeps) {
     try {
-      versionDeps = await findVersionDeps(appId, versionId);
+      const version = await findVersion(
+        appId,
+        (item) => String(item.id) === String(versionId),
+      );
+      versionDeps = normalizeDeps(version?.deps);
     } catch (error: any) {
       console.warn(
         chalk.yellow(
@@ -329,6 +271,38 @@ export async function fetchVersions(
   return Array.isArray(data) ? data : [];
 }
 
+/**
+ * The first version matching `predicate`, paging through the list newest
+ * first (crashes and binds are usually about recent versions).
+ */
+export async function findVersion(
+  appId: string,
+  predicate: (version: Version) => boolean,
+): Promise<Version | undefined> {
+  const limit = 100;
+  for (let offset = 0; offset < 100 * limit; offset += limit) {
+    const page = await fetchVersions(appId, offset, limit);
+    const found = page.find(predicate);
+    if (found || page.length < limit) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+/** The offset after a U(p) / D(own) / B(egin) paging command, else undefined. */
+function pageOffset(cmd: string, offset: number): number | undefined {
+  switch (cmd.toLowerCase()) {
+    case 'u':
+      return Math.max(0, offset - versionPageLimit);
+    case 'd':
+      return offset + versionPageLimit;
+    case 'b':
+      return 0;
+  }
+  return undefined;
+}
+
 async function showVersion(appId: string, offset: number) {
   const data = await fetchVersions(appId, offset, versionPageLimit);
   console.log(t('offset', { offset }));
@@ -365,21 +339,10 @@ async function listVersions(appId: string, interactive = true) {
       return data;
     }
     const cmd = await question('page Up/page Down/Begin/Quit(U/D/B/Q)');
-    switch (cmd.toLowerCase()) {
-      case 'u':
-        offset = Math.max(0, offset - 10);
-        break;
-      case 'd':
-        offset += 10;
-        break;
-      case 'b':
-        offset = 0;
-        break;
-      case 'q':
-        return data;
-      case '':
-        return data;
+    if (cmd === '' || cmd.toLowerCase() === 'q') {
+      return data;
     }
+    offset = pageOffset(cmd, offset) ?? offset;
   }
 }
 
@@ -393,27 +356,40 @@ async function chooseVersion(appId: string) {
     const cmd = await question(
       'Enter versionId or page Up/page Down/Begin(U/D/B)',
     );
-    switch (cmd.toUpperCase()) {
-      case 'U':
-        offset = Math.max(0, offset - 10);
-        break;
-      case 'D':
-        offset += 10;
-        break;
-      case 'B':
-        offset = 0;
-        break;
-      default: {
-        const versionId = Number.parseInt(cmd, 10);
-        const v = data.find(
-          (version: Version) => String(version.id) === String(versionId),
-        );
-        if (v) {
-          return v;
-        }
-      }
+    const nextOffset = pageOffset(cmd, offset);
+    if (nextOffset !== undefined) {
+      offset = nextOffset;
+      continue;
+    }
+    const versionId = Number.parseInt(cmd, 10);
+    const v = data.find(
+      (version: Version) => String(version.id) === String(versionId),
+    );
+    if (v) {
+      return v;
     }
   }
+}
+
+function isNonInteractiveFor(options: VersionCommandOptions) {
+  return (
+    getBooleanOption(options, 'no-interactive', false) || isNonInteractive()
+  );
+}
+
+/** `versionId` when given, else one picked from the list (interactive only). */
+async function versionIdOrChoose(
+  appId: string,
+  versionId: string | undefined,
+  options: VersionCommandOptions,
+): Promise<string> {
+  if (versionId) {
+    return versionId;
+  }
+  if (isNonInteractiveFor(options)) {
+    throw new Error(t('versionIdRequired'));
+  }
+  return String((await chooseVersion(appId)).id);
 }
 
 export const bindVersionToPackages = async ({
@@ -536,8 +512,7 @@ export const versionCommands = {
 
     const platform = await getPlatform(options.platform);
     const appId = await resolveAppId({ ...options, platform });
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
+    const nonInteractive = isNonInteractiveFor(options);
 
     // The source map is archived with the version so `pushy symbolicate` can
     // map crashes back to source. An explicit path that does not exist is a
@@ -581,16 +556,14 @@ export const versionCommands = {
     // fail the publish, only lose the archive.
     let sourceMapUploadError: unknown;
     const [{ hash }, bundleMeta, commit, sourceMapUpload] = await Promise.all([
-      uploadFile(fn, undefined, appId),
+      uploadFile(fn, appId),
       describePpkBundle(fn, options.hermesBase),
       getCommitInfo(),
       uploadSourcemapPath
-        ? uploadFile(uploadSourcemapPath, undefined, appId).catch(
-            (error: unknown) => {
-              sourceMapUploadError = error;
-              return undefined;
-            },
-          )
+        ? uploadFile(uploadSourcemapPath, appId).catch((error: unknown) => {
+            sourceMapUploadError = error;
+            return undefined;
+          })
         : Promise.resolve(undefined),
     ]).finally(() => {
       // the packed copy only exists for the upload; a failed ppk upload must
@@ -690,23 +663,16 @@ export const versionCommands = {
   },
   versions: async ({ options }: { options: VersionCommandOptions }) => {
     const appId = await resolveAppId(options);
-    const interactive = !(
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive()
-    );
-    await listVersions(appId, interactive);
+    await listVersions(appId, !isNonInteractiveFor(options));
   },
   update: async ({ options }: { options: VersionCommandOptions }) => {
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
     const appId = await resolveAppId(options);
 
-    let versionId: string | null | undefined = options.versionId;
-    if (!versionId) {
-      if (nonInteractive) {
-        throw new Error(t('versionIdRequired'));
-      }
-      versionId = String((await chooseVersion(appId)).id);
-    }
+    let versionId: string | null = await versionIdOrChoose(
+      appId,
+      options.versionId,
+      options,
+    );
     if (versionId === 'null') {
       versionId = null;
     }
@@ -797,7 +763,7 @@ export const versionCommands = {
       }
     } else {
       if (!pkgId) {
-        if (nonInteractive) {
+        if (isNonInteractiveFor(options)) {
           throw new Error(t('packageIdRequired'));
         }
         // the package list was already fetched above: no second round trip
@@ -838,17 +804,12 @@ export const versionCommands = {
   }: {
     options: VersionCommandOptions;
   }) => {
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
     const appId = await resolveAppId(options);
-
-    let versionId = options.versionId;
-    if (!versionId) {
-      if (nonInteractive) {
-        throw new Error(t('versionIdRequired'));
-      }
-      versionId = String((await chooseVersion(appId)).id);
-    }
+    const versionId = await versionIdOrChoose(
+      appId,
+      options.versionId,
+      options,
+    );
 
     const updateParams: Record<string, string> = {};
     if (options.name) updateParams.name = options.name;
@@ -859,44 +820,12 @@ export const versionCommands = {
     console.log(t('operationSuccess'));
   },
   deleteVersion: async ({ options }: { options: VersionCommandOptions }) => {
-    const nonInteractive =
-      getBooleanOption(options, 'no-interactive', false) || isNonInteractive();
     const appId = await resolveAppId(options);
+    const versionIds = getStringListOption(options, 'versionIds') ??
+      getStringListOption(options, 'versionId') ?? [
+        await versionIdOrChoose(appId, undefined, options),
+      ];
 
-    const parsedVersionIds =
-      getStringListOption(options, 'versionIds') ??
-      getStringListOption(options, 'versionId');
-    let versionIds = parsedVersionIds;
-    if (!versionIds) {
-      if (nonInteractive) {
-        throw new Error(t('versionIdRequired'));
-      }
-      versionIds = [String((await chooseVersion(appId)).id)];
-    }
-
-    try {
-      if (versionIds.length === 1) {
-        const [versionId] = versionIds;
-        await doDelete(`/app/${appId}/version/${versionId}`);
-        console.log(t('deleteVersionSuccess', { versionId }));
-      } else {
-        await doDelete(`/app/${appId}/version`, {
-          versionIds: toNumericIds(versionIds),
-        });
-        console.log(
-          t('deleteVersionsSuccess', {
-            count: versionIds.length,
-            versionIds: versionIds.join(', '),
-          }),
-        );
-      }
-    } catch (error: any) {
-      throw new Error(
-        t('deleteVersionError', {
-          versionId: versionIds.join(', '),
-          error: error.message,
-        }),
-      );
-    }
+    await deleteByIds(appId, 'version', versionIds);
   },
 };

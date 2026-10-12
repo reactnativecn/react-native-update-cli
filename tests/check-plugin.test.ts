@@ -1,69 +1,45 @@
-import { describe, expect, test } from 'bun:test';
-
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { checkPlugins } from '../src/utils/check-plugin';
-import * as pluginConfig from '../src/utils/plugin-config';
 
 describe('checkPlugins', () => {
-  test('should detect plugins concurrently (simulated)', async () => {
-    const mockPlugins = [
-      {
-        name: 'plugin1',
-        bundleParams: { p1: true },
-        detect: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          return true;
-        },
-      },
-      {
-        name: 'plugin2',
-        bundleParams: { p2: true },
-        detect: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          return true;
-        },
-      },
-      {
-        name: 'plugin3',
-        bundleParams: { p3: true },
-        detect: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 100));
-          return true;
-        },
-      },
-    ];
+  let tmpDir: string;
+  let origCwd: string;
+  let logSpy: ReturnType<typeof spyOn>;
 
-    // Replacing the plugins array in plugin-config
-    const originalPlugins = [...pluginConfig.plugins];
-    (pluginConfig.plugins as any).splice(
-      0,
-      pluginConfig.plugins.length,
-      ...mockPlugins,
-    );
-
-    const start = Date.now();
-    const result = await checkPlugins();
-    const end = Date.now();
-    const duration = end - start;
-
-    console.log(`Duration with optimized implementation: ${duration}ms`);
-
-    expect(result).toEqual({
-      sentry: false, // default
-      sourcemap: false, // default
-      p1: true,
-      p2: true,
-      p3: true,
-    } as any);
-
-    // Now it's concurrent, so we expect around 100ms.
-    // We'll allow some buffer, but it should definitely be less than 250ms.
-    expect(duration).toBeLessThan(250);
-
-    // Restore original plugins
-    (pluginConfig.plugins as any).splice(
-      0,
-      pluginConfig.plugins.length,
-      ...originalPlugins,
-    );
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-plugin-test-'));
+    origCwd = process.cwd();
+    process.chdir(tmpDir);
+    logSpy = spyOn(console, 'log').mockImplementation(() => {});
   });
+
+  afterEach(() => {
+    process.chdir(origCwd);
+    logSpy.mockRestore();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const writeProperties = (platform: string) => {
+    fs.mkdirSync(path.join(tmpDir, platform), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, platform, 'sentry.properties'),
+      'defaults.org=test\n',
+    );
+  };
+
+  test('nothing is enabled without sentry.properties', async () => {
+    expect(await checkPlugins()).toEqual({ sentry: false, sourcemap: false });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  for (const platform of ['ios', 'android']) {
+    test(`${platform}/sentry.properties enables sentry and source maps`, async () => {
+      writeProperties(platform);
+      expect(await checkPlugins()).toEqual({ sentry: true, sourcemap: true });
+      expect(logSpy).toHaveBeenCalledTimes(1);
+    });
+  }
 });

@@ -11,13 +11,12 @@ import { PassThrough, Readable } from 'stream';
 import {
   type Entry,
   fromRandomAccessReader,
-  open as openZipFile,
   RandomAccessReader,
   type ZipFile,
 } from 'yauzl';
 import { inflateRawSync, constants as zlibConstants } from 'zlib';
 import { webFetch } from './runtime';
-import { readEntry } from './zip-entries';
+import { openFirstEntry, readEntry } from './zip-entries';
 
 export const ZIP_STORED = 0;
 export const ZIP_DEFLATED = 8;
@@ -80,6 +79,34 @@ export async function readZipEntryWithLocation(
   return { data, location: await locationOfEntry(zipPath, found.entry) };
 }
 
+/** Where an entry's data starts, from its local file header at `headerOffset`. */
+function dataOffsetFromLocalHeader(header: Buffer, headerOffset: number) {
+  if (header.readUInt32LE(0) !== LOCAL_HEADER_SIGNATURE) {
+    throw new Error('invalid local file header signature');
+  }
+  // fixed header, then the file name and extra field lengths it declares
+  return (
+    headerOffset +
+    LOCAL_HEADER_SIZE +
+    header.readUInt16LE(26) +
+    header.readUInt16LE(28)
+  );
+}
+
+function assertValidLocation({
+  dataOffset,
+  compressedSize,
+}: Pick<ZipEntryLocation, 'dataOffset' | 'compressedSize'>) {
+  if (
+    !Number.isInteger(dataOffset) ||
+    !Number.isInteger(compressedSize) ||
+    dataOffset < 0 ||
+    compressedSize <= 0
+  ) {
+    throw new Error('invalid bundle location');
+  }
+}
+
 async function locationOfEntry(
   zipPath: string,
   entry: Entry,
@@ -99,62 +126,16 @@ async function locationOfEntry(
   } finally {
     await handle.close();
   }
-  if (header.readUInt32LE(0) !== LOCAL_HEADER_SIGNATURE) {
-    throw new Error('invalid local file header signature');
-  }
-  const fileNameLength = header.readUInt16LE(26);
-  const extraFieldLength = header.readUInt16LE(28);
   return {
     fileName: entry.fileName,
-    dataOffset:
-      entry.relativeOffsetOfLocalHeader +
-      LOCAL_HEADER_SIZE +
-      fileNameLength +
-      extraFieldLength,
+    dataOffset: dataOffsetFromLocalHeader(
+      header,
+      entry.relativeOffsetOfLocalHeader,
+    ),
     compressedSize: entry.compressedSize,
     uncompressedSize: entry.uncompressedSize,
     compressionMethod: entry.compressionMethod,
   };
-}
-
-/** Open a local zip and stop at the first matching entry (caller closes). */
-function openFirstEntry(
-  zipPath: string,
-  matches: (name: string) => boolean,
-): Promise<{ zipFile: ZipFile; entry: Entry } | null> {
-  return new Promise((resolve, reject) => {
-    openZipFile(
-      zipPath,
-      { lazyEntries: true, autoClose: false },
-      (err, zipFile) => {
-        if (err) return reject(err);
-        let settled = false;
-        zipFile.on('error', (error) => {
-          if (!settled) {
-            settled = true;
-            reject(error);
-          }
-        });
-        zipFile.on('end', () => {
-          if (!settled) {
-            settled = true;
-            zipFile.close();
-            resolve(null);
-          }
-        });
-        zipFile.on('entry', (entry: Entry) => {
-          if (settled) return;
-          if (matches(entry.fileName)) {
-            settled = true;
-            resolve({ zipFile, entry });
-            return;
-          }
-          zipFile.readEntry();
-        });
-        zipFile.readEntry();
-      },
-    );
-  });
 }
 
 /**
@@ -344,14 +325,7 @@ export async function fetchZipEntryData(
   if (compressionMethod !== ZIP_STORED && compressionMethod !== ZIP_DEFLATED) {
     throw new Error(`unsupported compression method ${compressionMethod}`);
   }
-  if (
-    !Number.isInteger(dataOffset) ||
-    !Number.isInteger(compressedSize) ||
-    dataOffset < 0 ||
-    compressedSize <= 0
-  ) {
-    throw new Error('invalid bundle location');
-  }
+  assertValidLocation(location);
   const { data, total } = await fetchRangeBuffer(
     url,
     dataOffset,
@@ -409,14 +383,7 @@ export async function fetchZipEntryHead(
   options: RangeOptions = {},
 ): Promise<Buffer> {
   const { dataOffset, compressedSize, compressionMethod } = location;
-  if (
-    !Number.isInteger(dataOffset) ||
-    !Number.isInteger(compressedSize) ||
-    dataOffset < 0 ||
-    compressedSize <= 0
-  ) {
-    throw new Error('invalid bundle location');
-  }
+  assertValidLocation(location);
   const size = headProbeSize(compressedSize, compressionMethod, bytes);
   const { data } = await fetchRangeBuffer(url, dataOffset, dataOffset + size, {
     timeoutMs: timeoutFor(size, options),
@@ -778,15 +745,10 @@ async function remoteEntryHead(
   bytes: number,
 ): Promise<Buffer> {
   const start = entry.relativeOffsetOfLocalHeader;
-  const header = await readAt(reader, start, LOCAL_HEADER_SIZE);
-  if (header.readUInt32LE(0) !== LOCAL_HEADER_SIGNATURE) {
-    throw new Error('invalid local file header signature');
-  }
-  const dataOffset =
-    start +
-    LOCAL_HEADER_SIZE +
-    header.readUInt16LE(26) +
-    header.readUInt16LE(28);
+  const dataOffset = dataOffsetFromLocalHeader(
+    await readAt(reader, start, LOCAL_HEADER_SIZE),
+    start,
+  );
   const size = headProbeSize(
     entry.compressedSize,
     entry.compressionMethod,

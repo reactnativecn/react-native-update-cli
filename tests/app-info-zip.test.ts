@@ -4,8 +4,9 @@ import os from 'os';
 import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
 import { ApkBundleFileName, IpaBundleFileName } from '../src/utils';
-import { IpaParser } from '../src/utils/app-info-parser/ipa';
-import { Zip } from '../src/utils/app-info-parser/zip';
+import { parseApkManifest } from '../src/utils/app-info-parser/apk';
+import { parsePlist } from '../src/utils/app-info-parser/ipa';
+import { readZipEntries } from '../src/utils/app-info-parser/zip';
 
 function mkTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -31,7 +32,162 @@ async function writeZip(
   });
 }
 
-describe('app-info-parser Zip', () => {
+// Minimal binary (AAPT) XML writer: a UTF-16 string pool plus start/end
+// element chunks whose attributes carry typed values.
+type Attr = [name: string, type: number, data: number | string];
+type Node = { name: string; attrs: Attr[]; children?: Node[] };
+
+function binaryXml(root: Node): Buffer {
+  const strings: string[] = [];
+  const ref = (s: string) => {
+    if (!strings.includes(s)) strings.push(s);
+    return strings.indexOf(s);
+  };
+  const u16 = (n: number) => {
+    const b = Buffer.alloc(2);
+    b.writeUInt16LE(n);
+    return b;
+  };
+  const u32 = (n: number) => {
+    const b = Buffer.alloc(4);
+    b.writeInt32LE(n);
+    return b;
+  };
+  const chunk = (type: number, headerSize: number, body: Buffer[]) => {
+    const data = Buffer.concat(body);
+    return Buffer.concat([
+      u16(type),
+      u16(headerSize),
+      u32(8 + data.length),
+      data,
+    ]);
+  };
+  const elements: Buffer[] = [];
+  const walk = (node: Node) => {
+    const name = ref(node.name);
+    const attrs = node.attrs.map(([attrName, type, data]) =>
+      Buffer.concat([
+        u32(-1),
+        u32(ref(attrName)),
+        u32(typeof data === 'string' ? ref(data) : -1),
+        u16(8),
+        Buffer.from([0, type]),
+        u32(typeof data === 'string' ? ref(data) : data),
+      ]),
+    );
+    elements.push(
+      chunk(0x0102, 16, [
+        u32(1),
+        u32(-1),
+        u32(-1),
+        u32(name),
+        u16(20),
+        u16(20),
+        u16(attrs.length),
+        u16(0),
+        u16(0),
+        u16(0),
+        ...attrs,
+      ]),
+    );
+    for (const child of node.children ?? []) walk(child);
+    elements.push(chunk(0x0103, 16, [u32(1), u32(-1), u32(-1), u32(name)]));
+  };
+  walk(root);
+  const encoded = strings.map((s) =>
+    Buffer.concat([u16(s.length), Buffer.from(s, 'utf16le'), u16(0)]),
+  );
+  const offsets: Buffer[] = [];
+  let at = 0;
+  for (const e of encoded) {
+    offsets.push(u32(at));
+    at += e.length;
+  }
+  const pool = chunk(0x0001, 28, [
+    u32(strings.length),
+    u32(0),
+    u32(0),
+    u32(28 + 4 * strings.length),
+    u32(0),
+    ...offsets,
+    ...encoded,
+  ]);
+  return chunk(0x0003, 8, [pool, ...elements]);
+}
+
+const TYPE_REFERENCE = 0x01;
+const TYPE_STRING = 0x03;
+const TYPE_INT_DEC = 0x10;
+const TYPE_INT_BOOLEAN = 0x12;
+
+describe('parseApkManifest', () => {
+  test('reads versionName and application meta-data', () => {
+    const manifest = binaryXml({
+      name: 'manifest',
+      attrs: [['versionName', TYPE_STRING, '1.2.3\u0000\u0000']],
+      children: [
+        { name: 'uses-permission', attrs: [['name', TYPE_STRING, 'x']] },
+        {
+          name: 'application',
+          attrs: [['label', TYPE_REFERENCE, 0x7f010000]],
+          children: [
+            {
+              name: 'meta-data',
+              attrs: [
+                ['name', TYPE_STRING, 'pushy_build_time'],
+                ['value', TYPE_INT_DEC, 1700000000],
+              ],
+            },
+            {
+              name: 'meta-data',
+              attrs: [
+                ['name', TYPE_STRING, 'enabled'],
+                ['value', TYPE_INT_BOOLEAN, 0],
+              ],
+            },
+            {
+              name: 'activity',
+              attrs: [['name', TYPE_STRING, '.Main']],
+              children: [
+                {
+                  name: 'meta-data',
+                  attrs: [['name', TYPE_STRING, 'nested']],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(parseApkManifest(manifest)).toEqual({
+      versionName: '1.2.3',
+      metaData: [
+        { name: 'pushy_build_time', value: 1700000000 },
+        { name: 'enabled', value: false },
+      ],
+    });
+  });
+
+  test('leaves an unresolvable reference undefined without resources.arsc', () => {
+    const manifest = binaryXml({
+      name: 'manifest',
+      attrs: [['versionName', TYPE_REFERENCE, 0x7f0f0001]],
+    });
+    expect(parseApkManifest(manifest)).toEqual({
+      versionName: undefined,
+      metaData: [],
+    });
+  });
+
+  test('rejects a buffer that is not binary XML', () => {
+    expect(() => parseApkManifest(Buffer.alloc(16))).toThrow(
+      'Parse AndroidManifest.xml error: Invalid XML header',
+    );
+  });
+});
+
+describe('readZipEntries', () => {
   let tempRoot = '';
 
   beforeEach(() => {
@@ -44,24 +200,23 @@ describe('app-info-parser Zip', () => {
     }
   });
 
-  test('reads entries by regex and string with compatible keys', async () => {
+  test('reads entries in pattern order, matching lowercased names too', async () => {
     const zipPath = path.join(tempRoot, 'app.zip');
     await writeZip(zipPath, {
       'AndroidManifest.xml': 'manifest',
+      'base/manifest/AndroidManifest.xml': 'aab manifest',
       'res/icon.png': 'icon',
     });
 
-    const manifestRegex = /^androidmanifest\.xml$/;
-    const buffers = await new Zip(zipPath).getEntries([
-      manifestRegex,
-      'res/icon.png',
+    const [manifest, aabManifest, missing] = await readZipEntries(zipPath, [
+      /^androidmanifest\.xml$/,
+      // case-sensitive patterns still match the original name
+      /^base\/manifest\/AndroidManifest\.xml$/,
+      /^nothing$/,
     ]);
-
-    expect(Buffer.isBuffer(buffers[manifestRegex as any])).toBe(true);
-    expect((buffers[manifestRegex as any] as Buffer).toString()).toBe(
-      'manifest',
-    );
-    expect((buffers['res/icon.png'] as Buffer).toString()).toBe('icon');
+    expect(manifest?.toString()).toBe('manifest');
+    expect(aabManifest?.toString()).toBe('aab manifest');
+    expect(missing).toBeUndefined();
   });
 
   test('bundle patterns only match the exact bundle entry, not .map/.backup siblings', async () => {
@@ -74,10 +229,8 @@ describe('app-info-parser Zip', () => {
       'foo/assets/index.android.bundle.tmp': 'TMP',
     });
 
-    const apkEntries = await new Zip(apkPath).getEntries([ApkBundleFileName]);
-    expect((apkEntries[String(ApkBundleFileName)] as Buffer).toString()).toBe(
-      'REAL_BUNDLE',
-    );
+    const [apkBundle] = await readZipEntries(apkPath, [ApkBundleFileName]);
+    expect(apkBundle?.toString()).toBe('REAL_BUNDLE');
 
     const ipaPath = path.join(tempRoot, 'app-bundle.ipa');
     await writeZip(ipaPath, {
@@ -86,16 +239,43 @@ describe('app-info-parser Zip', () => {
       'Payload/Test.app/mainXjsbundle': 'NOT_A_BUNDLE',
     });
 
-    const ipaEntries = await new Zip(ipaPath).getEntries([IpaBundleFileName]);
-    expect((ipaEntries[String(IpaBundleFileName)] as Buffer).toString()).toBe(
-      'REAL_IPA_BUNDLE',
-    );
+    const [ipaBundle] = await readZipEntries(ipaPath, [IpaBundleFileName]);
+    expect(ipaBundle?.toString()).toBe('REAL_IPA_BUNDLE');
   });
 
-  test('parses ipa plist with current plist package exports', async () => {
-    const ipaPath = path.join(tempRoot, 'app.ipa');
-    await writeZip(ipaPath, {
-      'Payload/Test.app/Info.plist': `<?xml version="1.0" encoding="UTF-8"?>
+  test('walks into nested .hap archives', async () => {
+    const hapPath = path.join(tempRoot, 'entry.hap');
+    await writeZip(hapPath, {
+      'resources/rawfile/bundle.harmony.js': 'bundle',
+      'resources/rawfile/update.json': '{"harmony":{}}',
+    });
+    const appPath = path.join(tempRoot, 'app.app');
+    await writeZip(appPath, {
+      'entry.hap': fs.readFileSync(hapPath),
+      'pack.info': '{}',
+    });
+
+    const [bundle, updateJson, meta] = await readZipEntries(appPath, [
+      /^resources\/rawfile\/bundle\.harmony\.js$/,
+      /^resources\/rawfile\/update\.json$/,
+      /^resources\/rawfile\/meta\.json$/,
+    ]);
+    expect(bundle?.toString()).toBe('bundle');
+    expect(updateJson?.toString()).toBe('{"harmony":{}}');
+    expect(meta).toBeUndefined();
+  });
+
+  test('rejects a file that is not a zip', async () => {
+    const notZip = path.join(tempRoot, 'broken.app');
+    fs.writeFileSync(notZip, 'not a zip');
+    await expect(readZipEntries(notZip, [/x/])).rejects.toThrow();
+  });
+});
+
+describe('parsePlist', () => {
+  test('parses an XML plist with the current plist package exports', async () => {
+    const info = await parsePlist(
+      Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key>
@@ -103,150 +283,16 @@ describe('app-info-parser Zip', () => {
   <key>CFBundleShortVersionString</key>
   <string>1.2.3</string>
 </dict>
-</plist>`,
-      'Payload/Test.app/embedded.mobileprovision': `prefix
-<?xml version="1.0" encoding="UTF-8"?>
-<plist version="1.0">
-<dict>
-  <key>TeamName</key>
-  <string>ReactNativeCN</string>
-</dict>
-</plist>
-suffix`,
-    });
-
-    const info = await new IpaParser(ipaPath).parse();
+</plist>`),
+    );
 
     expect(info.CFBundleIdentifier).toBe('cn.reactnative.test');
     expect(info.CFBundleShortVersionString).toBe('1.2.3');
-    expect(info.mobileProvision.TeamName).toBe('ReactNativeCN');
-    expect(info.icon).toBe(null);
   });
 
-  test('getEntry reads a single entry by string and regex', async () => {
-    const zipPath = path.join(tempRoot, 'app.zip');
-    await writeZip(zipPath, {
-      'test.txt': 'hello world',
-      'foo.bar': 'baz',
-    });
-
-    const zip = new Zip(zipPath);
-
-    // By string
-    const buf1 = await zip.getEntry('test.txt');
-    expect(Buffer.isBuffer(buf1)).toBe(true);
-    expect((buf1 as Buffer).toString()).toBe('hello world');
-
-    // By regex
-    const buf2 = await zip.getEntry(/foo.bar/);
-    expect(Buffer.isBuffer(buf2)).toBe(true);
-    expect((buf2 as Buffer).toString()).toBe('baz');
-  });
-
-  test('getEntry and getEntries handle blob return type', async () => {
-    const zipPath = path.join(tempRoot, 'app.zip');
-    await writeZip(zipPath, {
-      'test.txt': 'hello world',
-    });
-
-    const zip = new Zip(zipPath);
-
-    const blob1 = await zip.getEntry('test.txt', 'blob');
-    expect(blob1).toBeInstanceOf(Blob);
-    expect(await (blob1 as Blob).text()).toBe('hello world');
-
-    const buffers = await zip.getEntries(['test.txt'], 'blob');
-    expect(buffers['test.txt']).toBeInstanceOf(Blob);
-    expect(await (buffers['test.txt'] as Blob).text()).toBe('hello world');
-  });
-
-  test('getEntryFromHarmonyApp extracts matching file', async () => {
-    const zipPath = path.join(tempRoot, 'app.zip');
-    await writeZip(zipPath, {
-      'config.json': '{"harmony": true}',
-      'other.txt': 'ignore',
-    });
-
-    const zip = new Zip(zipPath);
-
-    const buf = await zip.getEntryFromHarmonyApp(/config.json/);
-    expect(Buffer.isBuffer(buf)).toBe(true);
-    expect((buf as Buffer).toString()).toBe('{"harmony": true}');
-  });
-
-  test('getEntriesFromHarmonyApp reads multiple entries in one pass', async () => {
-    const zipPath = path.join(tempRoot, 'app.zip');
-    await writeZip(zipPath, {
-      'rawfile/bundle.harmony.js': 'bundle',
-      'rawfile/update.json': '{"harmony":{}}',
-      'other.txt': 'ignore',
-    });
-
-    const zip = new Zip(zipPath);
-
-    const [bundle, updateJson, missing] = await zip.getEntriesFromHarmonyApp([
-      /rawfile\/bundle.harmony.js/,
-      /rawfile\/update.json/,
-      /rawfile\/meta.json/,
-    ]);
-    expect((bundle as Buffer).toString()).toBe('bundle');
-    expect((updateJson as Buffer).toString()).toBe('{"harmony":{}}');
-    expect(missing).toBeUndefined();
-  });
-
-  test('getEntry matches case-sensitive regex against original entry name', async () => {
-    const zipPath = path.join(tempRoot, 'app.zip');
-    await writeZip(zipPath, {
-      'base/manifest/AndroidManifest.xml': 'aab manifest',
-    });
-
-    // regex with uppercase letters used to never match because only the
-    // lowercased entry name was tested
-    const buf = await new Zip(zipPath).getEntry(
-      /^base\/manifest\/AndroidManifest\.xml$/,
-    );
-    expect((buf as Buffer).toString()).toBe('aab manifest');
-  });
-
-  test('constructor resolves path for string input', () => {
-    const relPath = 'some/relative/path.zip';
-    const zip = new Zip(relPath);
-    expect(zip.file).toBe(path.resolve(relPath));
-  });
-
-  test('throws error when reading entries and file is not a string', async () => {
-    // Simulate a File object which is not a string
-    const mockFile = new Blob(['dummy']) as File;
-    const zip = new Zip(mockFile);
-
-    expect(zip.file).toBe(mockFile);
-
-    try {
-      await zip.getEntry('any');
-      expect(true).toBe(false); // Should not reach here
-    } catch (e: any) {
-      expect(e.message).toBe('Param error: [file] must be file path in Node.');
-    }
-
-    try {
-      await zip.getEntries(['any']);
-      expect(true).toBe(false); // Should not reach here
-    } catch (e: any) {
-      expect(e.message).toBe('Param error: [file] must be file path in Node.');
-    }
-
-    // getEntryFromHarmonyApp catches the error and logs to console, returning undefined
-    const originalError = console.error;
-    let consoleOutput = '';
-    console.error = (_msg: string, err: any) => {
-      consoleOutput += err.message;
-    };
-    const res = await zip.getEntryFromHarmonyApp(/any/);
-    console.error = originalError;
-
-    expect(res).toBeUndefined();
-    expect(consoleOutput).toBe(
-      'Param error: [file] must be file path in Node.',
+  test('rejects an unknown plist format', async () => {
+    await expect(parsePlist(Buffer.from('garbage'))).rejects.toThrow(
+      'Unknown plist buffer type.',
     );
   });
 });

@@ -50,6 +50,28 @@ function parsePositiveIntegerId(value: string): number {
   return id;
 }
 
+type UpdateInfo = Partial<Record<Platform, { appId: number; appKey: string }>>;
+
+/** The parsed config file, or undefined when it does not exist. */
+async function readUpdateInfo(
+  configPath: string,
+): Promise<UpdateInfo | undefined> {
+  let raw: string;
+  try {
+    raw = await fs.promises.readFile(configPath, 'utf8');
+  } catch (e: any) {
+    if (e.code === 'ENOENT') {
+      return undefined;
+    }
+    throw e;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(t('failedToParseUpdateJson', { configPath }));
+  }
+}
+
 /** Read the selected app for a platform from the requested config file. */
 export async function getSelectedApp(
   platform: Platform,
@@ -57,25 +79,8 @@ export async function getSelectedApp(
 ): Promise<{ appId: string; appKey: string; platform: Platform }> {
   assertPlatform(platform);
 
-  const resolvedConfigPath = configPath || updateJson;
-  let raw: string;
-  try {
-    raw = await fs.promises.readFile(resolvedConfigPath, 'utf8');
-  } catch (e: any) {
-    if (e.code === 'ENOENT') {
-      throw new AppNotSelectedError(platform);
-    }
-    throw e;
-  }
-  let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>>;
-  try {
-    updateInfo = JSON.parse(raw);
-  } catch {
-    throw new Error(
-      t('failedToParseUpdateJson', { configPath: resolvedConfigPath }),
-    );
-  }
-  const info = updateInfo[platform];
+  const updateInfo = await readUpdateInfo(configPath || updateJson);
+  const info = updateInfo?.[platform];
   if (!info) {
     throw new AppNotSelectedError(platform);
   }
@@ -183,9 +188,6 @@ async function selectApp({
   const id = args[0]
     ? parsePositiveIntegerId(args[0])
     : (await chooseApp(platform)).id;
-  if (!Number.isSafeInteger(id) || id <= 0) {
-    throw new Error(t('invalidId', { id: args[0] }));
-  }
   const app = await assertAppPlatform(String(id), platform);
   if (typeof app.appKey !== 'string' || !app.appKey) {
     throw new Error(t('appKeyMissing', { appId: id }));
@@ -193,16 +195,7 @@ async function selectApp({
   const appKey = app.appKey;
 
   const configPath = options.config || updateJson;
-  let updateInfo: Partial<Record<Platform, { appId: number; appKey: string }>> =
-    {};
-  try {
-    updateInfo = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
-  } catch (e: any) {
-    if (e.code !== 'ENOENT') {
-      console.error(t('failedToParseUpdateJson', { configPath }));
-      throw e;
-    }
-  }
+  const updateInfo = (await readUpdateInfo(configPath)) ?? {};
   updateInfo[platform] = {
     appId: id,
     appKey,
@@ -250,10 +243,6 @@ export function getAppCommands() {
       const id = args[0]
         ? parsePositiveIntegerId(args[0])
         : (await chooseApp(platform)).id;
-      if (!id) {
-        console.log(t('cancelled'));
-        return;
-      }
       await doDelete(`/app/${id}`);
       console.log(t('operationSuccess'));
     },

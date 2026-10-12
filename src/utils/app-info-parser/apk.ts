@@ -1,92 +1,47 @@
 import { ResourceFinder } from './resource-finder';
-import { findApkIconPath, getBase64FromBuffer, mapInfoResource } from './utils';
-import { ManifestParser } from './xml-parser/manifest';
-import { Zip } from './zip';
+import { parseBinaryXml, type XmlElement } from './xml-parser/binary';
 
-const ManifestName = /^androidmanifest\.xml$/;
-const ResourceName = /^resources\.arsc$/;
+export interface ApkManifestInfo {
+  versionName?: unknown;
+  /** `<application>`'s `<meta-data>` entries, resource references resolved */
+  metaData: Array<{ name?: unknown; value?: unknown }>;
+}
 
-export class ApkParser extends Zip {
-  parse(): Promise<any> {
-    const manifestKey = ManifestName.toString();
-    const resourceKey = ResourceName.toString();
-
-    return new Promise((resolve, reject) => {
-      this.getEntries([ManifestName, ResourceName])
-        .then((buffers: Record<string, Buffer | Blob | undefined>) => {
-          const manifestBuffer = buffers[manifestKey];
-          if (!manifestBuffer) {
-            throw new Error("AndroidManifest.xml can't be found.");
-          }
-          let apkInfo: any;
-          let resourceMap: any;
-
-          apkInfo = this._parseManifest(manifestBuffer as Buffer);
-
-          if (!buffers[resourceKey]) {
-            resolve(apkInfo);
-          } else {
-            resourceMap = this._parseResourceMap(
-              buffers[resourceKey] as Buffer,
-            );
-            apkInfo = mapInfoResource(apkInfo, resourceMap);
-
-            const iconPath = findApkIconPath(apkInfo);
-            if (iconPath) {
-              this.getEntry(iconPath)
-                .then((iconBuffer: Buffer | Blob | undefined) => {
-                  apkInfo.icon = Buffer.isBuffer(iconBuffer)
-                    ? getBase64FromBuffer(iconBuffer)
-                    : null;
-                  resolve(apkInfo);
-                })
-                .catch((e: any) => {
-                  apkInfo.icon = null;
-                  resolve(apkInfo);
-                  console.warn('[Warning] failed to parse icon: ', e);
-                });
-            } else {
-              apkInfo.icon = null;
-              resolve(apkInfo);
-            }
-          }
-        })
-        .catch((e: any) => {
-          reject(e);
-        });
-    });
+/**
+ * The fields of a binary AndroidManifest.xml the CLI reads, with
+ * `@<resource>` references resolved through resources.arsc when given.
+ */
+export function parseApkManifest(
+  manifest: Buffer,
+  resources?: Buffer,
+): ApkManifestInfo {
+  let root: XmlElement;
+  try {
+    root = parseBinaryXml(manifest);
+  } catch (e: any) {
+    throw new Error(`Parse AndroidManifest.xml error: ${e.message || e}`);
   }
-
-  /**
-   * Parse manifest
-   * @param {Buffer} buffer // manifest file's buffer
-   */
-  private _parseManifest(buffer: Buffer) {
+  let resourceMap: Record<string, unknown> = {};
+  if (resources) {
     try {
-      const parser = new ManifestParser(buffer, {
-        ignore: [
-          'application.activity',
-          'application.service',
-          'application.receiver',
-          'application.provider',
-          'permission-group',
-        ],
-      });
-      return parser.parse();
-    } catch (e: any) {
-      throw new Error(`Parse AndroidManifest.xml error: ${e.message || e}`);
-    }
-  }
-
-  /**
-   * Parse resourceMap
-   * @param {Buffer} buffer // resourceMap file's buffer
-   */
-  private _parseResourceMap(buffer: Buffer) {
-    try {
-      return new ResourceFinder().processResourceTable(buffer);
+      resourceMap = new ResourceFinder().processResourceTable(resources);
     } catch (e: any) {
       throw new Error(`Parser resources.arsc error: ${e}`);
     }
   }
+  const resolve = (value: unknown) =>
+    typeof value === 'string' && value.startsWith('resourceId:')
+      ? resourceMap[`@${value.replace('resourceId:0x', '').toUpperCase()}`]
+      : value;
+
+  const application = root.children.find((el) => el.name === 'application');
+  return {
+    versionName: resolve(root.attributes.versionName),
+    metaData: (application?.children ?? [])
+      .filter((el) => el.name === 'meta-data')
+      .map(({ attributes }) => ({
+        name: resolve(attributes.name),
+        value: resolve(attributes.value),
+      })),
+  };
 }
