@@ -418,10 +418,9 @@ export async function extractBundleFromArchive(
     );
   }
   if (ext === '.app') {
-    // harmony .app wraps .hap archives; reuse the existing parser
-    const { default: AppInfoParser } = await import('./app-info-parser');
-    const parser = new AppInfoParser(filePath);
-    const [bundle] = await parser.parser.getEntriesFromHarmonyApp([
+    // harmony .app wraps .hap archives; readZipEntries walks into them
+    const { readZipEntries } = await import('./app-info-parser/zip');
+    const [bundle] = await readZipEntries(filePath, [
       /^resources\/rawfile\/bundle\.harmony\.js$/,
     ]);
     return bundle ?? null;

@@ -5,211 +5,134 @@ import path from 'path';
 import { pathExists, remove } from '../fs-helpers';
 import { t } from '../i18n';
 import { extractFirstEntry } from '../zip-entries';
-import { ResourceFinder } from './resource-finder';
-import { mapInfoResource } from './utils';
-import { ManifestParser } from './xml-parser/manifest';
-import { Zip } from './zip';
 
-export class AabParser extends Zip {
-  async extractApk(
-    outputPath: string,
-    {
-      includeAllSplits,
-      splits,
-    }: { includeAllSplits?: boolean; splits?: string[] | null },
-  ) {
-    const normalizedSplits = Array.isArray(splits)
-      ? splits.map((item) => item.trim()).filter(Boolean)
-      : [];
-    const modules = includeAllSplits
-      ? null
-      : Array.from(new Set(['base', ...normalizedSplits]));
-    const modulesArgs = modules ? [`--modules=${modules.join(',')}`] : [];
+/** Build a universal APK from an .aab with bundletool (or npx node-bundletool). */
+export async function extractApk(
+  aabPath: string,
+  outputPath: string,
+  {
+    includeAllSplits,
+    splits,
+  }: { includeAllSplits?: boolean; splits?: string[] | null },
+) {
+  const bundlePath = path.resolve(aabPath);
+  const normalizedSplits = Array.isArray(splits)
+    ? splits.map((item) => item.trim()).filter(Boolean)
+    : [];
+  const modules = includeAllSplits
+    ? null
+    : Array.from(new Set(['base', ...normalizedSplits]));
+  const modulesArgs = modules ? [`--modules=${modules.join(',')}`] : [];
 
-    const runCommand = (
-      command: string,
-      args: string[],
-      options: { stdio?: 'inherit'; env?: NodeJS.ProcessEnv } = {},
-    ) =>
-      new Promise<void>((resolve, reject) => {
-        const inheritStdio = options.stdio === 'inherit';
-        const child = spawn(command, args, {
-          stdio: inheritStdio ? 'inherit' : ['ignore', 'pipe', 'pipe'],
-          env: options.env,
-        });
-        let stderr = '';
-        if (!inheritStdio) {
-          child.stderr?.on('data', (chunk) => {
-            stderr += chunk.toString();
-          });
-        }
-        child.on('error', reject);
-        child.on('close', (code) => {
-          if (code === 0) {
-            resolve();
-            return;
-          }
-          reject(
-            new Error(
-              stderr.trim() || `Command failed: ${command} (code ${code})`,
-            ),
-          );
-        });
+  const runCommand = (
+    command: string,
+    args: string[],
+    options: { stdio?: 'inherit'; env?: NodeJS.ProcessEnv } = {},
+  ) =>
+    new Promise<void>((resolve, reject) => {
+      const inheritStdio = options.stdio === 'inherit';
+      const child = spawn(command, args, {
+        stdio: inheritStdio ? 'inherit' : ['ignore', 'pipe', 'pipe'],
+        env: options.env,
       });
-
-    // Create a temp file for the .apks output
-    const tempDir = await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'bundletool-'),
-    );
-    const tempApksPath = path.join(tempDir, 'output.apks');
-
-    const needsNpxDownload = async () => {
-      try {
-        await runCommand('npx', [
-          '--no-install',
-          'node-bundletool',
-          '--version',
-        ]);
-        return false;
-      } catch {
-        return true;
+      let stderr = '';
+      if (!inheritStdio) {
+        child.stderr?.on('data', (chunk) => {
+          stderr += chunk.toString();
+        });
       }
-    };
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(
+          new Error(
+            stderr.trim() || `Command failed: ${command} (code ${code})`,
+          ),
+        );
+      });
+    });
+
+  // Create a temp file for the .apks output
+  const tempDir = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'bundletool-'),
+  );
+  const tempApksPath = path.join(tempDir, 'output.apks');
+
+  const needsNpxDownload = async () => {
+    try {
+      await runCommand('npx', ['--no-install', 'node-bundletool', '--version']);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  try {
+    // 1. Build APKS (universal mode)
+    // We assume bundletool is in the path.
+    // User might need keystore to sign it properly but for simple extraction we stick to default debug key if possible or unsigned?
+    // actually bundletool build-apks signs with debug key by default if no keystore provided.
 
     try {
-      // 1. Build APKS (universal mode)
-      // We assume bundletool is in the path.
-      // User might need keystore to sign it properly but for simple extraction we stick to default debug key if possible or unsigned?
-      // actually bundletool build-apks signs with debug key by default if no keystore provided.
-
-      try {
-        await runCommand('bundletool', [
+      await runCommand('bundletool', [
+        'build-apks',
+        '--mode=universal',
+        `--bundle=${bundlePath}`,
+        `--output=${tempApksPath}`,
+        '--overwrite',
+        ...modulesArgs,
+      ]);
+    } catch (e) {
+      // Only fall back when bundletool itself is missing from PATH (spawn
+      // ENOENT). Any other failure (corrupt AAB, Java issues, bad args,
+      // non-zero exit) must surface as-is instead of being masked by an
+      // online npx install.
+      if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        throw e;
+      }
+      // Fallback to npx node-bundletool if bundletool is not in PATH
+      // We use -y to avoid interactive prompt for installation
+      if (await needsNpxDownload()) {
+        console.log(t('aabBundletoolDownloadHint'));
+      }
+      await runCommand(
+        'npx',
+        [
+          '-y',
+          'node-bundletool',
           'build-apks',
           '--mode=universal',
-          `--bundle=${this.file}`,
+          `--bundle=${bundlePath}`,
           `--output=${tempApksPath}`,
           '--overwrite',
           ...modulesArgs,
-        ]);
-      } catch (e) {
-        // Only fall back when bundletool itself is missing from PATH (spawn
-        // ENOENT). Any other failure (corrupt AAB, Java issues, bad args,
-        // non-zero exit) must surface as-is instead of being masked by an
-        // online npx install.
-        if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-          throw e;
-        }
-        // Fallback to npx node-bundletool if bundletool is not in PATH
-        // We use -y to avoid interactive prompt for installation
-        if (await needsNpxDownload()) {
-          console.log(t('aabBundletoolDownloadHint'));
-        }
-        await runCommand(
-          'npx',
-          [
-            '-y',
-            'node-bundletool',
-            'build-apks',
-            '--mode=universal',
-            `--bundle=${this.file}`,
-            `--output=${tempApksPath}`,
-            '--overwrite',
-            ...modulesArgs,
-          ],
-          {
-            stdio: 'inherit',
-            env: {
-              ...process.env,
-              npm_config_progress: 'true',
-            },
-          },
-        );
-      }
-
-      // 2. Extract universal.apk from the .apks (zip) file
-      const found = await extractFirstEntry(
-        tempApksPath,
-        (name) => name === 'universal.apk',
-        outputPath,
-      );
-      if (!found) {
-        throw new Error(t('aabUniversalApkNotFound'));
-      }
-    } finally {
-      // Cleanup
-      if (await pathExists(tempDir)) {
-        await remove(tempDir);
-      }
-    }
-  }
-
-  /**
-   * 解析 AAB 文件信息（类似 APK parser 的 parse 方法）
-   * 注意：AAB 中的 AndroidManifest.xml 在 base/manifest/AndroidManifest.xml
-   */
-  async parse() {
-    const manifestPath = 'base/manifest/AndroidManifest.xml';
-    const ResourceName = /^base\/resources\.arsc$/;
-
-    try {
-      const manifestBuffer = await this.getEntry(
-        new RegExp(`^${escapeRegExp(manifestPath)}$`),
-      );
-
-      if (!manifestBuffer) {
-        throw new Error(t('aabManifestNotFound'));
-      }
-
-      let apkInfo = this._parseManifest(manifestBuffer as Buffer);
-
-      try {
-        const resourceBuffer = await this.getEntry(ResourceName);
-        if (resourceBuffer) {
-          const resourceMap = this._parseResourceMap(resourceBuffer as Buffer);
-          apkInfo = mapInfoResource(apkInfo, resourceMap);
-        }
-      } catch (e: any) {
-        console.warn(t('aabParseResourcesWarning', { error: e?.message ?? e }));
-      }
-
-      return apkInfo;
-    } catch (error: any) {
-      throw new Error(t('aabParseFailed', { error: error.message ?? error }));
-    }
-  }
-  /**
-   * Parse manifest
-   * @param {Buffer} buffer // manifest file's buffer
-   */
-  private _parseManifest(buffer: Buffer) {
-    try {
-      const parser = new ManifestParser(buffer, {
-        ignore: [
-          'application.activity',
-          'application.service',
-          'application.receiver',
-          'application.provider',
-          'permission-group',
         ],
-      });
-      return parser.parse();
-    } catch (e: any) {
-      throw new Error(t('aabParseManifestError', { error: e?.message ?? e }));
+        {
+          stdio: 'inherit',
+          env: {
+            ...process.env,
+            npm_config_progress: 'true',
+          },
+        },
+      );
     }
-  }
 
-  /**
-   * Parse resourceMap
-   * @param {Buffer} buffer // resourceMap file's buffer
-   */
-  private _parseResourceMap(buffer: Buffer) {
-    try {
-      return new ResourceFinder().processResourceTable(buffer);
-    } catch (e: any) {
-      throw new Error(t('aabParseResourcesError', { error: e?.message ?? e }));
+    // 2. Extract universal.apk from the .apks (zip) file
+    const found = await extractFirstEntry(
+      tempApksPath,
+      (name) => name === 'universal.apk',
+      outputPath,
+    );
+    if (!found) {
+      throw new Error(t('aabUniversalApkNotFound'));
+    }
+  } finally {
+    // Cleanup
+    if (await pathExists(tempDir)) {
+      await remove(tempDir);
     }
   }
 }
-
-const escapeRegExp = (value: string) =>
-  value.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');

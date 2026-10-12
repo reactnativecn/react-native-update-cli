@@ -52,6 +52,10 @@ class Reader {
     return this.buffer.readInt32LE(this.advance(4));
   }
 
+  skip(len: number) {
+    this.advance(len);
+  }
+
   /** The next `len` bytes as a new reader (a view, not a copy). */
   readBytes(len: number) {
     const at = this.advance(len);
@@ -64,32 +68,24 @@ function chunkAt(bb: Reader, pos: number, size: number) {
   return new Reader(bb.buffer.subarray(pos, pos + size));
 }
 
-const DEBUG = false;
-
 const RES_STRING_POOL_TYPE = 0x0001;
 const RES_TABLE_TYPE = 0x0002;
 const RES_TABLE_PACKAGE_TYPE = 0x0200;
 const RES_TABLE_TYPE_TYPE = 0x0201;
-const RES_TABLE_TYPE_SPEC_TYPE = 0x0202;
 
 const TYPE_REFERENCE = 0x01;
 const TYPE_STRING = 0x03;
 
+const FLAG_COMPLEX = 0x0001;
+
 export class ResourceFinder {
   private valueStringPool: string[] | null = null;
-  private typeStringPool: string[] | null = null;
-  private keyStringPool: string[] | null = null;
 
   private packageId = 0;
 
   private responseMap: Record<string, any[]> = {};
-  private entryMap: Record<number, string[]> = {};
 
-  /**
-   *
-   * @param {Reader} bb
-   * @return {Map<String, Set<String>>}
-   */
+  /** Map of `@<RESOURCE ID>` to the values of that resource. */
   processResourceTable(resourceBuffer: Buffer) {
     const bb = new Reader(resourceBuffer);
 
@@ -114,32 +110,22 @@ export class ResourceFinder {
     while (true) {
       let pos = 0;
       let t = 0;
-      let _hs = 0;
       let s = 0;
       try {
         pos = bb.offset;
         t = bb.readShort();
-        _hs = bb.readShort();
+        bb.readShort(); // header size
         s = bb.readInt();
       } catch (_e) {
         break;
       }
       if (t === RES_STRING_POOL_TYPE) {
         if (realStringPoolCount === 0) {
-          if (DEBUG) {
-            console.log('Processing the string pool ...');
-          }
-
           this.valueStringPool = this.processStringPool(chunkAt(bb, pos, s));
         }
         realStringPoolCount++;
       } else if (t === RES_TABLE_PACKAGE_TYPE) {
-        if (DEBUG) {
-          console.log(`Processing the package ${realPackageCount} ...`);
-        }
-
         this.processPackage(chunkAt(bb, pos, s));
-
         realPackageCount++;
       } else {
         throw new Error('Unsupported type');
@@ -158,32 +144,17 @@ export class ResourceFinder {
     return this.responseMap;
   }
 
-  /**
-   *
-   * @param {Reader} bb
-   */
   private processPackage(bb: Reader) {
-    const type = bb.readShort();
+    bb.readShort(); // type
     const headerSize = bb.readShort();
-    const size = bb.readInt();
-    const id = bb.readInt();
-
-    void type;
-    void size;
-
-    this.packageId = id;
-
-    for (let i = 0; i < 256; ++i) {
-      bb.readUint8();
-    }
+    bb.readInt(); // size
+    this.packageId = bb.readInt();
+    bb.skip(256); // package name
 
     const typeStrings = bb.readInt();
-    const lastPublicType = bb.readInt();
+    bb.readInt(); // last public type
     const keyStrings = bb.readInt();
-    const lastPublicKey = bb.readInt();
-
-    void lastPublicType;
-    void lastPublicKey;
+    bb.readInt(); // last public key
 
     if (typeStrings !== headerSize) {
       throw new Error(
@@ -191,62 +162,22 @@ export class ResourceFinder {
       );
     }
 
-    if (DEBUG) {
-      console.log('Type strings:');
-    }
-
-    let lastPosition = bb.offset;
-    bb.offset = typeStrings;
-    const bbTypeStrings = bb.readBytes(bb.limit - bb.offset);
-    bb.offset = lastPosition;
-    this.typeStringPool = this.processStringPool(bbTypeStrings);
-
-    if (DEBUG) {
-      console.log('Key strings:');
-    }
-
+    // the type and key string pools only name entries: skip both, and the
+    // type specs (only flags); types carry the values
     bb.offset = keyStrings;
-    const keyType = bb.readShort();
-    const keyHeaderSize = bb.readShort();
-    const keySize = bb.readInt();
-
-    void keyType;
-    void keyHeaderSize;
-
-    lastPosition = bb.offset;
-    bb.offset = keyStrings;
-    const bbKeyStrings = bb.readBytes(bb.limit - bb.offset);
-    bb.offset = lastPosition;
-    this.keyStringPool = this.processStringPool(bbKeyStrings);
-
-    let typeSpecCount = 0;
-    let typeCount = 0;
-
-    bb.offset = keyStrings + keySize;
-
-    let bb2: Reader;
-
+    bb.readShort(); // key pool type
+    bb.readShort(); // key pool header size
+    bb.offset = keyStrings + bb.readInt();
     while (true) {
       const pos = bb.offset;
       try {
         const t = bb.readShort();
-        const hs = bb.readShort();
+        bb.readShort(); // header size
         const s = bb.readInt();
 
-        void hs;
-
-        if (t === RES_TABLE_TYPE_SPEC_TYPE) {
+        if (t === RES_TABLE_TYPE_TYPE) {
           bb.offset = pos;
-          bb2 = bb.readBytes(s);
-          this.processTypeSpec(bb2);
-
-          typeSpecCount++;
-        } else if (t === RES_TABLE_TYPE_TYPE) {
-          bb.offset = pos;
-          bb2 = bb.readBytes(s);
-          this.processType(bb2);
-
-          typeCount++;
+          this.processType(bb.readBytes(s));
         }
 
         if (s === 0) {
@@ -262,35 +193,18 @@ export class ResourceFinder {
         break;
       }
     }
-
-    void typeSpecCount;
-    void typeCount;
   }
 
-  /**
-   *
-   * @param {Reader} bb
-   */
   private processType(bb: Reader) {
-    const type = bb.readShort();
+    bb.readShort(); // type
     const headerSize = bb.readShort();
-    const size = bb.readInt();
+    bb.readInt(); // size
     const id = bb.readByte();
-    const res0 = bb.readByte();
-    const res1 = bb.readShort();
+    bb.skip(3); // res0, res1
     const entryCount = bb.readInt();
     const entriesStart = bb.readInt();
 
-    void type;
-    void size;
-    void res0;
-    void res1;
-
     const refKeys: Record<string, number> = {};
-
-    const configSize = bb.readInt();
-
-    void configSize;
 
     bb.offset = headerSize;
 
@@ -308,86 +222,38 @@ export class ResourceFinder {
 
       const resourceId = (this.packageId << 24) | (id << 16) | i;
 
-      let entrySize = 0;
       let entryFlag = 0;
-      let entryKey = 0;
       try {
-        entrySize = bb.readShort();
+        bb.readShort(); // entry size
         entryFlag = bb.readShort();
-        entryKey = bb.readInt();
+        bb.readInt(); // key
       } catch (_e) {
         break;
       }
 
-      void entrySize;
-
-      const FLAG_COMPLEX = 0x0001;
       if ((entryFlag & FLAG_COMPLEX) === 0) {
-        const valueSize = bb.readShort();
-        const valueRes0 = bb.readByte();
-        const valueDataType = bb.readByte();
+        bb.readShort(); // value size
+        bb.readUint8(); // res0
+        const valueDataType = bb.readUint8();
         const valueData = bb.readInt();
 
-        void valueSize;
-        void valueRes0;
-
         const idStr = Number(resourceId).toString(16);
-        const keyStr = this.keyStringPool ? this.keyStringPool[entryKey] : '';
 
         let data: string | null = null;
-
-        if (DEBUG) {
-          console.log(`Entry 0x${idStr}, key: ${keyStr}, simple value type: `);
-        }
-
-        const key = Number.parseInt(idStr, 16);
-
-        const entryArr = this.entryMap[key] ?? [];
-        entryArr.push(keyStr);
-        this.entryMap[key] = entryArr;
-
         if (valueDataType === TYPE_STRING) {
           data = this.valueStringPool ? this.valueStringPool[valueData] : null;
-
-          if (DEBUG && this.valueStringPool) {
-            console.log(`, data: ${this.valueStringPool[valueData]}`);
-          }
         } else if (valueDataType === TYPE_REFERENCE) {
           refKeys[idStr] = valueData;
         } else {
           data = `${valueData}`;
-          if (DEBUG) {
-            console.log(`, data: ${valueData}`);
-          }
         }
 
         this.putIntoMap(`@${idStr}`, data);
       } else {
-        const entryParent = bb.readInt();
-        const entryCountValue = bb.readInt();
-
-        void entryParent;
-
-        for (let j = 0; j < entryCountValue; ++j) {
-          const refName = bb.readInt();
-          const valueSize = bb.readShort();
-          const valueRes0 = bb.readByte();
-          const valueDataType = bb.readByte();
-          const valueData = bb.readInt();
-
-          void refName;
-          void valueSize;
-          void valueRes0;
-          void valueDataType;
-          void valueData;
-        }
-
-        if (DEBUG) {
-          const keyStr = this.keyStringPool ? this.keyStringPool[entryKey] : '';
-          console.log(
-            `Entry 0x${Number(resourceId).toString(16)}, key: ${keyStr}, complex value, not printed.`,
-          );
-        }
+        bb.readInt(); // parent
+        const valueCount = bb.readInt();
+        // name (4) + Res_value (8) per value; maps are not resolved
+        bb.skip(valueCount * 12);
       }
     }
 
@@ -404,26 +270,15 @@ export class ResourceFinder {
     }
   }
 
-  /**
-   *
-   * @param {Reader} bb
-   * @return {Array}
-   */
   private processStringPool(bb: Reader) {
-    const type = bb.readShort();
-    const headerSize = bb.readShort();
-    const size = bb.readInt();
+    bb.readShort(); // type
+    bb.readShort(); // header size
+    bb.readInt(); // size
     const stringCount = bb.readInt();
-    const styleCount = bb.readInt();
+    bb.readInt(); // style count
     const flags = bb.readInt();
     const stringsStart = bb.readInt();
-    const stylesStart = bb.readInt();
-
-    void type;
-    void headerSize;
-    void size;
-    void styleCount;
-    void stylesStart;
+    bb.readInt(); // styles start
 
     const isUtf8 = (flags & 256) !== 0;
 
@@ -435,75 +290,33 @@ export class ResourceFinder {
     const strings = new Array<string>(stringCount);
 
     for (let i = 0; i < stringCount; ++i) {
-      const pos = stringsStart + offsets[i];
-      bb.offset = pos;
-
+      bb.offset = stringsStart + offsets[i];
       strings[i] = '';
 
       if (isUtf8) {
-        let u16len = bb.readUint8();
-
-        if ((u16len & 0x80) !== 0) {
-          u16len = ((u16len & 0x7f) << 8) + bb.readUint8();
+        // UTF-16 length, then UTF-8 byte length; each 1 or 2 bytes
+        if ((bb.readUint8() & 0x80) !== 0) {
+          bb.readUint8();
         }
-
         let u8len = bb.readUint8();
         if ((u8len & 0x80) !== 0) {
           u8len = ((u8len & 0x7f) << 8) + bb.readUint8();
         }
-
         if (u8len > 0) {
           strings[i] = bb.readBytes(u8len).buffer.toString('utf8');
-        } else {
-          strings[i] = '';
         }
       } else {
         let u16len = bb.readUint16();
         if ((u16len & 0x8000) !== 0) {
           u16len = ((u16len & 0x7fff) << 16) + bb.readUint16();
         }
-
         if (u16len > 0) {
           strings[i] = bb.readBytes(u16len * 2).buffer.toString('utf16le');
         }
       }
-
-      if (DEBUG) {
-        console.log('Parsed value: {0}', strings[i]);
-      }
     }
 
     return strings;
-  }
-
-  /**
-   *
-   * @param {Reader} bb
-   */
-  private processTypeSpec(bb: Reader) {
-    const type = bb.readShort();
-    const headerSize = bb.readShort();
-    const size = bb.readInt();
-    const id = bb.readByte();
-    const res0 = bb.readByte();
-    const res1 = bb.readShort();
-    const entryCount = bb.readInt();
-
-    void type;
-    void headerSize;
-    void size;
-    void res0;
-    void res1;
-
-    if (DEBUG && this.typeStringPool) {
-      console.log(`Processing type spec ${this.typeStringPool[id - 1]}...`);
-    }
-
-    const flags = new Array<number>(entryCount);
-
-    for (let i = 0; i < entryCount; ++i) {
-      flags[i] = bb.readInt();
-    }
   }
 
   private putIntoMap(resId: string, value: any) {

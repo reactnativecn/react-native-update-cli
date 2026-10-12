@@ -1,693 +1,179 @@
-// From https://github.com/openstf/adbkit-apkreader
-const NodeType = {
-  ELEMENT_NODE: 1,
-  ATTRIBUTE_NODE: 2,
-  CDATA_SECTION_NODE: 4,
-};
+// Binary (AAPT) XML reader, trimmed from
+// https://github.com/openstf/adbkit-apkreader to the element tree and the
+// attribute value types an AndroidManifest.xml needs.
 
-const ChunkType = {
-  NULL: 0x0000,
-  STRING_POOL: 0x0001,
-  TABLE: 0x0002,
-  XML: 0x0003,
-  XML_FIRST_CHUNK: 0x0100,
-  XML_START_NAMESPACE: 0x0100,
-  XML_END_NAMESPACE: 0x0101,
-  XML_START_ELEMENT: 0x0102,
-  XML_END_ELEMENT: 0x0103,
-  XML_CDATA: 0x0104,
-  XML_LAST_CHUNK: 0x017f,
-  XML_RESOURCE_MAP: 0x0180,
-  TABLE_PACKAGE: 0x0200,
-  TABLE_TYPE: 0x0201,
-  TABLE_TYPE_SPEC: 0x0202,
-};
+const CHUNK_STRING_POOL = 0x0001;
+const CHUNK_XML = 0x0003;
+const CHUNK_XML_START_ELEMENT = 0x0102;
+const CHUNK_XML_END_ELEMENT = 0x0103;
+const STRING_POOL_UTF8 = 1 << 8;
 
-const StringFlags = {
-  SORTED: 1 << 0,
-  UTF8: 1 << 8,
-};
+// android.util.TypedValue
+const TYPE_NULL = 0x00;
+const TYPE_REFERENCE = 0x01;
+const TYPE_STRING = 0x03;
+const TYPE_INT_DEC = 0x10;
+const TYPE_INT_HEX = 0x11;
+const TYPE_INT_BOOLEAN = 0x12;
 
-// Taken from android.util.TypedValue
-const TypedValue = {
-  COMPLEX_MANTISSA_MASK: 0x00ffffff,
-  COMPLEX_MANTISSA_SHIFT: 0x00000008,
-  COMPLEX_RADIX_0p23: 0x00000003,
-  COMPLEX_RADIX_16p7: 0x00000001,
-  COMPLEX_RADIX_23p0: 0x00000000,
-  COMPLEX_RADIX_8p15: 0x00000002,
-  COMPLEX_RADIX_MASK: 0x00000003,
-  COMPLEX_RADIX_SHIFT: 0x00000004,
-  COMPLEX_UNIT_DIP: 0x00000001,
-  COMPLEX_UNIT_FRACTION: 0x00000000,
-  COMPLEX_UNIT_FRACTION_PARENT: 0x00000001,
-  COMPLEX_UNIT_IN: 0x00000004,
-  COMPLEX_UNIT_MASK: 0x0000000f,
-  COMPLEX_UNIT_MM: 0x00000005,
-  COMPLEX_UNIT_PT: 0x00000003,
-  COMPLEX_UNIT_PX: 0x00000000,
-  COMPLEX_UNIT_SHIFT: 0x00000000,
-  COMPLEX_UNIT_SP: 0x00000002,
-  DENSITY_DEFAULT: 0x00000000,
-  DENSITY_NONE: 0x0000ffff,
-  TYPE_ATTRIBUTE: 0x00000002,
-  TYPE_DIMENSION: 0x00000005,
-  TYPE_FIRST_COLOR_INT: 0x0000001c,
-  TYPE_FIRST_INT: 0x00000010,
-  TYPE_FLOAT: 0x00000004,
-  TYPE_FRACTION: 0x00000006,
-  TYPE_INT_BOOLEAN: 0x00000012,
-  TYPE_INT_COLOR_ARGB4: 0x0000001e,
-  TYPE_INT_COLOR_ARGB8: 0x0000001c,
-  TYPE_INT_COLOR_RGB4: 0x0000001f,
-  TYPE_INT_COLOR_RGB8: 0x0000001d,
-  TYPE_INT_DEC: 0x00000010,
-  TYPE_INT_HEX: 0x00000011,
-  TYPE_LAST_COLOR_INT: 0x0000001f,
-  TYPE_LAST_INT: 0x0000001f,
-  TYPE_NULL: 0x00000000,
-  TYPE_REFERENCE: 0x00000001,
-  TYPE_STRING: 0x00000003,
-};
+export interface XmlElement {
+  name: string;
+  /** typed attribute values; references read as `resourceId:0x<id>` */
+  attributes: Record<string, unknown>;
+  children: XmlElement[];
+}
 
-type BinaryXmlParserOptions = {
-  debug?: boolean;
-};
+export function parseBinaryXml(buffer: Buffer): XmlElement {
+  let cursor = 0;
+  const strings: string[] = [];
 
-export class BinaryXmlParser {
-  buffer: Buffer;
-  cursor = 0;
-  strings: string[] = [];
-  resources: number[] = [];
-  document: any = null;
-  parent: any = null;
-  stack: any[] = [];
-  debug: boolean;
+  const u8 = () => buffer[cursor++];
+  const u16 = () => {
+    const value = buffer.readUInt16LE(cursor);
+    cursor += 2;
+    return value;
+  };
+  const u32 = () => {
+    const value = buffer.readUInt32LE(cursor);
+    cursor += 4;
+    return value;
+  };
+  const s32 = () => {
+    const value = buffer.readInt32LE(cursor);
+    cursor += 4;
+    return value;
+  };
 
-  constructor(buffer: Buffer, options: BinaryXmlParserOptions = {}) {
-    this.buffer = buffer;
-    this.cursor = 0;
-    this.strings = [];
-    this.resources = [];
-    this.document = null;
-    this.parent = null;
-    this.stack = [];
-    this.debug = options.debug || false;
-  }
-
-  readU8() {
-    this.debug && console.group('readU8');
-    this.debug && console.debug('cursor:', this.cursor);
-    const val = this.buffer[this.cursor];
-    this.debug && console.debug('value:', val);
-    this.cursor += 1;
-    this.debug && console.groupEnd();
-    return val;
-  }
-
-  readU16() {
-    this.debug && console.group('readU16');
-    this.debug && console.debug('cursor:', this.cursor);
-    const val = this.buffer.readUInt16LE(this.cursor);
-    this.debug && console.debug('value:', val);
-    this.cursor += 2;
-    this.debug && console.groupEnd();
-    return val;
-  }
-
-  readS32() {
-    this.debug && console.group('readS32');
-    this.debug && console.debug('cursor:', this.cursor);
-    const val = this.buffer.readInt32LE(this.cursor);
-    this.debug && console.debug('value:', val);
-    this.cursor += 4;
-    this.debug && console.groupEnd();
-    return val;
-  }
-
-  readU32() {
-    this.debug && console.group('readU32');
-    this.debug && console.debug('cursor:', this.cursor);
-    const val = this.buffer.readUInt32LE(this.cursor);
-    this.debug && console.debug('value:', val);
-    this.cursor += 4;
-    this.debug && console.groupEnd();
-    return val;
-  }
-
-  readLength8() {
-    this.debug && console.group('readLength8');
-    let len = this.readU8();
-    if (len & 0x80) {
-      len = (len & 0x7f) << 8;
-      len += this.readU8();
-    }
-    this.debug && console.debug('length:', len);
-    this.debug && console.groupEnd();
-    return len;
-  }
-
-  readLength16() {
-    this.debug && console.group('readLength16');
-    let len = this.readU16();
-    if (len & 0x8000) {
-      len = (len & 0x7fff) << 16;
-      len += this.readU16();
-    }
-    this.debug && console.debug('length:', len);
-    this.debug && console.groupEnd();
-    return len;
-  }
-
-  readDimension() {
-    this.debug && console.group('readDimension');
-
-    const dimension: {
-      value: number | null;
-      unit: string | null;
-      rawUnit: number | null;
-    } = {
-      value: null,
-      unit: null,
-      rawUnit: null,
-    };
-
-    const value = this.readU32();
-    const unit = value & 0xff;
-
-    dimension.value = value >> 8;
-    dimension.rawUnit = unit;
-
-    switch (unit) {
-      case TypedValue.COMPLEX_UNIT_MM:
-        dimension.unit = 'mm';
-        break;
-      case TypedValue.COMPLEX_UNIT_PX:
-        dimension.unit = 'px';
-        break;
-      case TypedValue.COMPLEX_UNIT_DIP:
-        dimension.unit = 'dp';
-        break;
-      case TypedValue.COMPLEX_UNIT_SP:
-        dimension.unit = 'sp';
-        break;
-      case TypedValue.COMPLEX_UNIT_PT:
-        dimension.unit = 'pt';
-        break;
-      case TypedValue.COMPLEX_UNIT_IN:
-        dimension.unit = 'in';
-        break;
-    }
-
-    this.debug && console.groupEnd();
-
-    return dimension;
-  }
-
-  readFraction() {
-    this.debug && console.group('readFraction');
-
-    const fraction: {
-      value: number | null;
-      type: string | null;
-      rawType: number | null;
-    } = {
-      value: null,
-      type: null,
-      rawType: null,
-    };
-
-    const value = this.readU32();
-    const type = value & 0xf;
-
-    fraction.value = this.convertIntToFloat(value >> 4);
-    fraction.rawType = type;
-
-    switch (type) {
-      case TypedValue.COMPLEX_UNIT_FRACTION:
-        fraction.type = '%';
-        break;
-      case TypedValue.COMPLEX_UNIT_FRACTION_PARENT:
-        fraction.type = '%p';
-        break;
-    }
-
-    this.debug && console.groupEnd();
-
-    return fraction;
-  }
-
-  readHex24() {
-    this.debug && console.group('readHex24');
-    const val = (this.readU32() & 0xffffff).toString(16);
-    this.debug && console.groupEnd();
-    return val;
-  }
-
-  readHex32() {
-    this.debug && console.group('readHex32');
-    const val = this.readU32().toString(16);
-    this.debug && console.groupEnd();
-    return val;
-  }
-
-  readTypedValue() {
-    this.debug && console.group('readTypedValue');
-
-    const typedValue: {
-      value: any;
-      type: string | null;
-      rawType: number | null;
-    } = {
-      value: null,
-      type: null,
-      rawType: null,
-    };
-
-    const start = this.cursor;
-
-    let size = this.readU16();
-    /* const zero = */ this.readU8();
-    const dataType = this.readU8();
-
-    if (size === 0) {
-      size = 8;
-    }
-
-    typedValue.rawType = dataType;
-
-    switch (dataType) {
-      case TypedValue.TYPE_INT_DEC:
-        typedValue.value = this.readS32();
-        typedValue.type = 'int_dec';
-        break;
-      case TypedValue.TYPE_INT_HEX:
-        typedValue.value = this.readS32();
-        typedValue.type = 'int_hex';
-        break;
-      case TypedValue.TYPE_STRING: {
-        const ref = this.readS32();
-        typedValue.value = ref > 0 ? this.strings[ref] : '';
-        typedValue.type = 'string';
-        break;
+  const readString = (utf8: boolean) => {
+    let byteLength: number;
+    if (utf8) {
+      // character count, then byte count; each 1 or 2 bytes
+      if (u8() & 0x80) u8();
+      byteLength = u8();
+      if (byteLength & 0x80) {
+        byteLength = ((byteLength & 0x7f) << 8) + u8();
       }
-      case TypedValue.TYPE_REFERENCE: {
-        const id = this.readU32();
-        typedValue.value = `resourceId:0x${id.toString(16)}`;
-        typedValue.type = 'reference';
-        break;
-      }
-      case TypedValue.TYPE_INT_BOOLEAN:
-        typedValue.value = this.readS32() !== 0;
-        typedValue.type = 'boolean';
-        break;
-      case TypedValue.TYPE_NULL:
-        this.readU32();
-        typedValue.value = null;
-        typedValue.type = 'null';
-        break;
-      case TypedValue.TYPE_INT_COLOR_RGB8:
-        typedValue.value = this.readHex24();
-        typedValue.type = 'rgb8';
-        break;
-      case TypedValue.TYPE_INT_COLOR_RGB4:
-        typedValue.value = this.readHex24();
-        typedValue.type = 'rgb4';
-        break;
-      case TypedValue.TYPE_INT_COLOR_ARGB8:
-        typedValue.value = this.readHex32();
-        typedValue.type = 'argb8';
-        break;
-      case TypedValue.TYPE_INT_COLOR_ARGB4:
-        typedValue.value = this.readHex32();
-        typedValue.type = 'argb4';
-        break;
-      case TypedValue.TYPE_DIMENSION:
-        typedValue.value = this.readDimension();
-        typedValue.type = 'dimension';
-        break;
-      case TypedValue.TYPE_FRACTION:
-        typedValue.value = this.readFraction();
-        typedValue.type = 'fraction';
-        break;
-      default: {
-        const type = dataType.toString(16);
-        console.debug(
-          `Not sure what to do with typed value of type 0x${type}, falling back to reading an uint32.`,
-        );
-        typedValue.value = this.readU32();
-        typedValue.type = 'unknown';
-      }
-    }
-
-    const end = start + size;
-    if (this.cursor !== end) {
-      const type = dataType.toString(16);
-      const diff = end - this.cursor;
-      console.debug(`Cursor is off by ${diff} bytes at ${this.cursor} at supposed end \
-of typed value of type 0x${type}. The typed value started at offset ${start} \
-and is supposed to end at offset ${end}. Ignoring the rest of the value.`);
-      this.cursor = end;
-    }
-
-    this.debug && console.groupEnd();
-
-    return typedValue;
-  }
-
-  // https://twitter.com/kawasima/status/427730289201139712
-  convertIntToFloat(int: number) {
-    const buf = new ArrayBuffer(4);
-    new Int32Array(buf)[0] = int;
-    return new Float32Array(buf)[0];
-  }
-
-  readString(encoding: string) {
-    this.debug && console.group('readString', encoding);
-    switch (encoding) {
-      case 'utf-8': {
-        const stringLength = this.readLength8();
-        this.debug && console.debug('stringLength:', stringLength);
-        const byteLength = this.readLength8();
-        this.debug && console.debug('byteLength:', byteLength);
-        const value = this.buffer.toString(
-          encoding,
-          this.cursor,
-          (this.cursor += byteLength),
-        );
-        this.debug && console.debug('value:', value);
-        this.debug && console.groupEnd();
-        return value;
-      }
-      case 'ucs2': {
-        const stringLength = this.readLength16();
-        this.debug && console.debug('stringLength:', stringLength);
-        const byteLength = stringLength * 2;
-        this.debug && console.debug('byteLength:', byteLength);
-        const value = this.buffer.toString(
-          encoding,
-          this.cursor,
-          (this.cursor += byteLength),
-        );
-        this.debug && console.debug('value:', value);
-        this.debug && console.groupEnd();
-        return value;
-      }
-      default:
-        throw new Error(`Unsupported encoding '${encoding}'`);
-    }
-  }
-
-  readChunkHeader() {
-    this.debug && console.group('readChunkHeader');
-    const header = {
-      startOffset: this.cursor,
-      chunkType: this.readU16(),
-      headerSize: this.readU16(),
-      chunkSize: this.readU32(),
-    };
-    this.debug && console.debug('startOffset:', header.startOffset);
-    this.debug && console.debug('chunkType:', header.chunkType);
-    this.debug && console.debug('headerSize:', header.headerSize);
-    this.debug && console.debug('chunkSize:', header.chunkSize);
-    this.debug && console.groupEnd();
-    return header;
-  }
-
-  readStringPool(header: any) {
-    this.debug && console.group('readStringPool');
-
-    header.stringCount = this.readU32();
-    this.debug && console.debug('stringCount:', header.stringCount);
-    header.styleCount = this.readU32();
-    this.debug && console.debug('styleCount:', header.styleCount);
-    header.flags = this.readU32();
-    this.debug && console.debug('flags:', header.flags);
-    header.stringsStart = this.readU32();
-    this.debug && console.debug('stringsStart:', header.stringsStart);
-    header.stylesStart = this.readU32();
-    this.debug && console.debug('stylesStart:', header.stylesStart);
-
-    if (header.chunkType !== ChunkType.STRING_POOL) {
-      throw new Error('Invalid string pool header');
-    }
-
-    const offsets: number[] = [];
-    for (let i = 0, l = header.stringCount; i < l; ++i) {
-      this.debug && console.debug('offset:', i);
-      offsets.push(this.readU32());
-    }
-
-    const sorted = (header.flags & StringFlags.SORTED) === StringFlags.SORTED;
-    this.debug && console.debug('sorted:', sorted);
-    const encoding =
-      (header.flags & StringFlags.UTF8) === StringFlags.UTF8 ? 'utf-8' : 'ucs2';
-    this.debug && console.debug('encoding:', encoding);
-
-    const stringsStart = header.startOffset + header.stringsStart;
-    this.cursor = stringsStart;
-    for (let i = 0, l = header.stringCount; i < l; ++i) {
-      this.debug && console.debug('string:', i);
-      this.debug && console.debug('offset:', offsets[i]);
-      this.cursor = stringsStart + offsets[i];
-      this.strings.push(this.readString(encoding));
-    }
-
-    this.cursor = header.startOffset + header.chunkSize;
-
-    this.debug && console.groupEnd();
-
-    return null;
-  }
-
-  readResourceMap(header: any) {
-    this.debug && console.group('readResourceMap');
-    const count = Math.floor((header.chunkSize - header.headerSize) / 4);
-    for (let i = 0; i < count; ++i) {
-      this.resources.push(this.readU32());
-    }
-    this.debug && console.groupEnd();
-    return null;
-  }
-
-  readXmlNamespaceStart() {
-    this.debug && console.group('readXmlNamespaceStart');
-
-    /* const line = */ this.readU32();
-    /* const commentRef = */ this.readU32();
-    /* const prefixRef = */ this.readS32();
-    /* const uriRef = */ this.readS32();
-
-    this.debug && console.groupEnd();
-
-    return null;
-  }
-
-  readXmlNamespaceEnd() {
-    this.debug && console.group('readXmlNamespaceEnd');
-
-    /* const line = */ this.readU32();
-    /* const commentRef = */ this.readU32();
-    /* const prefixRef = */ this.readS32();
-    /* const uriRef = */ this.readS32();
-
-    this.debug && console.groupEnd();
-
-    return null;
-  }
-
-  readXmlElementStart() {
-    this.debug && console.group('readXmlElementStart');
-
-    const node: any = {
-      namespaceURI: null,
-      nodeType: NodeType.ELEMENT_NODE,
-      nodeName: null,
-      attributes: [],
-      childNodes: [],
-    };
-
-    /* const line = */ this.readU32();
-    /* const commentRef = */ this.readU32();
-    const nsRef = this.readS32();
-    const nameRef = this.readS32();
-
-    if (nsRef > 0) {
-      node.namespaceURI = this.strings[nsRef];
-    }
-
-    node.nodeName = this.strings[nameRef];
-
-    /* const attrStart = */ this.readU16();
-    /* const attrSize = */ this.readU16();
-    const attrCount = this.readU16();
-    /* const idIndex = */ this.readU16();
-    /* const classIndex = */ this.readU16();
-    /* const styleIndex = */ this.readU16();
-
-    for (let i = 0; i < attrCount; ++i) {
-      node.attributes.push(this.readXmlAttribute());
-    }
-
-    if (this.document) {
-      this.parent.childNodes.push(node);
-      this.parent = node;
     } else {
-      this.document = this.parent = node;
+      byteLength = u16();
+      if (byteLength & 0x8000) {
+        byteLength = ((byteLength & 0x7fff) << 16) + u16();
+      }
+      byteLength *= 2;
     }
+    const start = cursor;
+    cursor += byteLength;
+    return buffer.toString(utf8 ? 'utf-8' : 'ucs2', start, cursor);
+  };
 
-    this.stack.push(node);
+  const readStringPool = (chunkStart: number) => {
+    const count = u32();
+    u32(); // style count
+    const flags = u32();
+    const stringsStart = chunkStart + u32();
+    u32(); // styles start
+    const offsets: number[] = [];
+    for (let i = 0; i < count; i++) {
+      offsets.push(u32());
+    }
+    for (const offset of offsets) {
+      cursor = stringsStart + offset;
+      strings.push(readString((flags & STRING_POOL_UTF8) !== 0));
+    }
+  };
 
-    this.debug && console.groupEnd();
+  const readTypedValue = (): unknown => {
+    const start = cursor;
+    const size = u16() || 8;
+    u8(); // res0
+    const type = u8();
+    const data = start + 4;
+    cursor = start + size;
+    switch (type) {
+      case TYPE_INT_DEC:
+      case TYPE_INT_HEX:
+        return buffer.readInt32LE(data);
+      case TYPE_STRING: {
+        const ref = buffer.readInt32LE(data);
+        return ref > 0 ? strings[ref] : '';
+      }
+      case TYPE_REFERENCE:
+        return `resourceId:0x${buffer.readUInt32LE(data).toString(16)}`;
+      case TYPE_INT_BOOLEAN:
+        return buffer.readInt32LE(data) !== 0;
+      case TYPE_NULL:
+        return null;
+      default:
+        // floats, dimensions, colors...: not needed, keep the raw bits
+        return buffer.readUInt32LE(data);
+    }
+  };
 
-    return node;
-  }
-
-  readXmlAttribute() {
-    this.debug && console.group('readXmlAttribute');
-
-    const attr: any = {
-      namespaceURI: null,
-      nodeType: NodeType.ATTRIBUTE_NODE,
-      nodeName: null,
-      name: null,
-      value: null,
-      typedValue: null,
+  const readElement = (): XmlElement => {
+    u32(); // line
+    u32(); // comment
+    s32(); // namespace
+    const element: XmlElement = {
+      name: strings[s32()],
+      attributes: Object.create(null),
+      children: [],
     };
-
-    const nsRef = this.readS32();
-    const nameRef = this.readS32();
-    const valueRef = this.readS32();
-
-    if (nsRef > 0) {
-      attr.namespaceURI = this.strings[nsRef];
-    }
-
-    attr.nodeName = attr.name = this.strings[nameRef];
-
-    if (valueRef > 0) {
-      if (attr.name === 'versionName') {
+    u16(); // attribute start
+    u16(); // attribute size
+    const attributeCount = u16();
+    cursor += 6; // id, class and style indexes
+    for (let i = 0; i < attributeCount; i++) {
+      s32(); // namespace
+      const name = strings[s32()];
+      s32(); // raw value
+      let value = readTypedValue();
+      if (name === 'versionName' && typeof value === 'string') {
         // strip UTF-16 null padding only; keep spaces and non-ASCII chars
         // biome-ignore lint/suspicious/noControlCharactersInRegex: removing NUL padding is the point
-        this.strings[valueRef] = this.strings[valueRef].replace(/\u0000/g, '');
+        value = value.replace(/\u0000/g, '');
       }
-      attr.value = this.strings[valueRef];
+      element.attributes[name] = value;
     }
+    return element;
+  };
 
-    attr.typedValue = this.readTypedValue();
-
-    this.debug && console.groupEnd();
-
-    return attr;
+  if (u16() !== CHUNK_XML) {
+    throw new Error('Invalid XML header');
   }
+  cursor = 8; // past the XML chunk header
 
-  readXmlElementEnd() {
-    this.debug && console.group('readXmlCData');
-
-    /* const line = */ this.readU32();
-    /* const commentRef = */ this.readU32();
-    /* const nsRef = */ this.readS32();
-    /* const nameRef = */ this.readS32();
-
-    this.stack.pop();
-    this.parent = this.stack[this.stack.length - 1];
-
-    this.debug && console.groupEnd();
-
-    return null;
-  }
-
-  readXmlCData() {
-    this.debug && console.group('readXmlCData');
-
-    const cdata: any = {
-      namespaceURI: null,
-      nodeType: NodeType.CDATA_SECTION_NODE,
-      nodeName: '#cdata',
-      data: null,
-      typedValue: null,
-    };
-
-    /* const line = */ this.readU32();
-    /* const commentRef = */ this.readU32();
-    const dataRef = this.readS32();
-
-    if (dataRef > 0) {
-      cdata.data = this.strings[dataRef];
+  let root: XmlElement | undefined;
+  const stack: XmlElement[] = [];
+  while (cursor < buffer.length) {
+    const start = cursor;
+    const type = u16();
+    u16(); // header size
+    const size = u32();
+    if (size < 8) {
+      throw new Error(`Invalid chunk size ${size} at offset ${start}`);
     }
-
-    cdata.typedValue = this.readTypedValue();
-
-    this.parent.childNodes.push(cdata);
-
-    this.debug && console.groupEnd();
-
-    return cdata;
-  }
-
-  readNull(header: any) {
-    this.debug && console.group('readNull');
-    this.cursor += header.chunkSize - header.headerSize;
-    this.debug && console.groupEnd();
-    return null;
-  }
-
-  parse() {
-    this.debug && console.group('BinaryXmlParser.parse');
-
-    const xmlHeader = this.readChunkHeader();
-    if (xmlHeader.chunkType !== ChunkType.XML) {
-      throw new Error('Invalid XML header');
-    }
-
-    while (this.cursor < this.buffer.length) {
-      this.debug && console.group('chunk');
-      const start = this.cursor;
-      const header = this.readChunkHeader();
-      switch (header.chunkType) {
-        case ChunkType.STRING_POOL:
-          this.readStringPool(header);
-          break;
-        case ChunkType.XML_RESOURCE_MAP:
-          this.readResourceMap(header);
-          break;
-        case ChunkType.XML_START_NAMESPACE:
-          this.readXmlNamespaceStart();
-          break;
-        case ChunkType.XML_END_NAMESPACE:
-          this.readXmlNamespaceEnd();
-          break;
-        case ChunkType.XML_START_ELEMENT:
-          this.readXmlElementStart();
-          break;
-        case ChunkType.XML_END_ELEMENT:
-          this.readXmlElementEnd();
-          break;
-        case ChunkType.XML_CDATA:
-          this.readXmlCData();
-          break;
-        case ChunkType.NULL:
-          this.readNull(header);
-          break;
-        default:
-          throw new Error(`Unsupported chunk type '${header.chunkType}'`);
+    switch (type) {
+      case CHUNK_STRING_POOL:
+        readStringPool(start);
+        break;
+      case CHUNK_XML_START_ELEMENT: {
+        const element = readElement();
+        if (stack.length) {
+          stack[stack.length - 1].children.push(element);
+        } else {
+          root ??= element;
+        }
+        stack.push(element);
+        break;
       }
-
-      const end = start + header.chunkSize;
-      if (this.cursor !== end) {
-        const diff = end - this.cursor;
-        const type = header.chunkType.toString(16);
-        console.debug(`Cursor is off by ${diff} bytes at ${this.cursor} at supposed \
-end of chunk of type 0x${type}. The chunk started at offset ${start} and is \
-supposed to end at offset ${end}. Ignoring the rest of the chunk.`);
-        this.cursor = end;
-      }
-
-      this.debug && console.groupEnd();
+      case CHUNK_XML_END_ELEMENT:
+        stack.pop();
+        break;
+      // namespaces, resource map, CDATA: not needed
     }
-
-    this.debug && console.groupEnd();
-
-    return this.document;
+    cursor = start + size;
   }
+  if (!root) {
+    throw new Error('No root element');
+  }
+  return root;
 }

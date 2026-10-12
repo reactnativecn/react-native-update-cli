@@ -69,10 +69,10 @@ type NativeUploadConfig = {
 };
 
 // the AAB parser drags in protobufjs; load it only for the aab commands
-function createAabParser(source: string) {
-  const { AabParser } =
-    require('./utils/app-info-parser/aab') as typeof import('./utils/app-info-parser/aab');
-  return new AabParser(source);
+function loadExtractApk() {
+  return (
+    require('./utils/app-info-parser/aab') as typeof import('./utils/app-info-parser/aab')
+  ).extractApk;
 }
 
 export function normalizeUploadBuildTime(value: unknown): string {
@@ -333,9 +333,8 @@ export const packageCommands = {
     const includeAllSplits = parseBooleanOption(options.includeAllSplits);
     const splits = parseCsvOption(options.splits);
 
-    const parser = createAabParser(source);
     try {
-      await parser.extractApk(output, {
+      await loadExtractApk()(source, output, {
         includeAllSplits,
         splits,
       });
@@ -412,8 +411,7 @@ export const packageCommands = {
     const includeAllSplits = parseBooleanOption(options.includeAllSplits);
     const splits = parseCsvOption(options.splits);
 
-    const parser = createAabParser(source);
-    await parser.extractApk(output, {
+    await loadExtractApk()(source, output, {
       includeAllSplits,
       splits,
     });
