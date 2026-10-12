@@ -1358,7 +1358,6 @@ async function selectHermesBase(
   try {
     const base = await resolveHermesBase({
       option: request.option,
-      hermesCommand,
       bytecodeVersion,
       appId: request.appId,
       cacheMaxMb: request.cacheMaxMb,

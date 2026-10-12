@@ -194,48 +194,32 @@ export function classifyHermesCommand(hermesCommand: string): {
       };
     }
     const build = /^(\d{9})\./.exec(version);
-    if (build) {
-      const ok = Number(build[1]) >= MIN_HERMES_COMPILER_BUILD;
-      return {
-        allowed: ok,
-        kind: 'hermes-compiler',
-        version,
-        reason: ok
-          ? undefined
-          : `hermes-compiler ${version} predates the delta-mode fix`,
-      };
-    }
     const commitly = /^0\.(\d+)\.\d+-commitly-(\d{8})/.exec(version);
-    if (commitly) {
-      const ok =
+    const stable = /^0\.(\d+)\.\d+$/.exec(version);
+    let ok: boolean;
+    if (build) {
+      ok = Number(build[1]) >= MIN_HERMES_COMPILER_BUILD;
+    } else if (commitly) {
+      ok =
         Number(commitly[1]) >= 14 &&
         Number(commitly[2]) >= MIN_HERMES_COMPILER_COMMITLY_DATE;
+    } else if (stable) {
+      ok = Number(stable[1]) >= 14;
+    } else {
       return {
-        allowed: ok,
+        allowed: false,
         kind: 'hermes-compiler',
         version,
-        reason: ok
-          ? undefined
-          : `hermes-compiler ${version} predates the delta-mode fix`,
-      };
-    }
-    const stable = /^0\.(\d+)\.\d+$/.exec(version);
-    if (stable) {
-      const ok = Number(stable[1]) >= 14;
-      return {
-        allowed: ok,
-        kind: 'hermes-compiler',
-        version,
-        reason: ok
-          ? undefined
-          : `hermes-compiler ${version} predates the delta-mode fix`,
+        reason: `unrecognized hermes-compiler version ${version}`,
       };
     }
     return {
-      allowed: false,
+      allowed: ok,
       kind: 'hermes-compiler',
       version,
-      reason: `unrecognized hermes-compiler version ${version}`,
+      reason: ok
+        ? undefined
+        : `hermes-compiler ${version} predates the delta-mode fix`,
     };
   }
   return {
@@ -415,6 +399,9 @@ export async function extractBundleFromArchive(
 export const DEFAULT_CACHE_MAX_BYTES = 500 * 1024 * 1024;
 export const DEFAULT_CACHE_MAX_FILES = 20;
 
+/** cache entries are named by the sha256 of their bundle */
+const isBundleHash = (name: string) => /^[0-9a-f]{64}$/.test(name);
+
 export function cacheDir(): string {
   return process.env.PUSHY_CACHE_DIR || path.join(tempDir, 'cache');
 }
@@ -436,7 +423,7 @@ export function cacheLimits(overrideMaxMb?: number) {
 
 /** Returns the cached bundle path when present and its sha256 still matches. */
 export async function cacheLookup(bundleHash: string): Promise<string | null> {
-  if (!/^[0-9a-f]{64}$/.test(bundleHash)) return null;
+  if (!isBundleHash(bundleHash)) return null;
   const file = path.join(cacheDir(), bundleHash);
   if (!(await pathExists(file))) return null;
   if ((await sha256File(file).catch(() => '')) !== bundleHash) {
@@ -482,7 +469,7 @@ export async function enforceCacheLimits(
   const staleTmpCutoff = Date.now() - STALE_CACHE_TMP_MS;
   for (const name of await fs.promises.readdir(dir)) {
     const isTmp = isCacheTmpName(name);
-    if (!isTmp && !/^[0-9a-f]{64}$/.test(name)) continue;
+    if (!isTmp && !isBundleHash(name)) continue;
     const stat = await fs.promises.stat(path.join(dir, name)).catch(() => null);
     if (!stat?.isFile()) continue;
     if (isTmp) {
@@ -516,7 +503,7 @@ export async function cleanCache(): Promise<number> {
   if (!(await pathExists(dir))) return 0;
   let bundles = 0;
   for (const name of await fs.promises.readdir(dir)) {
-    const isBundle = /^[0-9a-f]{64}$/.test(name);
+    const isBundle = isBundleHash(name);
     if (!isBundle && !isCacheTmpName(name)) continue;
     await remove(path.join(dir, name));
     if (isBundle) bundles += 1;
@@ -534,7 +521,7 @@ export async function cacheStats(): Promise<{
   let bytes = 0;
   if (await pathExists(dir)) {
     for (const name of await fs.promises.readdir(dir)) {
-      if (!/^[0-9a-f]{64}$/.test(name)) continue;
+      if (!isBundleHash(name)) continue;
       const stat = await fs.promises
         .stat(path.join(dir, name))
         .catch(() => null);
@@ -804,7 +791,6 @@ export async function fetchBaseBundle(
 
 export interface ResolveHermesBaseParams {
   option: HermesBaseOption;
-  hermesCommand: string;
   bytecodeVersion: number;
   appId?: string;
   cacheMaxMb?: number;
