@@ -235,31 +235,6 @@ function printDepsChangesForPackage({
   return true;
 }
 
-async function findVersionDeps(appId: string, versionId: string) {
-  const targetId = String(versionId);
-  const limit = 100;
-  let offset = 0;
-
-  while (true) {
-    const { data, count } = await get(
-      `/app/${appId}/version/list?offset=${offset}&limit=${limit}`,
-    );
-    const versions: Version[] = Array.isArray(data) ? data : [];
-    const version = versions.find((item) => String(item.id) === targetId);
-
-    if (version) {
-      return normalizeDeps(version.deps);
-    }
-
-    offset += versions.length;
-    if (versions.length === 0 || offset >= Number(count || 0)) {
-      break;
-    }
-  }
-
-  return undefined;
-}
-
 async function printDepsChangesForPublish({
   appId,
   versionId,
@@ -278,7 +253,11 @@ async function printDepsChangesForPublish({
   let versionDeps = normalizeDeps(providedVersionDeps);
   if (!versionDeps) {
     try {
-      versionDeps = await findVersionDeps(appId, versionId);
+      const version = await findVersion(
+        appId,
+        (item) => String(item.id) === String(versionId),
+      );
+      versionDeps = normalizeDeps(version?.deps);
     } catch (error: any) {
       console.warn(
         chalk.yellow(
@@ -319,6 +298,38 @@ export async function fetchVersions(
   return Array.isArray(data) ? data : [];
 }
 
+/**
+ * The first version matching `predicate`, paging through the list newest
+ * first (crashes and binds are usually about recent versions).
+ */
+export async function findVersion(
+  appId: string,
+  predicate: (version: Version) => boolean,
+): Promise<Version | undefined> {
+  const limit = 100;
+  for (let offset = 0; offset < 100 * limit; offset += limit) {
+    const page = await fetchVersions(appId, offset, limit);
+    const found = page.find(predicate);
+    if (found || page.length < limit) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+/** The offset after a U(p) / D(own) / B(egin) paging command, else undefined. */
+function pageOffset(cmd: string, offset: number): number | undefined {
+  switch (cmd.toLowerCase()) {
+    case 'u':
+      return Math.max(0, offset - versionPageLimit);
+    case 'd':
+      return offset + versionPageLimit;
+    case 'b':
+      return 0;
+  }
+  return undefined;
+}
+
 async function showVersion(appId: string, offset: number) {
   const data = await fetchVersions(appId, offset, versionPageLimit);
   console.log(t('offset', { offset }));
@@ -355,21 +366,10 @@ async function listVersions(appId: string, interactive = true) {
       return data;
     }
     const cmd = await question('page Up/page Down/Begin/Quit(U/D/B/Q)');
-    switch (cmd.toLowerCase()) {
-      case 'u':
-        offset = Math.max(0, offset - 10);
-        break;
-      case 'd':
-        offset += 10;
-        break;
-      case 'b':
-        offset = 0;
-        break;
-      case 'q':
-        return data;
-      case '':
-        return data;
+    if (cmd === '' || cmd.toLowerCase() === 'q') {
+      return data;
     }
+    offset = pageOffset(cmd, offset) ?? offset;
   }
 }
 
@@ -383,25 +383,17 @@ async function chooseVersion(appId: string) {
     const cmd = await question(
       'Enter versionId or page Up/page Down/Begin(U/D/B)',
     );
-    switch (cmd.toUpperCase()) {
-      case 'U':
-        offset = Math.max(0, offset - 10);
-        break;
-      case 'D':
-        offset += 10;
-        break;
-      case 'B':
-        offset = 0;
-        break;
-      default: {
-        const versionId = Number.parseInt(cmd, 10);
-        const v = data.find(
-          (version: Version) => String(version.id) === String(versionId),
-        );
-        if (v) {
-          return v;
-        }
-      }
+    const nextOffset = pageOffset(cmd, offset);
+    if (nextOffset !== undefined) {
+      offset = nextOffset;
+      continue;
+    }
+    const versionId = Number.parseInt(cmd, 10);
+    const v = data.find(
+      (version: Version) => String(version.id) === String(versionId),
+    );
+    if (v) {
+      return v;
     }
   }
 }
