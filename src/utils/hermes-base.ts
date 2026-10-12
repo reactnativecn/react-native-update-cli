@@ -693,17 +693,18 @@ export async function fetchBaseBundle(
     }
     return { bundle, bundleHash };
   };
-  const fromFullResponse = async (
-    response: Response,
-  ): Promise<FetchedBaseBundle> => {
-    await saveResponse(response, archive);
-    return {
-      ...verified(await extractBundleFromArchive(archive)),
-      transport: 'full',
-    };
-  };
+  const fromArchive = async (): Promise<FetchedBaseBundle> => ({
+    ...verified(await extractBundleFromArchive(archive)),
+    transport: 'full',
+  });
   const skip = (reason: string) =>
     log(t('hermesBaseRangeFallback', { reason }));
+  // a 200 to a Range request already carries the whole archive
+  const rangeIgnored = async (response: Response) => {
+    skip('server ignores Range');
+    await saveResponse(response, archive);
+    return fromArchive();
+  };
 
   // harmony .app nests the bundle in a second zip, so a location inside the
   // outer archive is never reported for it
@@ -732,8 +733,7 @@ export async function fetchBaseBundle(
       };
     } catch (error: any) {
       if (error instanceof RangeUnsupportedError) {
-        skip('server ignores Range');
-        return fromFullResponse(error.response);
+        return rangeIgnored(error.response);
       }
       // not a transport failure: the directory read below settles it
       if (!(error instanceof StaleHeadError)) {
@@ -746,8 +746,7 @@ export async function fetchBaseBundle(
     try {
       const remote = await openRemoteZip(record.url);
       if (remote.kind === 'full') {
-        skip('server ignores Range');
-        return fromFullResponse(remote.response);
+        return rangeIgnored(remote.response);
       }
       const bundle = await readRemoteZipEntry(
         remote.zipFile,
@@ -773,8 +772,7 @@ export async function fetchBaseBundle(
       };
     } catch (error: any) {
       if (error instanceof RangeUnsupportedError) {
-        skip('server ignores Range');
-        return fromFullResponse(error.response);
+        return rangeIgnored(error.response);
       }
       // the real entry was read and is not the recorded one: final
       if (error instanceof PermanentBaseError) throw error;
@@ -783,10 +781,7 @@ export async function fetchBaseBundle(
   }
 
   await downloadToFile(record.url, archive);
-  return {
-    ...verified(await extractBundleFromArchive(archive)),
-    transport: 'full',
-  };
+  return fromArchive();
 }
 
 export interface ResolveHermesBaseParams {
@@ -865,12 +860,6 @@ export async function resolveHermesBase(
     );
     return null;
   }
-  const source: HermesBaseSelection['source'] =
-    record?.artifactType && record.artifactType !== 'ppk'
-      ? 'native-package'
-      : record?.bytecodeVersion == null
-        ? 'latest-version'
-        : 'download';
   if (!record) {
     log(t('hermesBaseNone', { reason: 'no published version yet' }));
     return null;
@@ -889,20 +878,20 @@ export async function resolveHermesBase(
   // 1. cache by bundleHash
   if (record.bundleHash) {
     const hit = await cacheLookup(record.bundleHash);
-    if (hit && record.bytecodeVersion == null) {
-      // the server does not know the HBC version (legacy version, native
-      // package): the download path checks it, the cache path must too
-      const version = await readFileHbcVersion(hit);
-      if (version !== bytecodeVersion) {
-        log(
-          t('hermesBaseNone', {
-            reason: `cached base is HBC ${version ?? 'n/a'}, need ${bytecodeVersion}`,
-          }),
-        );
-        return null;
-      }
-    }
     if (hit) {
+      if (record.bytecodeVersion == null) {
+        // the server does not know the HBC version (legacy version, native
+        // package): the download path checks it, the cache path must too
+        const version = await readFileHbcVersion(hit);
+        if (version !== bytecodeVersion) {
+          log(
+            t('hermesBaseNone', {
+              reason: `cached base is HBC ${version ?? 'n/a'}, need ${bytecodeVersion}`,
+            }),
+          );
+          return null;
+        }
+      }
       log(
         t('hermesBaseUsing', {
           source: `cache ${record.bundleHash.slice(0, 12)}${record.versionId == null ? '' : ` (version ${record.versionId})`}`,
@@ -920,17 +909,20 @@ export async function resolveHermesBase(
     }
   }
   // 2. download, extract, verify, cache — transport errors get a second try
+  const artifactType: BaseArtifactType = ['ppk', 'apk', 'ipa', 'app'].includes(
+    record.artifactType ?? '',
+  )
+    ? (record.artifactType as BaseArtifactType)
+    : 'ppk';
+  const source: HermesBaseSelection['source'] =
+    record.artifactType && record.artifactType !== 'ppk'
+      ? 'native-package'
+      : record.bytecodeVersion == null
+        ? 'latest-version'
+        : 'download';
   for (let attempt = 1; attempt <= 2; attempt++) {
     const dir = tmpDir();
     await ensureDir(dir);
-    const artifactType: BaseArtifactType = [
-      'ppk',
-      'apk',
-      'ipa',
-      'app',
-    ].includes(record.artifactType ?? '')
-      ? (record.artifactType as BaseArtifactType)
-      : 'ppk';
     const archive = path.join(
       dir,
       `base-${process.pid}-${Date.now()}-${attempt}.${artifactType}`,
