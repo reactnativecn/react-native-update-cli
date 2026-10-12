@@ -2,7 +2,7 @@
 //
 // Hermes re-sorts its string table by identifier frequency on every compile, so
 // any source change renumbers most string IDs and the bytecode diff explodes
-// (see hermes-base-bytecode-方案.md). Compiling with the previous HBC of the
+// (see docs/hermes-base-verification.md). Compiling with the previous HBC of the
 // same app as `-base-bytecode` keeps old IDs stable and shrinks patches 5-30×.
 // This module resolves that base: gating by hermesc build, HBC version probe,
 // server lookup, a sha256-named local cache, download + verification, and the
@@ -35,9 +35,14 @@ import { normalizeCachedObjectInstruction } from './hermes-cached-object';
 import {
   type LiteralBuffers,
   LiteralResolver,
-  readLiteralBuffers,
+  literalBuffersFromBytes,
 } from './hermes-literals';
-import { auditRawHermesBytecode, readHermesSemanticData } from './hermes-raw';
+import {
+  auditRawHermesBytecode,
+  foldWidthSuffix,
+  hermesSemanticData,
+  isFunctionHeader,
+} from './hermes-raw';
 import { hermesTimeout } from './hermes-timeout';
 import { t } from './i18n';
 import { webFetch } from './runtime';
@@ -194,48 +199,32 @@ export function classifyHermesCommand(hermesCommand: string): {
       };
     }
     const build = /^(\d{9})\./.exec(version);
-    if (build) {
-      const ok = Number(build[1]) >= MIN_HERMES_COMPILER_BUILD;
-      return {
-        allowed: ok,
-        kind: 'hermes-compiler',
-        version,
-        reason: ok
-          ? undefined
-          : `hermes-compiler ${version} predates the delta-mode fix`,
-      };
-    }
     const commitly = /^0\.(\d+)\.\d+-commitly-(\d{8})/.exec(version);
-    if (commitly) {
-      const ok =
+    const stable = /^0\.(\d+)\.\d+$/.exec(version);
+    let ok: boolean;
+    if (build) {
+      ok = Number(build[1]) >= MIN_HERMES_COMPILER_BUILD;
+    } else if (commitly) {
+      ok =
         Number(commitly[1]) >= 14 &&
         Number(commitly[2]) >= MIN_HERMES_COMPILER_COMMITLY_DATE;
+    } else if (stable) {
+      ok = Number(stable[1]) >= 14;
+    } else {
       return {
-        allowed: ok,
+        allowed: false,
         kind: 'hermes-compiler',
         version,
-        reason: ok
-          ? undefined
-          : `hermes-compiler ${version} predates the delta-mode fix`,
-      };
-    }
-    const stable = /^0\.(\d+)\.\d+$/.exec(version);
-    if (stable) {
-      const ok = Number(stable[1]) >= 14;
-      return {
-        allowed: ok,
-        kind: 'hermes-compiler',
-        version,
-        reason: ok
-          ? undefined
-          : `hermes-compiler ${version} predates the delta-mode fix`,
+        reason: `unrecognized hermes-compiler version ${version}`,
       };
     }
     return {
-      allowed: false,
+      allowed: ok,
       kind: 'hermes-compiler',
       version,
-      reason: `unrecognized hermes-compiler version ${version}`,
+      reason: ok
+        ? undefined
+        : `hermes-compiler ${version} predates the delta-mode fix`,
     };
   }
   return {
@@ -415,6 +404,9 @@ export async function extractBundleFromArchive(
 export const DEFAULT_CACHE_MAX_BYTES = 500 * 1024 * 1024;
 export const DEFAULT_CACHE_MAX_FILES = 20;
 
+/** cache entries are named by the sha256 of their bundle */
+const isBundleHash = (name: string) => /^[0-9a-f]{64}$/.test(name);
+
 export function cacheDir(): string {
   return process.env.PUSHY_CACHE_DIR || path.join(tempDir, 'cache');
 }
@@ -436,7 +428,7 @@ export function cacheLimits(overrideMaxMb?: number) {
 
 /** Returns the cached bundle path when present and its sha256 still matches. */
 export async function cacheLookup(bundleHash: string): Promise<string | null> {
-  if (!/^[0-9a-f]{64}$/.test(bundleHash)) return null;
+  if (!isBundleHash(bundleHash)) return null;
   const file = path.join(cacheDir(), bundleHash);
   if (!(await pathExists(file))) return null;
   if ((await sha256File(file).catch(() => '')) !== bundleHash) {
@@ -482,7 +474,7 @@ export async function enforceCacheLimits(
   const staleTmpCutoff = Date.now() - STALE_CACHE_TMP_MS;
   for (const name of await fs.promises.readdir(dir)) {
     const isTmp = isCacheTmpName(name);
-    if (!isTmp && !/^[0-9a-f]{64}$/.test(name)) continue;
+    if (!isTmp && !isBundleHash(name)) continue;
     const stat = await fs.promises.stat(path.join(dir, name)).catch(() => null);
     if (!stat?.isFile()) continue;
     if (isTmp) {
@@ -516,7 +508,7 @@ export async function cleanCache(): Promise<number> {
   if (!(await pathExists(dir))) return 0;
   let bundles = 0;
   for (const name of await fs.promises.readdir(dir)) {
-    const isBundle = /^[0-9a-f]{64}$/.test(name);
+    const isBundle = isBundleHash(name);
     if (!isBundle && !isCacheTmpName(name)) continue;
     await remove(path.join(dir, name));
     if (isBundle) bundles += 1;
@@ -534,7 +526,7 @@ export async function cacheStats(): Promise<{
   let bytes = 0;
   if (await pathExists(dir)) {
     for (const name of await fs.promises.readdir(dir)) {
-      if (!/^[0-9a-f]{64}$/.test(name)) continue;
+      if (!isBundleHash(name)) continue;
       const stat = await fs.promises
         .stat(path.join(dir, name))
         .catch(() => null);
@@ -706,17 +698,18 @@ export async function fetchBaseBundle(
     }
     return { bundle, bundleHash };
   };
-  const fromFullResponse = async (
-    response: Response,
-  ): Promise<FetchedBaseBundle> => {
-    await saveResponse(response, archive);
-    return {
-      ...verified(await extractBundleFromArchive(archive)),
-      transport: 'full',
-    };
-  };
+  const fromArchive = async (): Promise<FetchedBaseBundle> => ({
+    ...verified(await extractBundleFromArchive(archive)),
+    transport: 'full',
+  });
   const skip = (reason: string) =>
     log(t('hermesBaseRangeFallback', { reason }));
+  // a 200 to a Range request already carries the whole archive
+  const rangeIgnored = async (response: Response) => {
+    skip('server ignores Range');
+    await saveResponse(response, archive);
+    return fromArchive();
+  };
 
   // harmony .app nests the bundle in a second zip, so a location inside the
   // outer archive is never reported for it
@@ -745,8 +738,7 @@ export async function fetchBaseBundle(
       };
     } catch (error: any) {
       if (error instanceof RangeUnsupportedError) {
-        skip('server ignores Range');
-        return fromFullResponse(error.response);
+        return rangeIgnored(error.response);
       }
       // not a transport failure: the directory read below settles it
       if (!(error instanceof StaleHeadError)) {
@@ -759,8 +751,7 @@ export async function fetchBaseBundle(
     try {
       const remote = await openRemoteZip(record.url);
       if (remote.kind === 'full') {
-        skip('server ignores Range');
-        return fromFullResponse(remote.response);
+        return rangeIgnored(remote.response);
       }
       const bundle = await readRemoteZipEntry(
         remote.zipFile,
@@ -786,8 +777,7 @@ export async function fetchBaseBundle(
       };
     } catch (error: any) {
       if (error instanceof RangeUnsupportedError) {
-        skip('server ignores Range');
-        return fromFullResponse(error.response);
+        return rangeIgnored(error.response);
       }
       // the real entry was read and is not the recorded one: final
       if (error instanceof PermanentBaseError) throw error;
@@ -796,15 +786,11 @@ export async function fetchBaseBundle(
   }
 
   await downloadToFile(record.url, archive);
-  return {
-    ...verified(await extractBundleFromArchive(archive)),
-    transport: 'full',
-  };
+  return fromArchive();
 }
 
 export interface ResolveHermesBaseParams {
   option: HermesBaseOption;
-  hermesCommand: string;
   bytecodeVersion: number;
   appId?: string;
   cacheMaxMb?: number;
@@ -879,12 +865,6 @@ export async function resolveHermesBase(
     );
     return null;
   }
-  const source: HermesBaseSelection['source'] =
-    record?.artifactType && record.artifactType !== 'ppk'
-      ? 'native-package'
-      : record?.bytecodeVersion == null
-        ? 'latest-version'
-        : 'download';
   if (!record) {
     log(t('hermesBaseNone', { reason: 'no published version yet' }));
     return null;
@@ -903,20 +883,20 @@ export async function resolveHermesBase(
   // 1. cache by bundleHash
   if (record.bundleHash) {
     const hit = await cacheLookup(record.bundleHash);
-    if (hit && record.bytecodeVersion == null) {
-      // the server does not know the HBC version (legacy version, native
-      // package): the download path checks it, the cache path must too
-      const version = await readFileHbcVersion(hit);
-      if (version !== bytecodeVersion) {
-        log(
-          t('hermesBaseNone', {
-            reason: `cached base is HBC ${version ?? 'n/a'}, need ${bytecodeVersion}`,
-          }),
-        );
-        return null;
-      }
-    }
     if (hit) {
+      if (record.bytecodeVersion == null) {
+        // the server does not know the HBC version (legacy version, native
+        // package): the download path checks it, the cache path must too
+        const version = await readFileHbcVersion(hit);
+        if (version !== bytecodeVersion) {
+          log(
+            t('hermesBaseNone', {
+              reason: `cached base is HBC ${version ?? 'n/a'}, need ${bytecodeVersion}`,
+            }),
+          );
+          return null;
+        }
+      }
       log(
         t('hermesBaseUsing', {
           source: `cache ${record.bundleHash.slice(0, 12)}${record.versionId == null ? '' : ` (version ${record.versionId})`}`,
@@ -934,17 +914,20 @@ export async function resolveHermesBase(
     }
   }
   // 2. download, extract, verify, cache — transport errors get a second try
+  const artifactType: BaseArtifactType = ['ppk', 'apk', 'ipa', 'app'].includes(
+    record.artifactType ?? '',
+  )
+    ? (record.artifactType as BaseArtifactType)
+    : 'ppk';
+  const source: HermesBaseSelection['source'] =
+    record.artifactType && record.artifactType !== 'ppk'
+      ? 'native-package'
+      : record.bytecodeVersion == null
+        ? 'latest-version'
+        : 'download';
   for (let attempt = 1; attempt <= 2; attempt++) {
     const dir = tmpDir();
     await ensureDir(dir);
-    const artifactType: BaseArtifactType = [
-      'ppk',
-      'apk',
-      'ipa',
-      'app',
-    ].includes(record.artifactType ?? '')
-      ? (record.artifactType as BaseArtifactType)
-      : 'ppk';
     const archive = path.join(
       dir,
       `base-${process.pid}-${Date.now()}-${attempt}.${artifactType}`,
@@ -1274,15 +1257,6 @@ function isLetter(code: number): boolean {
 }
 
 /** strip one operand-width suffix (LongIndex, Long, Short) off an opcode */
-function foldWidthSuffix(opcode: string): string {
-  for (const suffix of ['LongIndex', 'Long', 'Short']) {
-    if (opcode.length > suffix.length && opcode.endsWith(suffix)) {
-      return opcode.slice(0, -suffix.length);
-    }
-  }
-  return opcode;
-}
-
 /** Split a readable stream into lines without readline (Bun's readline async iterator misbehaves when pulled manually). */
 async function* streamLines(
   stream: NodeJS.ReadableStream,
@@ -1319,7 +1293,7 @@ export interface HermesEquivalenceResult {
   functions: number;
   /**
    * `instruction`: literals decoded from the binary buffers at each
-   * New*WithBuffer instruction (HBC v87–96 and v98); `buffer`: the dumped
+   * New*WithBuffer instruction (HBC v87–96, v98 and v99); `buffer`: the dumped
    * buffers compared as a whole (unknown layout)
    */
   literals?: 'instruction' | 'buffer';
@@ -1355,10 +1329,6 @@ const TRAILER_SECTION = /^(?:Debug |Textified callees table)/;
 const DUMP_STDERR_KEEP = 4 * 1024;
 /** a diagnostic line is cut to this many characters */
 const DETAIL_LINE_MAX = 120;
-
-function isFunctionHeader(line: string): boolean {
-  return /^(?:Function|NCFunction|Constructor)</.test(line);
-}
 
 /**
  * Structured reader over one `hermesc -dump-bytecode -pretty-disassemble`
@@ -1648,16 +1618,26 @@ export async function compareHermesBytecode(
         killSignal: 'SIGKILL',
       },
     );
-  // The literal buffers are read from both files up front (header + three
-  // byte ranges). Only when both sides can be read do the instructions
-  // compare decoded literals; otherwise both fall back to the dumped buffers
-  // as a whole, so the two sides always normalize the same way.
-  const [buffersA, buffersB, dataA, dataB] = await Promise.all([
-    readLiteralBuffers(withBase).catch(() => null),
-    readLiteralBuffers(plain).catch(() => null),
-    readHermesSemanticData(withBase).catch(() => null),
-    readHermesSemanticData(plain).catch(() => null),
-  ]);
+  // Each file is read once; its literal buffers and semantic data both come
+  // from those bytes. Only when both sides' buffers can be read do the
+  // instructions compare decoded literals; otherwise both fall back to the
+  // dumped buffers as a whole, so the two sides always normalize the same way.
+  const [bytesA, bytesB] = await Promise.all(
+    [withBase, plain].map((file) =>
+      fs.promises.readFile(file).catch(() => null),
+    ),
+  );
+  const orNull = <T>(read: () => T): T | null => {
+    try {
+      return read();
+    } catch {
+      return null;
+    }
+  };
+  const buffersA = bytesA && orNull(() => literalBuffersFromBytes(bytesA));
+  const buffersB = bytesB && orNull(() => literalBuffersFromBytes(bytesB));
+  const dataA = bytesA && orNull(() => hermesSemanticData(bytesA));
+  const dataB = bytesB && orNull(() => hermesSemanticData(bytesB));
   const binary = buffersA && buffersB && buffersA.version === buffersB.version;
   const literals = binary ? 'instruction' : 'buffer';
   const a = new DumpReader(

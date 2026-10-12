@@ -24,14 +24,14 @@
  * - HBC v87–96 (`split`): arrayBuffer, objKeyBuffer, objValueBuffer.
  *   `NewArrayWithBuffer dst, sizeHint, count, arrayOffset`;
  *   `NewObjectWithBuffer dst, sizeHint, count, keyOffset, valueOffset`.
- * - HBC v98 (`shaped`): literalValueBuffer (array elements and object values
+ * - HBC v98 and v99 (`shaped`): literalValueBuffer (array elements and object values
  *   alike), objKeyBuffer, objShapeTable (8-byte entries: keyOffset u32,
  *   numProps u32). `NewArrayWithBuffer dst, sizeHint, count, valueOffset`;
  *   `NewObjectWithBuffer dst, shapeIndex, valueOffset` and
  *   `NewObjectWithBufferAndParent dst, parent, shapeIndex, valueOffset`.
  */
-import { open as openFile } from 'node:fs/promises';
-import { HBC_HEADER_SIZE, resolveHbcSections } from './hbcTransform';
+import { readFile } from 'node:fs/promises';
+import { resolveHbcSections } from './hbcTransform';
 
 const TAG_TYPE_MASK = 0x70;
 const TAG_LENGTH_CONTINUES = 0x80;
@@ -75,57 +75,38 @@ export type LiteralBuffers =
 const SHAPE_ENTRY_SIZE = 8;
 
 /**
- * Read only the literal buffers of an HBC file (header + three byte ranges,
- * never the whole file). Null for a file whose layout is unknown: the caller
- * then falls back to comparing the dumped buffers as a whole.
+ * The literal buffers of an HBC file's bytes, as views into them. Null for a
+ * file whose layout is unknown: the caller then falls back to comparing the
+ * dumped buffers as a whole.
  */
+export function literalBuffersFromBytes(bytes: Buffer): LiteralBuffers | null {
+  const resolved = resolveHbcSections(bytes, bytes.length);
+  if (!resolved) return null;
+  // resolveHbcSections keeps every section inside the file
+  const views = (names: string[]) => {
+    const ranges = names.map((name) => resolved.sections.get(name));
+    return ranges.every(Boolean)
+      ? ranges.map((r) => bytes.subarray(r!.start, r!.start + r!.size))
+      : null;
+  };
+  const { version } = resolved;
+  if (resolved.sections.has('objShapeTable')) {
+    const bufs = views(['literalValueBuffer', 'objKeyBuffer', 'objShapeTable']);
+    if (!bufs) return null;
+    const [values, objectKeys, shapes] = bufs;
+    return { layout: 'shaped', version, values, objectKeys, shapes };
+  }
+  const bufs = views(['arrayBuffer', 'objKeyBuffer', 'objValueBuffer']);
+  if (!bufs) return null;
+  const [array, objectKeys, objectValues] = bufs;
+  return { layout: 'split', version, array, objectKeys, objectValues };
+}
+
+/** {@link literalBuffersFromBytes} for a file. */
 export async function readLiteralBuffers(
   file: string,
 ): Promise<LiteralBuffers | null> {
-  const handle = await openFile(file, 'r');
-  try {
-    const { size } = await handle.stat();
-    if (size < HBC_HEADER_SIZE) return null;
-    const header = Buffer.alloc(HBC_HEADER_SIZE);
-    const read = await handle.read(header, 0, HBC_HEADER_SIZE, 0);
-    if (read.bytesRead !== HBC_HEADER_SIZE) return null;
-    const resolved = resolveHbcSections(header, size);
-    if (!resolved) return null;
-    const readRanges = async (names: string[]) => {
-      const ranges = names.map((name) => resolved.sections.get(name));
-      if (ranges.some((r) => !r)) return null;
-      const bufs = await Promise.all(
-        ranges.map(async (r) => {
-          const buf = Buffer.alloc(r!.size);
-          if (r!.size === 0) return buf;
-          const { bytesRead } = await handle.read(buf, 0, r!.size, r!.start);
-          return bytesRead === r!.size ? buf : null;
-        }),
-      );
-      return bufs.some((b) => !b) ? null : (bufs as Buffer[]);
-    };
-    const { version } = resolved;
-    if (resolved.sections.has('objShapeTable')) {
-      const bufs = await readRanges([
-        'literalValueBuffer',
-        'objKeyBuffer',
-        'objShapeTable',
-      ]);
-      if (!bufs) return null;
-      const [values, objectKeys, shapes] = bufs;
-      return { layout: 'shaped', version, values, objectKeys, shapes };
-    }
-    const bufs = await readRanges([
-      'arrayBuffer',
-      'objKeyBuffer',
-      'objValueBuffer',
-    ]);
-    if (!bufs) return null;
-    const [array, objectKeys, objectValues] = bufs;
-    return { layout: 'split', version, array, objectKeys, objectValues };
-  } finally {
-    await handle.close();
-  }
+  return literalBuffersFromBytes(await readFile(file));
 }
 
 /**

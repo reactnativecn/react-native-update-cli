@@ -240,7 +240,6 @@ describe('resolveHermesBase', () => {
     removeSync(dir);
   });
   const common = {
-    hermesCommand: 'hermesc',
     bytecodeVersion: 98,
     log: (m: string) => logs.push(m),
   };
@@ -431,8 +430,6 @@ describe('resolveHermesBase over HTTP Range', () => {
       ))!;
       const selection = await resolveHermesBase({
         option: 'auto',
-        hermesCommand:
-          '/x/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
         bytecodeVersion: 98,
         appId: '1',
         log: (m) => messages.push(m),
@@ -491,8 +488,6 @@ describe('resolveHermesBase over HTTP Range', () => {
     try {
       const selection = await resolveHermesBase({
         option: 'auto',
-        hermesCommand:
-          '/x/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
         bytecodeVersion: 98,
         appId: '1',
         log: (m) => messages.push(m),
@@ -533,8 +528,6 @@ describe('resolveHermesBase over HTTP Range', () => {
       };
       const params = {
         option: 'auto',
-        hermesCommand:
-          '/x/node_modules/react-native/sdks/hermesc/osx-bin/hermesc',
         appId: '1',
         log: (m: string) => messages.push(m),
         fetchBase: async () => record,
