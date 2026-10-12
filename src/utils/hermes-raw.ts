@@ -11,7 +11,7 @@
 import { readFile } from 'node:fs/promises';
 import { StringDecoder } from 'node:string_decoder';
 import { spawn } from 'child_process';
-import { pickLayout, resolveHbcSections } from './hbcTransform';
+import { resolveHbcSections } from './hbcTransform';
 import { type LiteralBuffers, LiteralResolver } from './hermes-literals';
 
 export class UnverifiableHermesBytecode extends Error {}
@@ -74,7 +74,7 @@ export async function readHermesSemanticData(
   ) {
     throw new UnverifiableHermesBytecode('unsupported semantic HBC version');
   }
-  const layout = requireValue(pickLayout(bytes), 'unknown HBC layout');
+  const { layout } = resolved;
   const section = (name: string) => {
     const r = requireValue(resolved.sections.get(name), `missing ${name}`);
     return checkedSlice(bytes, r.start, r.size);
@@ -561,38 +561,22 @@ export async function auditRawHermesBytecode(
   const functions = async function* (side: number): AsyncGenerator<string[]> {
     let lines: string[] | null = null;
     let index = 0;
+    const normalize = (body: string[]) =>
+      normalizeRawHermesFunction(body, data[side], index++, buffers[side]);
     for await (const line of linesOf(children[side].stdout!)) {
       if (/^(?:Function|NCFunction|Constructor)</.test(line)) {
-        if (lines)
-          yield normalizeRawHermesFunction(
-            lines,
-            data[side],
-            index++,
-            buffers[side],
-          );
+        if (lines) yield normalize(lines);
         lines = [];
       } else if (
         /^(?:RegExp Bytecodes:|Debug |Textified callees table)/.test(line)
       ) {
-        if (lines)
-          yield normalizeRawHermesFunction(
-            lines,
-            data[side],
-            index++,
-            buffers[side],
-          );
+        if (lines) yield normalize(lines);
         lines = null;
       } else if (lines) {
         lines.push(line);
       }
     }
-    if (lines)
-      yield normalizeRawHermesFunction(
-        lines,
-        data[side],
-        index++,
-        buffers[side],
-      );
+    if (lines) yield normalize(lines);
     const error = await exits[side];
     if (error)
       throw new UnverifiableHermesBytecode(

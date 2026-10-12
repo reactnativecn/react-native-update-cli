@@ -374,7 +374,11 @@ export type HbcSectionRange = { start: number; size: number };
 export function resolveHbcSections(
   header: Buffer,
   fileLength: number,
-): { version: number; sections: Map<string, HbcSectionRange> } | null {
+): {
+  version: number;
+  layout: HbcLayout;
+  sections: Map<string, HbcSectionRange>;
+} | null {
   const version = getHbcVersion(header);
   if (version === null) return null;
   for (const layout of findLayouts(version)) {
@@ -382,6 +386,7 @@ export function resolveHbcSections(
     if (resolved) {
       return {
         version,
+        layout,
         sections: new Map(
           resolved.map((s) => [s.desc.name, { start: s.start, size: s.size }]),
         ),
@@ -431,7 +436,7 @@ export function transformHbc(buf: Buffer, inverse = false): Buffer | null {
 }
 
 /** 返回该 buffer 结构上匹配的布局(候选中第一个校验通过者)。 */
-export function pickLayout(buf: Buffer): HbcLayout | null {
+function pickLayout(buf: Buffer): HbcLayout | null {
   const version = getHbcVersion(buf);
   if (version === null) return null;
   for (const layout of findLayouts(version)) {
