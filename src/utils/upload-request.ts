@@ -63,7 +63,18 @@ export function multipartRequest(
   const tailBytes = Buffer.from(`\r\n--${boundary}--\r\n`);
   async function* parts() {
     yield headBytes;
-    for await (const chunk of file.stream) yield chunk as Buffer;
+    let sent = 0;
+    for await (const chunk of file.stream) {
+      sent += (chunk as Buffer).length;
+      yield chunk as Buffer;
+    }
+    // a file that shrank since its size was taken would leave the request
+    // short of its Content-Length, waiting out the whole upload deadline
+    if (sent !== file.size) {
+      throw new Error(
+        `${file.name} changed during the upload: sent ${sent} of ${file.size} bytes`,
+      );
+    }
     yield tailBytes;
   }
   return {

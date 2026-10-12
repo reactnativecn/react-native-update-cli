@@ -56,6 +56,21 @@ describe('fs-helpers', () => {
     expect(fs.readdirSync(path.join(dir, 'new/deep'))).toEqual([]);
   });
 
+  test('emptyDirSync rethrows when an existing directory cannot be read', () => {
+    const locked = path.join(dir, 'locked');
+    ensureDirSync(locked);
+    fs.writeFileSync(path.join(locked, 'stale.js'), 'x');
+    fs.chmodSync(locked, 0o000);
+    try {
+      // root reads anything: nothing to assert there
+      if (process.getuid?.() === 0) return;
+      expect(() => emptyDirSync(locked)).toThrow();
+    } finally {
+      fs.chmodSync(locked, 0o755);
+    }
+    expect(fs.readdirSync(locked)).toEqual(['stale.js']);
+  });
+
   test('moveSync replaces the destination and creates its parent', () => {
     fs.writeFileSync(path.join(dir, 'src.js'), 'new');
     moveSync(path.join(dir, 'src.js'), path.join(dir, 'a/b/dest.js'));

@@ -32,7 +32,10 @@ export function emptyDirSync(dir: string): void {
   let names: string[];
   try {
     names = fs.readdirSync(dir);
-  } catch {
+  } catch (err) {
+    // only a missing directory is created; an unreadable one must not pass
+    // for emptied
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     ensureDirSync(dir);
     return;
   }

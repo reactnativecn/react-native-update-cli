@@ -453,15 +453,7 @@ export class ResourceFinder {
         }
 
         if (u8len > 0) {
-          const buffer = bb.readBytes(u8len);
-          try {
-            strings[i] = buffer.buffer.toString('utf8');
-          } catch (e) {
-            if (DEBUG) {
-              console.error(e);
-              console.log('Error when turning buffer to utf-8 string.');
-            }
-          }
+          strings[i] = bb.readBytes(u8len).buffer.toString('utf8');
         } else {
           strings[i] = '';
         }
@@ -472,16 +464,7 @@ export class ResourceFinder {
         }
 
         if (u16len > 0) {
-          const len = u16len * 2;
-          const buffer = bb.readBytes(len);
-          try {
-            strings[i] = buffer.buffer.toString('utf16le');
-          } catch (e) {
-            if (DEBUG) {
-              console.error(e);
-              console.log('Error when turning buffer to utf-16 string.');
-            }
-          }
+          strings[i] = bb.readBytes(u16len * 2).buffer.toString('utf16le');
         }
       }
 

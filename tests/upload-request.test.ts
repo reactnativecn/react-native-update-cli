@@ -141,6 +141,20 @@ describe('upload-request', () => {
     expect(res).toEqual({ status: 403, statusText: 'Forbidden' });
   });
 
+  test('a file shorter than its declared size fails instead of hanging', async () => {
+    const file = writeFile('shrunk.ppk', Buffer.from('abc'));
+    await expect(
+      sendUploadRequest(
+        `${base}/ok`,
+        multipartRequest(
+          {},
+          { name: file, size: 10, stream: fs.createReadStream(file) },
+        ),
+        {},
+      ),
+    ).rejects.toThrow('changed during the upload: sent 3 of 10 bytes');
+  });
+
   test('aborting rejects with an AbortError', async () => {
     const file = writeFile('hang.ppk', Buffer.from('x'));
     const controller = new AbortController();
