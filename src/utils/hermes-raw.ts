@@ -58,7 +58,11 @@ export interface HermesSemanticData {
 export async function readHermesSemanticData(
   file: string,
 ): Promise<HermesSemanticData> {
-  const bytes = await readFile(file);
+  return hermesSemanticData(await readFile(file));
+}
+
+/** {@link readHermesSemanticData} for HBC bytes already in memory. */
+export function hermesSemanticData(bytes: Buffer): HermesSemanticData {
   const resolved = requireValue(
     resolveHbcSections(bytes, bytes.length),
     'unsupported or unreadable HBC layout',

@@ -35,9 +35,9 @@ import { normalizeCachedObjectInstruction } from './hermes-cached-object';
 import {
   type LiteralBuffers,
   LiteralResolver,
-  readLiteralBuffers,
+  literalBuffersFromBytes,
 } from './hermes-literals';
-import { auditRawHermesBytecode, readHermesSemanticData } from './hermes-raw';
+import { auditRawHermesBytecode, hermesSemanticData } from './hermes-raw';
 import { hermesTimeout } from './hermes-timeout';
 import { t } from './i18n';
 import { webFetch } from './runtime';
@@ -1626,16 +1626,26 @@ export async function compareHermesBytecode(
         killSignal: 'SIGKILL',
       },
     );
-  // The literal buffers are read from both files up front (header + three
-  // byte ranges). Only when both sides can be read do the instructions
-  // compare decoded literals; otherwise both fall back to the dumped buffers
-  // as a whole, so the two sides always normalize the same way.
-  const [buffersA, buffersB, dataA, dataB] = await Promise.all([
-    readLiteralBuffers(withBase).catch(() => null),
-    readLiteralBuffers(plain).catch(() => null),
-    readHermesSemanticData(withBase).catch(() => null),
-    readHermesSemanticData(plain).catch(() => null),
-  ]);
+  // Each file is read once; its literal buffers and semantic data both come
+  // from those bytes. Only when both sides' buffers can be read do the
+  // instructions compare decoded literals; otherwise both fall back to the
+  // dumped buffers as a whole, so the two sides always normalize the same way.
+  const [bytesA, bytesB] = await Promise.all(
+    [withBase, plain].map((file) =>
+      fs.promises.readFile(file).catch(() => null),
+    ),
+  );
+  const orNull = <T>(read: () => T): T | null => {
+    try {
+      return read();
+    } catch {
+      return null;
+    }
+  };
+  const buffersA = bytesA && orNull(() => literalBuffersFromBytes(bytesA));
+  const buffersB = bytesB && orNull(() => literalBuffersFromBytes(bytesB));
+  const dataA = bytesA && orNull(() => hermesSemanticData(bytesA));
+  const dataB = bytesB && orNull(() => hermesSemanticData(bytesB));
   const binary = buffersA && buffersB && buffersA.version === buffersB.version;
   const literals = binary ? 'instruction' : 'buffer';
   const a = new DumpReader(
