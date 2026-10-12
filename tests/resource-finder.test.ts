@@ -121,7 +121,7 @@ function resourceTable(values: string[], utf8: boolean) {
 }
 
 describe('ResourceFinder', () => {
-  for (const utf8 of [true]) {
+  for (const utf8 of [true, false]) {
     test(`decodes a ${utf8 ? 'UTF-8' : 'UTF-16'} resource table`, () => {
       const table = resourceTable(['My App', '应用名称'], utf8);
       expect(new ResourceFinder().processResourceTable(table)).toEqual({

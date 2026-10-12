@@ -475,11 +475,11 @@ export class ResourceFinder {
           const len = u16len * 2;
           const buffer = bb.readBytes(len);
           try {
-            strings[i] = buffer.buffer.toString('utf8');
+            strings[i] = buffer.buffer.toString('utf16le');
           } catch (e) {
             if (DEBUG) {
               console.error(e);
-              console.log('Error when turning buffer to utf-8 string.');
+              console.log('Error when turning buffer to utf-16 string.');
             }
           }
         }
