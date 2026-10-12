@@ -1,6 +1,7 @@
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import path from 'path';
 import { ZipFile as YazlZipFile } from 'yazl';
+import { ensureDirSync } from './utils/fs-helpers';
 import { t } from './utils/i18n';
 import { zipOptionsForPayloadFile } from './utils/zip-options';
 
@@ -19,7 +20,7 @@ export async function packBundle(
     ignorePackingFileNames.push(`${bundleName}.map`);
   }
   console.log(t('packing'));
-  fs.ensureDirSync(path.dirname(output));
+  ensureDirSync(path.dirname(output));
   await new Promise<void>((resolve, reject) => {
     const zipfile = new YazlZipFile();
 

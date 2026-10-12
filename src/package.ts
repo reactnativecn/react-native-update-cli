@@ -1,4 +1,4 @@
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { doDelete, getAllPackages, post, uploadFile } from './api';
@@ -16,6 +16,7 @@ import {
 } from './utils';
 import { updateJson } from './utils/constants';
 import { getDepVersions } from './utils/dep-versions';
+import { remove } from './utils/fs-helpers';
 import { getCommitInfo } from './utils/git';
 import {
   bundleEntryMatcher,
@@ -161,7 +162,7 @@ async function uploadNativePackage(
     console.log(t('usingCustomVersion', { version: versionName }));
   }
 
-  const tempRoot = await fs.mkdtemp(
+  const tempRoot = await fs.promises.mkdtemp(
     path.join(os.tmpdir(), 'rnu-native-package-upload-'),
   );
   const slimPackagePath = path.join(tempRoot, `package${config.extension}`);
@@ -217,7 +218,7 @@ async function uploadNativePackage(
       }),
     );
   } finally {
-    await fs.remove(tempRoot);
+    await remove(tempRoot);
   }
 }
 
@@ -324,7 +325,7 @@ export const packageCommands = {
 
     // private temp dir: unpredictable path, safe against symlink squatting in
     // the shared tmpdir and against concurrent uploads of same-named AABs
-    const tempRoot = await fs.mkdtemp(
+    const tempRoot = await fs.promises.mkdtemp(
       path.join(os.tmpdir(), 'rnu-aab-upload-'),
     );
     const output = path.join(tempRoot, 'universal.apk');
@@ -343,7 +344,7 @@ export const packageCommands = {
         options,
       });
     } finally {
-      await fs.remove(tempRoot);
+      await remove(tempRoot);
     }
   },
   uploadApp: async ({

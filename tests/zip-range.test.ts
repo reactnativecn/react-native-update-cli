@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fromRandomAccessReader, type ZipFile as YauzlZipFile } from 'yauzl';
 import { ZipFile } from 'yazl';
 import { deflateRawSync, inflateRawSync } from 'zlib';
+import { removeSync } from '../src/utils/fs-helpers';
 import {
   BundleHashMismatchError,
   bundleEntryMatcher,
@@ -186,7 +187,7 @@ describe('zip-range', () => {
     });
   });
   afterEach(() => {
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test('locateZipEntry points at the compressed bytes of the entry', async () => {
@@ -620,7 +621,7 @@ describe('zip-range request economy', () => {
     await writeZip(path.join(dir, 'many.apk'), many);
   });
   afterEach(() => {
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test('parseEndOfCentralDirectory finds the directory from the tail', () => {
@@ -883,7 +884,7 @@ describe('zip-range consistency and deadlines', () => {
     });
   });
   afterEach(() => {
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   const readBundle = async (url: string) => {

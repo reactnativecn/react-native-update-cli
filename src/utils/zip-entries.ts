@@ -1,4 +1,4 @@
-import * as fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { pipeline } from 'stream/promises';
@@ -7,6 +7,7 @@ import {
   open as openZipFile,
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
+import { ensureDirSync, remove } from './fs-helpers';
 
 export function readEntry(
   entry: Entry,
@@ -40,7 +41,7 @@ export function writeEntry(
   zipFile: YauzlZipFile,
   outputPath: string,
 ): Promise<void> {
-  fs.ensureDirSync(path.dirname(outputPath));
+  ensureDirSync(path.dirname(outputPath));
   return new Promise((resolve, reject) => {
     zipFile.openReadStream(entry, (err, stream) => {
       if (err) {
@@ -165,7 +166,7 @@ export async function enumZipEntries(
               !entry.fileName.endsWith('/') &&
               entry.fileName.toLowerCase().endsWith('.hap')
             ) {
-              const tempDir = await fs.mkdtemp(
+              const tempDir = await fs.promises.mkdtemp(
                 path.join(os.tmpdir(), 'nested_zip_'),
               );
               const tempZipPath = path.join(tempDir, 'temp.zip');
@@ -183,7 +184,7 @@ export async function enumZipEntries(
 
                 await enumZipEntries(tempZipPath, callback, `${fullPath}/`);
               } finally {
-                await fs.remove(tempDir);
+                await remove(tempDir);
               }
             }
 

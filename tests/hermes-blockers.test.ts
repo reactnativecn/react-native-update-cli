@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'child_process';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { removeSync } from '../src/utils/fs-helpers';
 import { normalizeDisassemblyLine } from '../src/utils/hermes-base';
 import type { LiteralBuffers } from '../src/utils/hermes-literals';
 import {
@@ -110,7 +111,7 @@ describe.if(process.platform !== 'win32')('debug dump failure cleanup', () => {
       { mode: 0o755 },
     );
   });
-  afterEach(() => fs.removeSync(dir));
+  afterEach(() => removeSync(dir));
 
   for (const scenario of ['timeout', 'abort', 'pre-abort', 'ENOENT'] as const) {
     test(`${scenario} with dumpTo returns and closes debug streams`, () => {

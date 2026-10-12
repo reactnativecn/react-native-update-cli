@@ -4,9 +4,10 @@
 // a second deflate of every asset (yazl can only add uncompressed data and
 // re-deflates it). Plain zip only: no zip64, no data descriptors, no extra
 // fields; callers must check `fitsRawZip` before choosing this writer.
-import fs from 'fs-extra';
+import fs from 'fs';
 import type { Readable } from 'stream';
 import type { Entry } from 'yauzl';
+import { remove } from './fs-helpers';
 
 const LOCAL_HEADER_SIGNATURE = 0x04034b50;
 const CENTRAL_HEADER_SIGNATURE = 0x02014b50;
@@ -234,7 +235,7 @@ export class RawZipWriter {
   async abort(): Promise<void> {
     this.out.destroy();
     await this.closed.catch(() => {});
-    await fs.remove(this.output).catch(() => {});
+    await remove(this.output).catch(() => {});
   }
 
   private write(chunk: Buffer): Promise<void> {

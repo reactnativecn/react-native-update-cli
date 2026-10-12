@@ -24,10 +24,11 @@
  * caught with useful coverage, 1 otherwise; invalid arguments exit 2.
  */
 import { spawnSync } from 'node:child_process';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { failureFingerprint } from '../src/utils/failure-fingerprint';
+import { ensureDirSync, removeSync } from '../src/utils/fs-helpers';
 import { compareHermesBytecode } from '../src/utils/hermes-base';
 import { fuzzStringLiterals } from './hermes-fuzz-literals';
 import { hermesFuzzSucceeded } from './hermes-fuzz-result';
@@ -580,7 +581,7 @@ interface Finding {
 async function main() {
   const rng = new Rng(SEED);
   const gen = new Gen(rng);
-  fs.ensureDirSync(OUT_DIR);
+  ensureDirSync(OUT_DIR);
   console.log(
     `fuzz-hermes-base: ${ROUNDS} rounds, seed ${SEED}, hermesc ${hermesc}, out ${OUT_DIR}`,
   );
@@ -598,7 +599,7 @@ async function main() {
 
   for (let round = 0; round < ROUNDS; round++) {
     const dir = path.join(OUT_DIR, `round-${String(round).padStart(4, '0')}`);
-    fs.ensureDirSync(dir);
+    ensureDirSync(dir);
     const next = gen.program();
     const baseSource =
       pool.length > 0 && rng.chance(0.5) ? rng.pick(pool) : gen.mutate(next);
@@ -712,7 +713,7 @@ async function main() {
       }
     }
 
-    if (!keep) fs.removeSync(dir);
+    if (!keep) removeSync(dir);
   }
 
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
@@ -751,7 +752,7 @@ async function main() {
     plantedCompileErrors,
   });
   if (!ok) console.log(`\nfailing cases kept under ${OUT_DIR}`);
-  else if (!argValue('out')) fs.removeSync(OUT_DIR);
+  else if (!argValue('out')) removeSync(OUT_DIR);
   process.exit(ok ? 0 : 1);
 }
 

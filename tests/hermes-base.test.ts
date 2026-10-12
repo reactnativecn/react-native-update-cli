@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'child_process';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { ZipFile } from 'yazl';
+import { ensureDirSync, removeSync } from '../src/utils/fs-helpers';
 import {
   cacheDir,
   cacheLookup,
@@ -77,7 +78,7 @@ describe('classifyHermesCommand', () => {
     root = mkTemp('rnu-hermes-gate-');
   });
   afterEach(() => {
-    fs.removeSync(root);
+    removeSync(root);
   });
 
   test('classic hermesc locations are allowed', () => {
@@ -105,11 +106,14 @@ describe('classifyHermesCommand', () => {
     ];
     for (const [version, allowed] of cases) {
       const pkg = path.join(root, version, 'node_modules', 'hermes-compiler');
-      fs.ensureDirSync(path.join(pkg, 'hermesc', 'osx-bin'));
-      fs.writeJsonSync(path.join(pkg, 'package.json'), {
-        name: 'hermes-compiler',
-        version,
-      });
+      ensureDirSync(path.join(pkg, 'hermesc', 'osx-bin'));
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: 'hermes-compiler',
+          version,
+        }),
+      );
       const result = classifyHermesCommand(
         path.join(pkg, 'hermesc', 'osx-bin', 'hermesc'),
       );
@@ -139,7 +143,7 @@ describe('bundle cache', () => {
     else process.env.PUSHY_CACHE_DIR = previous.cache;
     if (previous.max === undefined) delete process.env.PUSHY_CACHE_MAX_MB;
     else process.env.PUSHY_CACHE_MAX_MB = previous.max;
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test('put/lookup round-trips by sha256 and rejects corrupted content', async () => {
@@ -170,7 +174,7 @@ describe('bundle cache', () => {
 
   test('cleanStaleTmp removes only old leftovers', async () => {
     const tmp = tmpDir();
-    fs.ensureDirSync(tmp);
+    ensureDirSync(tmp);
     const old = path.join(tmp, 'old.ppk');
     const fresh = path.join(tmp, 'fresh.ppk');
     fs.writeFileSync(old, 'x');
@@ -180,7 +184,7 @@ describe('bundle cache', () => {
     await cleanStaleTmp();
     expect(fs.existsSync(old)).toBe(false);
     expect(fs.existsSync(fresh)).toBe(true);
-    fs.removeSync(tmp);
+    removeSync(tmp);
   });
 });
 
@@ -190,7 +194,7 @@ describe('extractBundleFromArchive', () => {
     dir = mkTemp('rnu-hermes-extract-');
   });
   afterEach(() => {
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test('reads the bundle entry of a ppk and an apk', async () => {
@@ -233,7 +237,7 @@ describe('resolveHermesBase', () => {
   afterEach(() => {
     if (previousCache === undefined) delete process.env.PUSHY_CACHE_DIR;
     else process.env.PUSHY_CACHE_DIR = previousCache;
-    fs.removeSync(dir);
+    removeSync(dir);
   });
   const common = {
     hermesCommand: 'hermesc',
@@ -453,7 +457,7 @@ describe('resolveHermesBase over HTTP Range', () => {
     } finally {
       server.stop(true);
       delete process.env.PUSHY_CACHE_DIR;
-      fs.removeSync(dir);
+      removeSync(dir);
     }
   });
 
@@ -508,7 +512,7 @@ describe('resolveHermesBase over HTTP Range', () => {
     } finally {
       server.stop(true);
       delete process.env.PUSHY_CACHE_DIR;
-      fs.removeSync(dir);
+      removeSync(dir);
     }
   });
 
@@ -544,7 +548,7 @@ describe('resolveHermesBase over HTTP Range', () => {
       expect(hit?.source).toBe('cache');
     } finally {
       delete process.env.PUSHY_CACHE_DIR;
-      fs.removeSync(dir);
+      removeSync(dir);
     }
   });
 });
@@ -569,7 +573,7 @@ describe('cache staging leftovers', () => {
       expect(fs.existsSync(fresh)).toBe(false);
     } finally {
       delete process.env.PUSHY_CACHE_DIR;
-      fs.removeSync(dir);
+      removeSync(dir);
     }
   });
 });
@@ -744,7 +748,7 @@ describe.if(hasHermesc)('with a real hermesc', () => {
   afterEach(() => {
     if (previousCache === undefined) delete process.env.PUSHY_CACHE_DIR;
     else process.env.PUSHY_CACHE_DIR = previousCache;
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test('probeHbcVersion returns the bytecode version', () => {
@@ -855,7 +859,7 @@ describe('publish metadata never sends JSON null', () => {
       });
       expect(plainWithBase.bytecodeVersion).toBe(0);
     } finally {
-      fs.removeSync(dir);
+      removeSync(dir);
     }
   });
 });
@@ -972,7 +976,7 @@ describe('probeHbcVersion cache', () => {
   afterEach(() => {
     if (previous === undefined) delete process.env.PUSHY_CACHE_DIR;
     else process.env.PUSHY_CACHE_DIR = previous;
-    fs.removeSync(dir);
+    removeSync(dir);
   });
 
   test.if(os.platform() !== 'win32')(
@@ -1109,7 +1113,7 @@ describe.if(os.platform() !== 'win32')(
       );
       fs.chmodSync(fakeHermesc, 0o755);
     });
-    afterEach(() => fs.removeSync(dir));
+    afterEach(() => removeSync(dir));
 
     test('matching text dumps without readable HBC metadata are unverifiable', async () => {
       const result = await compareHermesBytecode(
@@ -1258,7 +1262,7 @@ describe.if(os.platform() !== 'win32')(
         withBase: path.join(dir, 'out', 'base.txt'),
         plain: path.join(dir, 'out', 'plain.txt'),
       };
-      fs.ensureDirSync(path.dirname(dumpTo.withBase));
+      ensureDirSync(path.dirname(dumpTo.withBase));
       const result = await compareHermesBytecode(
         fakeHermesc,
         write('delta.hbc', DELTA_DUMP),
@@ -1279,7 +1283,7 @@ describe.if(hasHermesc)('compareHermesBytecode with a real hermesc', () => {
   beforeEach(() => {
     dir = mkTemp('rnu-hermes-real-cmp-');
   });
-  afterEach(() => fs.removeSync(dir));
+  afterEach(() => removeSync(dir));
 
   // enough identifiers and literals that the delta build has to use the
   // wide operand forms (Long/LongIndex) and re-lay the literal buffers

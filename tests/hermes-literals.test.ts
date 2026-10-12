@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'child_process';
-import fs from 'fs-extra';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { removeSync } from '../src/utils/fs-helpers';
 import {
   LITERAL_SEPARATOR,
   normalizeDisassemblyLine,
@@ -363,7 +364,7 @@ describe('readLiteralBuffers', () => {
       fs.writeFileSync(file, Buffer.from('not hbc'));
       expect(await readLiteralBuffers(file)).toBeNull();
     } finally {
-      fs.removeSync(dir);
+      removeSync(dir);
     }
   });
 
@@ -428,7 +429,7 @@ describe('readLiteralBuffers', () => {
         expect(keys).toEqual(['[String "k"]', '[String "m"]']);
         expect(values).toEqual(['true', '[String "color"]']);
       } finally {
-        fs.removeSync(dir);
+        removeSync(dir);
       }
     });
   }
