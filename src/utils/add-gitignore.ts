@@ -1,5 +1,4 @@
 import fs from 'fs';
-// import path from 'path';
 import { credentialFile, tempDir } from './constants';
 import { t } from './i18n';
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { $ } from 'bun';
 
@@ -10,12 +10,6 @@ async function modifyPackageJson({
   version: string;
 }): Promise<void> {
   const packageJsonPath = path.join(__dirname, '..', 'package.json');
-
-  try {
-    await access(packageJsonPath);
-  } catch {
-    throw new Error(`package.json not found at ${packageJsonPath}`);
-  }
 
   console.log('Reading package.json...');
   const packageJsonContent = await readFile(packageJsonPath, 'utf-8');

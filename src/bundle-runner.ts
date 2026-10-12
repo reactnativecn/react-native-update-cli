@@ -504,11 +504,8 @@ export function assertSafeToEmpty(dir: string, cwd = process.cwd()): string {
     [lexicalHome, canonicalHome],
     [lexicalTmp, canonicalTmp],
   ] as const) {
-    const relative = path.relative(lexicalBase, requested);
-    if (
-      relative === '' ||
-      (!relative.startsWith('..') && !path.isAbsolute(relative))
-    ) {
+    if (contains(lexicalBase, requested)) {
+      const relative = path.relative(lexicalBase, requested);
       if (!samePath(path.resolve(canonicalBase, relative), target)) {
         reject(target);
       }

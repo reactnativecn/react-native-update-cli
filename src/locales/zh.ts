@@ -108,7 +108,6 @@ export default {
   pausedStatus: '(已暂停)',
   platform: '平台',
   platformQuestion: '平台(ios/android/harmony):',
-  pluginDetectionError: '检测 {{name}} 插件时出错：{{error}}',
   pluginDetected: '检测到 {{name}} 插件',
   sourceMapNotFound: '找不到 source map：{{path}}',
   sourceMapMissingWarning:

@@ -117,7 +117,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   pausedStatus: '(Paused)',
   platform: 'Platform',
   platformQuestion: 'Platform(ios/android/harmony):',
-  pluginDetectionError: 'error while detecting {{name}} plugin: {{error}}',
   pluginDetected: 'detected {{name}} plugin',
   publishUsage:
     'Usage: pushy publish <ppk file> --platform ios|android|harmony',

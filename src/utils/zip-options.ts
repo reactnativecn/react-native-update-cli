@@ -55,72 +55,41 @@ function hasHermesBytecodeMagic(bytes: Buffer): boolean {
   return startsWith(bytes, HBC_MAGIC) || startsWith(bytes, HERMES_DELTA_MAGIC);
 }
 
+/** leading bytes of formats that are already compressed */
+const COMPRESSED_MAGIC = [
+  [0x89, 0x50, 0x4e, 0x47], // PNG
+  [0xff, 0xd8, 0xff], // JPEG
+  'GIF87a',
+  'GIF89a',
+  [0x50, 0x4b, 0x03, 0x04], // zip
+  [0x50, 0x4b, 0x05, 0x06], // empty zip
+  [0x50, 0x4b, 0x07, 0x08], // spanned zip
+  [0x1f, 0x8b], // gzip
+  'BZh',
+  [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00], // xz
+  [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c], // 7z
+  [0x28, 0xb5, 0x2f, 0xfd], // zstd
+  'OggS',
+  'ID3', // mp3 with tags
+  'wOFF',
+  'wOF2',
+].map((magic) => Buffer.from(magic as string));
+
 function hasAlreadyCompressedMagic(bytes: Buffer): boolean {
   if (bytes.length < 2) {
     return false;
   }
-
-  if (startsWith(bytes, Buffer.from([0x89, 0x50, 0x4e, 0x47]))) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from([0xff, 0xd8, 0xff]))) {
-    return true;
-  }
-  if (
-    startsWith(bytes, Buffer.from('GIF87a', 'ascii')) ||
-    startsWith(bytes, Buffer.from('GIF89a', 'ascii'))
-  ) {
-    return true;
-  }
-  if (
-    bytes.length >= 12 &&
-    bytes.subarray(0, 4).equals(Buffer.from('RIFF', 'ascii')) &&
-    bytes.subarray(8, 12).equals(Buffer.from('WEBP', 'ascii'))
-  ) {
-    return true;
-  }
-  if (
-    startsWith(bytes, Buffer.from([0x50, 0x4b, 0x03, 0x04])) ||
-    startsWith(bytes, Buffer.from([0x50, 0x4b, 0x05, 0x06])) ||
-    startsWith(bytes, Buffer.from([0x50, 0x4b, 0x07, 0x08]))
-  ) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from([0x1f, 0x8b]))) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from('BZh', 'ascii'))) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00]))) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]))) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))) {
-    return true;
-  }
-  if (bytes.length >= 12 && bytes.subarray(4, 8).equals(Buffer.from('ftyp'))) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from('OggS', 'ascii'))) {
-    return true;
-  }
-  if (startsWith(bytes, Buffer.from('ID3', 'ascii'))) {
-    return true;
-  }
-  if (bytes[0] === 0xff && bytes.length >= 2 && (bytes[1] & 0xe0) === 0xe0) {
-    return true;
-  }
-  if (
-    startsWith(bytes, Buffer.from('wOFF', 'ascii')) ||
-    startsWith(bytes, Buffer.from('wOF2', 'ascii'))
-  ) {
-    return true;
-  }
-
-  return false;
+  const at = (offset: number, ascii: string) =>
+    bytes.subarray(offset, offset + ascii.length).equals(Buffer.from(ascii));
+  return (
+    COMPRESSED_MAGIC.some((magic) => startsWith(bytes, magic)) ||
+    // WebP: RIFF container with a WEBP form type
+    (bytes.length >= 12 && at(0, 'RIFF') && at(8, 'WEBP')) ||
+    // ISO base media (mp4, m4a, heic, avif...)
+    (bytes.length >= 12 && at(4, 'ftyp')) ||
+    // MPEG audio frame sync
+    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+  );
 }
 
 function readFilePrefix(filePath: string): Buffer {
