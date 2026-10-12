@@ -77,15 +77,11 @@ function readDepVersions(cwd: string): Record<string, string> {
   }
 
   // sorted keys: the object is sent to the server as-is and diffed
-  return Object.keys(versions)
-    .sort()
-    .reduce(
-      (obj, key) => {
-        obj[key] = versions[key];
-        return obj;
-      },
-      {} as Record<string, string>,
-    );
+  return Object.fromEntries(
+    Object.keys(versions)
+      .sort()
+      .map((key) => [key, versions[key]]),
+  );
 }
 
 /** Installed versions of the cwd project's dependencies, keys sorted. */
@@ -118,29 +114,3 @@ export function getDepVersion(
   }
   return readInstalledVersion(name, resolvedCwd);
 }
-
-/**
- * Same data as `getDepVersions()` but as a lazily populated object, for the
- * remaining property-access call sites (`depVersions['react-native']`).
- * Nothing is resolved until the first property access.
- */
-export const depVersions: Record<string, string> = new Proxy(
-  {} as Record<string, string>,
-  {
-    get: (_target, key) =>
-      typeof key === 'string' ? getDepVersions()[key] : undefined,
-    has: (_target, key) => typeof key === 'string' && key in getDepVersions(),
-    ownKeys: () => Object.keys(getDepVersions()),
-    getOwnPropertyDescriptor: (_target, key) => {
-      if (typeof key !== 'string' || !(key in getDepVersions())) {
-        return undefined;
-      }
-      return {
-        value: getDepVersions()[key],
-        writable: false,
-        enumerable: true,
-        configurable: true,
-      };
-    },
-  },
-);

@@ -12,7 +12,7 @@ import { checkPlugins, question, translateOptions } from './utils';
 import { addGitIgnore } from './utils/add-gitignore';
 import { checkLockFiles } from './utils/check-lockfile';
 import { tempDir } from './utils/constants';
-import { depVersions } from './utils/dep-versions';
+import { getDepVersion } from './utils/dep-versions';
 import {
   cleanStaleTmp,
   type HermesBaseMeta,
@@ -296,7 +296,9 @@ export const bundleCommands = {
 
     const sourcemap = normalized.sourcemap || bundleParams.sourcemap;
 
-    console.log(t('bundlingWithRN', { version: depVersions['react-native'] }));
+    console.log(
+      t('bundlingWithRN', { version: getDepVersion('react-native') }),
+    );
 
     const hermesResult = await runReactNativeBundleCommand({
       bundleName: normalized.bundleName,
