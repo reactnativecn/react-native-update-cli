@@ -297,15 +297,14 @@ export async function runReactNativeBundleCommand({
   }
 
   if (isSentry) {
-    if (platform === 'ios') {
-      process.env.SENTRY_PROPERTIES = 'ios/sentry.properties';
-    } else if (platform === 'android') {
-      process.env.SENTRY_PROPERTIES = 'android/sentry.properties';
-    } else if (
-      platform === 'harmony' &&
-      fs.existsSync('harmony/sentry.properties')
+    // optional only on harmony
+    const sentryProperties = `${platform}/sentry.properties`;
+    if (
+      platform === 'ios' ||
+      platform === 'android' ||
+      (platform === 'harmony' && fs.existsSync(sentryProperties))
     ) {
-      process.env.SENTRY_PROPERTIES = 'harmony/sentry.properties';
+      process.env.SENTRY_PROPERTIES = sentryProperties;
     }
   }
 
@@ -1575,28 +1574,34 @@ export function buildSentrySourcemapsUploadArgs({
   ];
 }
 
-function supportsStandaloneSentrySourcemapsUpload(sentryCliPath: string) {
+/**
+ * What the installed sentry-cli supports, from one `sourcemaps upload --help`
+ * run: the standalone `sourcemaps upload` command (else the legacy
+ * `releases files upload-sourcemaps`), and its `--debug-id-reference` flag.
+ */
+function probeSentryCli(sentryCliPath: string) {
   const result = spawnJavaScriptSync(
     [sentryCliPath, 'sourcemaps', 'upload', '--help'],
-    {
-      stdio: 'ignore',
-    },
+    { encoding: 'utf8' },
   );
-  return !result.error && result.status === 0;
+  const standalone = !result.error && result.status === 0;
+  return {
+    standalone,
+    debugIdReference:
+      standalone &&
+      typeof result.stdout === 'string' &&
+      result.stdout.includes('--debug-id-reference'),
+  };
 }
 
-function supportsSentryDebugIdReference(sentryCliPath: string) {
-  const result = spawnJavaScriptSync(
-    [sentryCliPath, 'sourcemaps', 'upload', '--help'],
-    {
-      encoding: 'utf8',
-    },
-  );
+/** --sentry-release/--sentry-dist, else SENTRY_RELEASE/SENTRY_DIST */
+function explicitSentryRelease(options: SentryUploadOptions) {
   return (
-    !result.error &&
-    result.status === 0 &&
-    typeof result.stdout === 'string' &&
-    result.stdout.includes('--debug-id-reference')
+    resolveSentryReleaseFromValues(options.sentryRelease, options.sentryDist) ??
+    resolveSentryReleaseFromValues(
+      process.env.SENTRY_RELEASE,
+      process.env.SENTRY_DIST,
+    )
   );
 }
 
@@ -1664,10 +1669,6 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  if (!fs.existsSync(sentryCliPath)) {
-    return;
-  }
-
   const { bundlePath, sourcemapPath } = await prepareSentryUploadArtifacts(
     bundleName,
     outputFolder,
@@ -1677,8 +1678,8 @@ export async function uploadSourcemapForSentry(
     sourcemapPath,
     sentryOptions,
   );
-  const useStandaloneSourcemapsCommand =
-    supportsStandaloneSentrySourcemapsUpload(sentryCliPath);
+  const sentryCli = probeSentryCli(sentryCliPath);
+  const useStandaloneSourcemapsCommand = sentryCli.standalone;
 
   if (uploadMode.type === 'release') {
     uploadSourcemapsWithRelease({
@@ -1693,19 +1694,8 @@ export async function uploadSourcemapForSentry(
   }
 
   console.log(t('uploadingSourcemap'));
-  if (
-    !useStandaloneSourcemapsCommand ||
-    !supportsSentryDebugIdReference(sentryCliPath)
-  ) {
-    const explicitRelease =
-      resolveSentryReleaseFromValues(
-        sentryOptions.sentryRelease,
-        sentryOptions.sentryDist,
-      ) ??
-      resolveSentryReleaseFromValues(
-        process.env.SENTRY_RELEASE,
-        process.env.SENTRY_DIST,
-      );
+  if (!sentryCli.debugIdReference) {
+    const explicitRelease = explicitSentryRelease(sentryOptions);
     if (!explicitRelease) {
       throw new Error(
         '[pushy/sentry] sentry-cli does not support Debug ID source map upload. ' +
@@ -1740,15 +1730,7 @@ export async function uploadSourcemapForSentry(
     return;
   }
 
-  const explicitRelease =
-    resolveSentryReleaseFromValues(
-      sentryOptions.sentryRelease,
-      sentryOptions.sentryDist,
-    ) ??
-    resolveSentryReleaseFromValues(
-      process.env.SENTRY_RELEASE,
-      process.env.SENTRY_DIST,
-    );
+  const explicitRelease = explicitSentryRelease(sentryOptions);
   if (!explicitRelease) {
     assertSuccessfulSyncProcess(debugIdResult, sentryCliPath);
     return;

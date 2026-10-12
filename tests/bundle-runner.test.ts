@@ -15,6 +15,7 @@ import {
   resolveHermesCommand,
   resolveSentryUploadMode,
   summarizeHermescStderr,
+  uploadSourcemapForSentry,
 } from '../src/bundle-runner';
 
 function mkTempDir(prefix: string): string {
@@ -743,5 +744,133 @@ describe('detectHermesEnabled', () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+});
+
+describe('uploadSourcemapForSentry', () => {
+  // A fake @sentry/cli: logs each invocation and answers `--help` according
+  // to FAKE_SENTRY_HELP (full | legacy-flags | missing).
+  const FAKE_CLI = `
+const fs = require('fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.FAKE_SENTRY_LOG, JSON.stringify(args) + '\\n');
+if (args.includes('--help')) {
+  if (process.env.FAKE_SENTRY_HELP === 'missing') process.exit(1);
+  console.log(process.env.FAKE_SENTRY_HELP === 'full'
+    ? 'Usage: --release --dist --debug-id-reference'
+    : 'Usage: --release --dist');
+  process.exit(0);
+}
+if (args.includes('--debug-id-reference') && process.env.FAKE_SENTRY_DEBUG_FAIL) {
+  process.exit(2);
+}
+`;
+  let root = '';
+  let cwd = '';
+  const savedEnv: Record<string, string | undefined> = {};
+  const envKeys = [
+    'FAKE_SENTRY_LOG',
+    'FAKE_SENTRY_HELP',
+    'FAKE_SENTRY_DEBUG_FAIL',
+    'SENTRY_RELEASE',
+    'SENTRY_DIST',
+  ];
+  let logSpy: ReturnType<typeof spyOn>;
+  let warnSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-sentry-'));
+    const bin = path.join(root, 'node_modules', '@sentry', 'cli', 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'sentry-cli'), FAKE_CLI);
+    fs.mkdirSync(path.join(root, 'out'));
+    fs.writeFileSync(path.join(root, 'out', 'index.bundlejs'), 'code');
+    for (const key of envKeys) {
+      savedEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+    process.env.FAKE_SENTRY_LOG = path.join(root, 'calls.log');
+    cwd = process.cwd();
+    process.chdir(root);
+    logSpy = spyOn(console, 'log').mockImplementation(() => {});
+    warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.chdir(cwd);
+    for (const key of envKeys) {
+      if (savedEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = savedEnv[key];
+    }
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const writeMap = (extra: Record<string, unknown> = {}) =>
+    fs.writeFileSync(
+      path.join(root, 'out', 'index.bundlejs.map'),
+      JSON.stringify({ version: 3, sources: [], mappings: '', ...extra }),
+    );
+  const calls = () =>
+    fs
+      .readFileSync(path.join(root, 'calls.log'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => (JSON.parse(line) as string[]).slice(0, 4).join(' '));
+  const upload = (options = {}) =>
+    uploadSourcemapForSentry(
+      'index.bundlejs',
+      path.join(root, 'out'),
+      'index.bundlejs.map',
+      'ios',
+      options,
+    );
+
+  test('uploads by Debug ID after a single --help probe', async () => {
+    writeMap({ debugId: 'abc' });
+    process.env.FAKE_SENTRY_HELP = 'full';
+    await upload();
+    expect(calls()).toEqual([
+      'sourcemaps upload --help',
+      'sourcemaps upload --debug-id-reference --strip-prefix',
+    ]);
+  });
+
+  test('falls back to SENTRY_RELEASE when --debug-id-reference is unsupported', async () => {
+    writeMap({ debugId: 'abc' });
+    process.env.FAKE_SENTRY_HELP = 'legacy-flags';
+    process.env.SENTRY_RELEASE = 'r1';
+    await upload();
+    expect(calls()).toEqual([
+      'sourcemaps upload --help',
+      'releases set-commits r1 --auto',
+      'sourcemaps upload --release r1',
+    ]);
+  });
+
+  test('uses releases files upload-sourcemaps without the standalone command', async () => {
+    writeMap();
+    process.env.FAKE_SENTRY_HELP = 'missing';
+    await upload({ sentryRelease: 'r2' });
+    expect(calls()).toEqual([
+      'sourcemaps upload --help',
+      'releases set-commits r2 --auto',
+      'releases files r2 upload-sourcemaps',
+    ]);
+  });
+
+  test('retries a failed Debug ID upload with SENTRY_RELEASE', async () => {
+    writeMap({ debugId: 'abc' });
+    process.env.FAKE_SENTRY_HELP = 'full';
+    process.env.FAKE_SENTRY_DEBUG_FAIL = '1';
+    process.env.SENTRY_RELEASE = 'r3';
+    await upload();
+    expect(calls()).toEqual([
+      'sourcemaps upload --help',
+      'sourcemaps upload --debug-id-reference --strip-prefix',
+      'releases set-commits r3 --auto',
+      'sourcemaps upload --release r3',
+    ]);
   });
 });
