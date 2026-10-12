@@ -159,9 +159,12 @@ export function createOutputZip(output: string) {
       resolve(void 0);
     });
   });
+  // a write error can come while the caller is still building entries, long
+  // before it awaits writePromise: mark it handled now (awaiting the original
+  // promise still rejects) so it never surfaces as an unhandled rejection
+  writePromise.catch(() => {});
   // 失败时释放输出 fd 并删掉半成品,避免残留一个截断的包
   const abort = async () => {
-    writePromise.catch(() => {});
     zipfile.outputStream.unpipe(writeStream);
     // yazl 的 outputStream 类型声明缺 destroy,运行时是 PassThrough
     (zipfile.outputStream as unknown as { destroy(): void }).destroy();
