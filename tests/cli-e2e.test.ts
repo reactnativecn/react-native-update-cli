@@ -97,6 +97,9 @@ function createMockServer(requests: string[], options: MockServerOptions = {}) {
       }
 
       if (url === '/oss/upload') {
+        // read the form like a real store: answering mid-body made the
+        // client's write fail with EPIPE (and retry) under load
+        await readBody(request);
         response.writeHead(204, { connection: 'close' });
         response.end();
         return;
