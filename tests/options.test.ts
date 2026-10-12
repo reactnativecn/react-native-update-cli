@@ -4,7 +4,6 @@ import {
   getOptionalStringOption,
   getStringListOption,
   getStringOption,
-  toObjectState,
 } from '../src/utils/options';
 
 describe('utils/options', () => {
@@ -48,14 +47,5 @@ describe('utils/options', () => {
     expect(getStringListOption({ ids: 10 }, 'ids')).toEqual(['10']);
     expect(getStringListOption({ ids: '' }, 'ids')).toBeUndefined();
     expect(getStringListOption({}, 'ids')).toBeUndefined();
-  });
-
-  test('toObjectState returns object value or fallback', () => {
-    const fallback = { ok: true };
-    const source = { name: 'app' };
-
-    expect(toObjectState(source, fallback)).toEqual(source);
-    expect(toObjectState(null, fallback)).toEqual(fallback);
-    expect(toObjectState('invalid', fallback)).toEqual(fallback);
   });
 });

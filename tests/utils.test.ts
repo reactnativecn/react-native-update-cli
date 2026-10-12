@@ -123,43 +123,6 @@ describe('translateOptions', () => {
     const result = translateOptions(options);
     expect(result.output).toBe('test-test.ppk');
   });
-
-  describe('translateOptions with map', () => {
-    test('maps keys according to the provided map', () => {
-      const options = { oldKey: 'value', keepKey: 'keep' };
-      const map = { oldKey: 'newKey' };
-      const result = translateOptions(options, map);
-      expect(result).toEqual({ newKey: 'value', keepKey: 'keep' });
-    });
-
-    test('ignores missing keys in options', () => {
-      const options = { existingKey: 'value' };
-      const map = { missingKey: 'newKey' };
-      const result = translateOptions(options, map);
-      expect(result).toEqual({ existingKey: 'value' });
-    });
-
-    test('maps multiple keys', () => {
-      const options = { a: 1, b: 2, c: 3 };
-      const map = { a: 'alpha', b: 'beta' };
-      const result = translateOptions(options, map);
-      expect(result).toEqual({ alpha: 1, beta: 2, c: 3 });
-    });
-
-    test('handles mapping to existing keys by overwriting', () => {
-      const options = { a: 1, b: 2 };
-      const map = { a: 'b' };
-      const result = translateOptions(options, map);
-      expect(result).toEqual({ b: 1 });
-    });
-
-    test('handles undefined values', () => {
-      const options = { a: undefined, b: null };
-      const map = { a: 'newA', b: 'newB' };
-      const result = translateOptions(options, map);
-      expect(result).toEqual({ a: undefined, newB: null });
-    });
-  });
 });
 
 describe('isNonInteractive', () => {

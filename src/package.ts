@@ -168,7 +168,7 @@ async function uploadNativePackage(
   const slimPackagePath = path.join(tempRoot, `package${config.extension}`);
   try {
     await createSlimNativePackage(filePath, slimPackagePath, config.platform);
-    const { hash } = await uploadFile(slimPackagePath, undefined, appId);
+    const { hash } = await uploadFile(slimPackagePath, appId);
     // where the bundle sits inside the uploaded (slim) archive, so a later
     // `bundle` that falls back to this package as hermes base fetches only
     // the bundle with one HTTP Range request. Harmony .app nests a second
@@ -452,19 +452,6 @@ export const packageCommands = {
         return String(selectedPackage.id);
       });
     }
-
-    // Confirm deletion
-    // const confirmDelete = await question(
-    //   t('confirmDeletePackage', { packageId }),
-    // );
-
-    // if (
-    //   confirmDelete.toLowerCase() !== 'y' &&
-    //   confirmDelete.toLowerCase() !== 'yes'
-    // ) {
-    //   console.log(t('cancelled'));
-    //   return;
-    // }
 
     try {
       if (packageIds.length === 1) {

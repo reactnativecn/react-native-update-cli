@@ -428,11 +428,7 @@ async function sendChunks(
   }
 }
 
-export async function uploadFile(
-  fn: string,
-  key?: string,
-  appId?: string | number,
-) {
+export async function uploadFile(fn: string, appId?: string | number) {
   const fileSize = fs.statSync(fn).size;
   // appId 用于服务端路由:绑定了自托管节点(rnu-node)的应用,
   // 上传指令会指向节点或其对象存储。chunked + size 让支持的服务端(GCS)
@@ -440,7 +436,8 @@ export async function uploadFile(
   const resp = await post('/upload', {
     ext: path.extname(fn),
     ...(appId ? { appId: Number(appId) } : {}),
-    ...(key ? {} : { chunked: true, size: fileSize }),
+    chunked: true,
+    size: fileSize,
   });
   const { url, backupUrl, formData, maxSize } = resp;
   let realUrl = url;
@@ -459,7 +456,6 @@ export async function uploadFile(
         realUrl = backupUrl;
       }
     }
-    // console.log({realUrl});
   }
 
   if (maxSize && fileSize > filesizeParser(maxSize)) {
@@ -528,7 +524,7 @@ export async function uploadFile(
         stream: fileStream,
       });
 
-  if (resp.chunked && !key) {
+  if (resp.chunked) {
     try {
       await sendChunks(fn, realUrl, fileSize, bar, resp.chunked, postForm);
     } catch (error) {
@@ -551,7 +547,7 @@ export async function uploadFile(
       realUrl,
       fileSize,
       bar,
-      postForm(key ? { ...formData, key } : formData, fileSize),
+      postForm(formData, fileSize),
     );
   } catch (error) {
     return rethrowUploadError(error);
@@ -564,8 +560,7 @@ export async function uploadFile(
     );
   }
 
-  // const body = await response.json();
-  return { hash: key || formData.key };
+  return { hash: formData.key };
 }
 
 /**

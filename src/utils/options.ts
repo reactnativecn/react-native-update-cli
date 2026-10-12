@@ -66,13 +66,3 @@ export function getStringListOption(
 
   return result.length > 0 ? result : undefined;
 }
-
-export function toObjectState<T extends Record<string, unknown>>(
-  value: unknown,
-  fallback: T,
-): T {
-  if (value && typeof value === 'object') {
-    return value as T;
-  }
-  return fallback;
-}

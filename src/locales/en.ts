@@ -176,8 +176,6 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   unnamed: '(Unnamed)',
   dryRun: 'Below is the dry-run result, no actual operation will be performed:',
   usingCustomVersion: 'Using custom version: {{version}}',
-  confirmDeletePackage:
-    'Confirm delete native package {{packageId}}? This operation cannot be undone (Y/N):',
   deletePackageSuccess: 'Native package {{packageId}} deleted successfully',
   deletePackagesSuccess: 'Deleted {{count}} native packages: {{packageIds}}',
   deletePackageError:

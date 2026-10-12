@@ -581,16 +581,14 @@ export const versionCommands = {
     // fail the publish, only lose the archive.
     let sourceMapUploadError: unknown;
     const [{ hash }, bundleMeta, commit, sourceMapUpload] = await Promise.all([
-      uploadFile(fn, undefined, appId),
+      uploadFile(fn, appId),
       describePpkBundle(fn, options.hermesBase),
       getCommitInfo(),
       uploadSourcemapPath
-        ? uploadFile(uploadSourcemapPath, undefined, appId).catch(
-            (error: unknown) => {
-              sourceMapUploadError = error;
-              return undefined;
-            },
-          )
+        ? uploadFile(uploadSourcemapPath, appId).catch((error: unknown) => {
+            sourceMapUploadError = error;
+            return undefined;
+          })
         : Promise.resolve(undefined),
     ]).finally(() => {
       // the packed copy only exists for the upload; a failed ppk upload must
