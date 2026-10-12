@@ -248,7 +248,7 @@ async function proxyScenario() {
       });
     });
   // tunnels to the mock host: the API client (undici), the registry check
-  // (http.get) and the upload (node-fetch) each open their own
+  // (http.get) and the upload (http.request) each open their own
   const tunnels = () =>
     seenByProxy.filter((line) => line === `CONNECT 127.0.0.1:${apiPort}`)
       .length;

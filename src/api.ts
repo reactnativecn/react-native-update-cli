@@ -1,9 +1,5 @@
 import filesizeParser from 'filesize-parser';
 import fs from 'fs';
-import type {
-  RequestInit as NodeFetchRequestInit,
-  Response as NodeFetchResponse,
-} from 'node-fetch';
 import path from 'path';
 import type ProgressBar from 'progress';
 import packageJson from '../package.json';
@@ -20,6 +16,12 @@ import {
   resolveProxy,
   runtimeFetch,
 } from './utils/runtime';
+import {
+  multipartRequest,
+  sendUploadRequest,
+  type UploadRequest,
+  type UploadResponse,
+} from './utils/upload-request';
 
 let session: Session | undefined;
 let savedSession: Session | undefined;
@@ -296,17 +298,6 @@ class UploadTimeoutError extends Error {
   }
 }
 
-/**
- * node-fetch is only needed for the streaming multipart / PUT upload below
- * (the built-in fetch cannot stream a form-data body). Loading it eagerly
- * pulled whatwg-url → punycode into every command, which Node ≥ 21 greets
- * with a DEP0040 deprecation warning on stderr; so it is loaded on first use.
- */
-function loadNodeFetch(): typeof import('node-fetch').default {
-  const mod = require('node-fetch');
-  return (mod.default ?? mod) as typeof import('node-fetch').default;
-}
-
 /** A byte range of the file (end exclusive) and its retry budget. */
 interface UploadSlice {
   start: number;
@@ -324,11 +315,10 @@ async function sendUpload(
   realUrl: string,
   fileSize: number,
   bar: ProgressBar,
-  buildRequest: (fileStream: fs.ReadStream) => NodeFetchRequestInit,
+  buildRequest: (fileStream: fs.ReadStream) => UploadRequest,
   slice: UploadSlice = { start: 0, end: fileSize, retries: UPLOAD_MAX_RETRIES },
-): Promise<NodeFetchResponse> {
+): Promise<UploadResponse> {
   const timeoutMs = uploadTimeoutMs(slice.end - slice.start);
-  const nodeFetch = loadNodeFetch();
   // HTTP(S)_PROXY / NO_PROXY, like every other request of the CLI
   const agent = proxyAgentFor(realUrl);
   for (let attempt = 0; ; attempt++) {
@@ -349,10 +339,10 @@ async function sendUpload(
       bar.tick(data.length);
     });
     try {
-      return await nodeFetch(realUrl, {
-        ...buildRequest(fileStream),
+      return await sendUploadRequest(realUrl, buildRequest(fileStream), {
         agent,
         signal: controller.signal,
+        userAgent,
       });
     } catch (rawError) {
       fileStream.destroy();
@@ -399,7 +389,7 @@ async function sendChunks(
   postForm: (
     fields: Record<string, string>,
     byteCount: number,
-  ) => (fileStream: fs.ReadStream) => NodeFetchRequestInit,
+  ) => (fileStream: fs.ReadStream) => UploadRequest,
 ): Promise<void> {
   let next = 0;
   let failure: unknown;
@@ -483,7 +473,7 @@ export async function uploadFile(
     );
   }
 
-  // progress/form-data are only needed here; keep them off the startup path
+  // progress is only needed here; keep it off the startup path
   const progressModule = require('progress');
   const ProgressBarImpl = (progressModule.default ??
     progressModule) as typeof import('progress');
@@ -506,7 +496,7 @@ export async function uploadFile(
 
   // 自托管节点的 s3 直传:服务端下发预签名 PUT,字节直达用户的对象存储
   if (resp.method === 'PUT') {
-    let putRes: NodeFetchResponse;
+    let putRes: UploadResponse;
     try {
       putRes = await sendUpload(fn, realUrl, fileSize, bar, (fileStream) => ({
         method: 'PUT',
@@ -529,23 +519,14 @@ export async function uploadFile(
     return { hash: resp.key };
   }
 
-  const formDataModule = require('form-data');
-  const FormData = (formDataModule.default ??
-    formDataModule) as typeof import('form-data');
   const postForm =
     (fields: Record<string, string>, byteCount: number) =>
-    (fileStream: fs.ReadStream): NodeFetchRequestInit => {
-      const form = new FormData();
-      for (const [k, v] of Object.entries(fields)) {
-        form.append(k, v);
-      }
-      // With every part's length known node-fetch sends Content-Length
-      // instead of a chunked body: what object stores expect, and the only
-      // framing that survives http-proxy-agent's rewrite of the buffered
-      // request head.
-      form.append('file', fileStream, { knownLength: byteCount });
-      return { method: 'POST', body: form };
-    };
+    (fileStream: fs.ReadStream): UploadRequest =>
+      multipartRequest(fields, {
+        name: fn,
+        size: byteCount,
+        stream: fileStream,
+      });
 
   if (resp.chunked && !key) {
     try {
@@ -563,7 +544,7 @@ export async function uploadFile(
     return { hash: resp.chunked.key as string };
   }
 
-  let res: NodeFetchResponse;
+  let res: UploadResponse;
   try {
     res = await sendUpload(
       fn,
