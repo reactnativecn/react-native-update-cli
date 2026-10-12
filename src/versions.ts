@@ -10,13 +10,13 @@ import type { Package, Platform, Version } from './types';
 import { isNonInteractive, loadTtyTable, question } from './utils';
 import { getDepVersions } from './utils/dep-versions';
 import { getCommitInfo } from './utils/git';
+import { sha256Hex } from './utils/hash';
 import {
   BUNDLE_ENTRY_NAMES,
   cachePut,
   extractBundleFromArchive,
   type HermesBaseMeta,
   reportedBytecodeVersion,
-  sha256Hex,
   truncateHermesBaseDetail,
 } from './utils/hermes-base';
 import { t } from './utils/i18n';

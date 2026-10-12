@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import fs from 'fs';
 import { npm, yarn } from 'global-dirs';
 import os from 'os';
@@ -9,6 +8,7 @@ import { resolveNativePackageEntry } from './native-package';
 import type { CommandContext, Platform } from './types';
 import { translateOptions } from './utils';
 import { isPPKBundleFileName, scriptName, tempDir } from './utils/constants';
+import { sha256File } from './utils/hash';
 import {
   type HbcTransformMeta,
   transformHbcFile,
@@ -211,14 +211,6 @@ async function bundleSourceFile(
   return outputPath;
 }
 
-async function hashFile(filePath: string): Promise<string> {
-  const hash = createHash('sha256');
-  for await (const chunk of fs.createReadStream(filePath)) {
-    hash.update(chunk as Buffer);
-  }
-  return hash.digest('hex');
-}
-
 async function filesEqual(leftPath: string, rightPath: string) {
   const [leftStat, rightStat] = await Promise.all([
     fs.promises.stat(leftPath),
@@ -228,8 +220,8 @@ async function filesEqual(leftPath: string, rightPath: string) {
     return false;
   }
   const [leftHash, rightHash] = await Promise.all([
-    hashFile(leftPath),
-    hashFile(rightPath),
+    sha256File(leftPath),
+    sha256File(rightPath),
   ]);
   return leftHash === rightHash;
 }

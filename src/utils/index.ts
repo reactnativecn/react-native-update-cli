@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import { compare, satisfies } from 'compare-versions';
-import { createHash } from 'crypto';
 import path from 'path';
 import type { Root as ProtobufRoot } from 'protobufjs';
 import { read } from 'read';
@@ -8,6 +7,7 @@ import pkg from '../../package.json';
 import { checkPlugins } from './check-plugin';
 import { IS_CRESC } from './constants';
 import { getDepVersion } from './dep-versions';
+import { sha256Hex as sha256 } from './hash';
 import { t } from './i18n';
 import { readFirstEntry } from './zip-entries';
 
@@ -141,10 +141,6 @@ export function translateOptions<T extends Record<string, unknown>>(
 // stay byte-identical with what the client hashes at runtime (its embedded
 // bundle, which is also the pdiff source) — the server compares the two to
 // decide pdiff applicability. Raw bytes, no normalization of any kind.
-function sha256(data: Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
-
 function requireBundle(
   bundleFile: Buffer | undefined,
   packageType: string,

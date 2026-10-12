@@ -6,12 +6,12 @@ import { fromRandomAccessReader, type ZipFile as YauzlZipFile } from 'yauzl';
 import { ZipFile } from 'yazl';
 import { deflateRawSync, inflateRawSync } from 'zlib';
 import { removeSync } from '../src/utils/fs-helpers';
+import { sha256Hex } from '../src/utils/hash';
 import {
   BundleHashMismatchError,
   bundleEntryMatcher,
   fetchBaseBundle,
   HbcVersionMismatchError,
-  sha256Hex,
 } from '../src/utils/hermes-base';
 import {
   bundleLocationFields,

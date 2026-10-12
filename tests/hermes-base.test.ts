@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 import { ZipFile } from 'yazl';
 import { ensureDirSync, removeSync } from '../src/utils/fs-helpers';
+import { sha256Hex } from '../src/utils/hash';
 import {
   cacheDir,
   cacheLookup,
@@ -21,7 +22,6 @@ import {
   normalizeDisassemblyLine,
   probeHbcVersion,
   resolveHermesBase,
-  sha256Hex,
   tmpDir,
   truncateHermesBaseDetail,
   verifyHermesBaseEquivalence,

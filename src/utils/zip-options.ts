@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import path from 'path';
+import { HBC_MAGIC } from './hbcTransform';
 
 export type ZipEntryOptions = {
   compress?: boolean;
@@ -39,9 +40,6 @@ const alreadyCompressedExtensions = new Set([
   '.zst',
 ]);
 
-const HERMES_MAGIC = Buffer.from([
-  0xc6, 0x1f, 0xbc, 0x03, 0xc1, 0x03, 0x19, 0x1f,
-]);
 const HERMES_DELTA_MAGIC = Buffer.from([
   0x39, 0xe0, 0x43, 0xfc, 0x3e, 0xfc, 0xe6, 0xe0,
 ]);
@@ -54,9 +52,7 @@ function startsWith(bytes: Buffer, signature: Buffer): boolean {
 }
 
 function hasHermesBytecodeMagic(bytes: Buffer): boolean {
-  return (
-    startsWith(bytes, HERMES_MAGIC) || startsWith(bytes, HERMES_DELTA_MAGIC)
-  );
+  return startsWith(bytes, HBC_MAGIC) || startsWith(bytes, HERMES_DELTA_MAGIC);
 }
 
 function hasAlreadyCompressedMagic(bytes: Buffer): boolean {
