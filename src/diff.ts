@@ -356,6 +356,41 @@ async function buildStreamBundlePatch(
   };
 }
 
+/** origin 与 new 中较大者达到流式阈值时走流式 diff */
+function exceedsStreamThreshold(
+  options: BundleDiffOptions,
+  originSource: BundleSource | undefined,
+  newSize: number,
+): originSource is BundleSource {
+  return (
+    !!options.streamThresholdBytes &&
+    !!originSource &&
+    Math.max(bundleSourceSize(originSource), newSize) >=
+      options.streamThresholdBytes
+  );
+}
+
+/** 把 zip 条目落盘到 workRoot 下的临时目录,作为文件型 BundleSource */
+async function materializeEntry(
+  entry: Entry,
+  zipFile: YauzlZipFile,
+  workRoot: string,
+  prefix: string,
+): Promise<BundleSource> {
+  const filePath = path.join(
+    fs.mkdtempSync(path.join(workRoot, prefix)),
+    'bundle.bin',
+  );
+  const startedAt = performance.now();
+  await writeEntry(entry, zipFile, filePath);
+  return {
+    kind: 'file',
+    path: filePath,
+    size: entry.uncompressedSize,
+    materializeDurationMs: performance.now() - startedAt,
+  };
+}
+
 /**
  * 生成 bundle patch:默认现状路径;开启 hbcTransform 时对 Hermes bundle
  * 做双候选择优(baseline vs 变换域 + 元数据开销),且变换候选必须通过
@@ -369,10 +404,7 @@ async function buildBundlePatch(
   workRoot: string,
 ): Promise<BundlePatchResult> {
   if (
-    options.streamThresholdBytes &&
-    originSource &&
-    Math.max(bundleSourceSize(originSource), bundleSourceSize(newSource)) >=
-      options.streamThresholdBytes
+    exceedsStreamThreshold(options, originSource, bundleSourceSize(newSource))
   ) {
     return buildStreamBundlePatch(originSource, newSource, options, workRoot);
   }
@@ -434,26 +466,13 @@ async function addBundlePatch(
   hbcTransformMetas: Record<string, HbcTransformMeta>,
   workRoot: string,
 ) {
-  const shouldStream =
-    !!bundleOptions.streamThresholdBytes &&
-    !!originSource &&
-    Math.max(bundleSourceSize(originSource), entry.uncompressedSize) >=
-      bundleOptions.streamThresholdBytes;
-  let newSource: BundleSource;
-  if (shouldStream) {
-    const nextRoot = fs.mkdtempSync(path.join(workRoot, 'next-'));
-    const nextPath = path.join(nextRoot, 'bundle.bin');
-    const startedAt = performance.now();
-    await writeEntry(entry, nextZipfile, nextPath);
-    newSource = {
-      kind: 'file',
-      path: nextPath,
-      size: entry.uncompressedSize,
-      materializeDurationMs: performance.now() - startedAt,
-    };
-  } else {
-    newSource = { kind: 'buffer', data: await readEntry(entry, nextZipfile) };
-  }
+  const newSource: BundleSource = exceedsStreamThreshold(
+    bundleOptions,
+    originSource,
+    entry.uncompressedSize,
+  )
+    ? await materializeEntry(entry, nextZipfile, workRoot, 'next-')
+    : { kind: 'buffer', data: await readEntry(entry, nextZipfile) };
 
   const { patch, hbcTransform } = await buildBundlePatch(
     diffFn,
@@ -482,16 +501,7 @@ async function readOriginBundleSource(
   if (!bundleOptions.streamThresholdBytes) {
     return { kind: 'buffer', data: await readEntry(entry, zipFile) };
   }
-  const originRoot = fs.mkdtempSync(path.join(workRoot, 'origin-'));
-  const originPath = path.join(originRoot, 'bundle.bin');
-  const startedAt = performance.now();
-  await writeEntry(entry, zipFile, originPath);
-  return {
-    kind: 'file',
-    path: originPath,
-    size: entry.uncompressedSize,
-    materializeDurationMs: performance.now() - startedAt,
-  };
+  return materializeEntry(entry, zipFile, workRoot, 'origin-');
 }
 
 async function addFileFromZipEntry(
