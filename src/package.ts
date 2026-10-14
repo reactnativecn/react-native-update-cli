@@ -27,6 +27,15 @@ import { t } from './utils/i18n';
 import { getBooleanOption, getStringListOption } from './utils/options';
 import { bundleLocationFields, locateZipEntry } from './utils/zip-range';
 
+// parse* output is JSON so the bundleHash (content fingerprint) can be piped
+// into jq; the raw bundle bytes are dropped — a Buffer preview is just noise.
+function printPackageInfo({
+  bundleFile: _bundleFile,
+  ...info
+}: Record<string, unknown>) {
+  console.log(JSON.stringify(info, null, 2));
+}
+
 type PackageCommandOptions = Record<string, unknown> & {
   appId?: string;
   appKey?: string;
@@ -386,28 +395,28 @@ export const packageCommands = {
     if (!fn?.endsWith('.app')) {
       throw new Error(t('usageParseApp'));
     }
-    console.log(await getAppInfo(fn));
+    printPackageInfo(await getAppInfo(fn));
   },
   parseIpa: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn?.endsWith('.ipa')) {
       throw new Error(t('usageParseIpa'));
     }
-    console.log(await getIpaInfo(fn));
+    printPackageInfo(await getIpaInfo(fn));
   },
   parseApk: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn?.endsWith('.apk')) {
       throw new Error(t('usageParseApk'));
     }
-    console.log(await getApkInfo(fn));
+    printPackageInfo(await getApkInfo(fn));
   },
   parseAab: async ({ args }: { args: string[] }) => {
     const fn = args[0];
     if (!fn?.endsWith('.aab')) {
       throw new Error(t('usageParseAab'));
     }
-    console.log(await getAabInfo(fn));
+    printPackageInfo(await getAabInfo(fn));
   },
   extractApk: async ({
     args,

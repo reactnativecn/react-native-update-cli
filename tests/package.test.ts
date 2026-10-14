@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { createHash } from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -176,6 +177,48 @@ describe('packageCommands native upload', () => {
 
     expect(fs.existsSync(uploadedPath)).toBe(false);
     expect(postSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('packageCommands parse*', () => {
+  let tempDir: string;
+  let consoleSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-parse-'));
+    consoleSpy = spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  test('prints JSON with bundleHash and without the bundle bytes', async () => {
+    const appPath = path.join(tempDir, 'demo.app');
+    await createZip(appPath, {
+      'resources/rawfile/bundle.harmony.js': 'console.log("hi");',
+      'resources/rawfile/meta.json': JSON.stringify({
+        versionName: '1.2.3',
+        pushy_build_time: 1700000000000,
+      }),
+      'resources/rawfile/update.json': JSON.stringify({
+        harmony: { appId: 7, appKey: 'k' },
+      }),
+    });
+
+    await packageCommands.parseApp({ args: [appPath] });
+
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(consoleSpy.mock.calls[0][0])).toEqual({
+      versionName: '1.2.3',
+      buildTime: 1700000000000,
+      bundleHash: createHash('sha256')
+        .update('console.log("hi");')
+        .digest('hex'),
+      appId: 7,
+      appKey: 'k',
+    });
   });
 });
 
