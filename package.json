@@ -59,7 +59,7 @@
   "bugs": {
     "url": "https://github.com/reactnativecn/react-native-update-cli/issues"
   },
-  "homepage": "https://github.com/reactnativecn/react-native-update-cli",
+  "homepage": "https://cresc.dev/docs/cli",
   "dependencies": {
     "bplist-parser": "^0.3.2",
     "chalk": "4",
