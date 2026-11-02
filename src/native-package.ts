@@ -1,16 +1,20 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { Readable } from 'stream';
+import { promisify } from 'util';
 import {
   type Entry,
   open as openZipFile,
   type ZipFile as YauzlZipFile,
 } from 'yauzl';
+import zlib from 'zlib';
 import type { Platform } from './types';
 import { ensureDir, remove } from './utils/fs-helpers';
 import {
   createOutputZip,
   openEntryStream,
+  readEntry,
   writeEntry,
 } from './utils/zip-entries';
 import { fitsRawZip, RawZipWriter } from './utils/zip-raw-writer';
@@ -72,9 +76,22 @@ export function resolveNativePackageEntry(
   return nativePackageRules[platform].resolveEntry(entryName);
 }
 
+/**
+ * Entries kept for the server only: it maps resource names to their (shortened)
+ * paths through resources.arsc when building a package diff. They are never a
+ * diff origin, so they stay out of resolveNativePackageEntry.
+ */
+const serverOnlyEntries: Partial<Record<Platform, string>> = {
+  android: 'resources.arsc',
+};
+
+const deflateRaw = promisify(zlib.deflateRaw);
+
 /** Where the kept entries go: a raw copy (default) or a yazl repack. */
 interface SlimSink {
   copyEntry(sourceZip: YauzlZipFile, entry: Entry): Promise<void>;
+  /** like copyEntry, but an entry the source stores uncompressed is deflated */
+  copyEntryDeflated(sourceZip: YauzlZipFile, entry: Entry): Promise<void>;
   /** add a local file under `fileName`, dated like `like` */
   addFile(filePath: string, fileName: string, like: Entry): Promise<void>;
   end(): Promise<void>;
@@ -97,6 +114,27 @@ class RawCopySink implements SlimSink {
     });
     await this.writer.addRawEntry(entry, readStream);
   }
+  async copyEntryDeflated(
+    sourceZip: YauzlZipFile,
+    entry: Entry,
+  ): Promise<void> {
+    if (entry.compressionMethod !== 0) {
+      return this.copyEntry(sourceZip, entry);
+    }
+    const deflated = await deflateRaw(await readEntry(entry, sourceZip), {
+      level: zlib.constants.Z_BEST_COMPRESSION,
+    });
+    await this.writer.addRawEntry(
+      {
+        ...entry,
+        compressionMethod: 8,
+        compressedSize: deflated.length,
+        // deflate strength bits of a stored entry mean nothing
+        generalPurposeBitFlag: 0,
+      },
+      Readable.from([deflated]),
+    );
+  }
   addFile(filePath: string, fileName: string, like: Entry): Promise<void> {
     // a nested slim archive is a zip of deflated entries: storing it as-is
     // loses nothing and skips another pass over its bytes
@@ -116,13 +154,23 @@ class RepackSink implements SlimSink {
   constructor(output: string) {
     this.output = createOutputZip(output);
   }
-  async copyEntry(sourceZip: YauzlZipFile, entry: Entry): Promise<void> {
+  copyEntry(sourceZip: YauzlZipFile, entry: Entry): Promise<void> {
+    return this.add(sourceZip, entry, entry.compressionMethod !== 0);
+  }
+  copyEntryDeflated(sourceZip: YauzlZipFile, entry: Entry): Promise<void> {
+    return this.add(sourceZip, entry, true);
+  }
+  private async add(
+    sourceZip: YauzlZipFile,
+    entry: Entry,
+    compress: boolean,
+  ): Promise<void> {
     const readStream = await openEntryStream(entry, sourceZip);
     await new Promise<void>((resolve, reject) => {
       readStream.once('error', reject);
       readStream.once('end', () => resolve());
       this.output.zipfile.addReadStream(readStream, entry.fileName, {
-        compress: entry.compressionMethod !== 0,
+        compress,
         mtime: entry.getLastModDate(),
       });
     });
@@ -248,6 +296,9 @@ async function filterNativePackageArchive(
             if (resolvedEntry.kind === 'bundle') {
               includedBundles += 1;
             }
+          } else if (entry.fileName === serverOnlyEntries[platform]) {
+            await sink.copyEntryDeflated(sourceZip, entry);
+            includedEntries += 1;
           }
           sourceZip.readEntry();
         } catch (error) {
@@ -270,7 +321,7 @@ async function filterNativePackageArchive(
 
 /**
  * Repack a native package with only the bundle and resources required by
- * package-origin diffs. Entry names and nested Harmony HAP structure are kept.
+ * package-origin diffs, plus the server-only entries. Entry names and nested Harmony HAP structure are kept.
  */
 export async function createSlimNativePackage(
   source: string,

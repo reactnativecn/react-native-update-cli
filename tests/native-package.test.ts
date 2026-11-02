@@ -97,8 +97,29 @@ describe('native package baseline extraction', () => {
       'assets/data/config.json',
       'assets/index.android.bundle',
       'res/drawable-xhdpi-v4/icon.webp',
+      'resources.arsc',
     ]);
     expect(files['assets/index.android.bundle'].toString()).toBe('bundle');
+    expect(files['resources.arsc'].toString()).toBe('resource-table');
+  });
+
+  test('resources.arsc is kept for the server but is not a diff origin', () => {
+    expect(resolveNativePackageEntry('android', 'resources.arsc')).toBe(
+      undefined,
+    );
+  });
+
+  test('keeps resources.arsc only for Android', async () => {
+    const source = path.join(tempRoot, 'source.ipa');
+    const output = path.join(tempRoot, 'slim.ipa');
+    await createZip(source, {
+      'Payload/Test.app/main.jsbundle': 'bundle',
+      'resources.arsc': 'resource-table',
+    });
+    await createSlimNativePackage(source, output, 'ios');
+    expect(Object.keys(await readZipFiles(output))).toEqual([
+      'Payload/Test.app/main.jsbundle',
+    ]);
   });
 
   test('keeps IPA paths while dropping native executables and frameworks', async () => {
@@ -256,4 +277,35 @@ describe('raw-copy slim packages', () => {
     ]);
     expect(files['assets/stored.bin'].equals(Buffer.alloc(4096, 7))).toBe(true);
   });
+
+  for (const repack of [false, true]) {
+    test(`deflates a stored resources.arsc (repack: ${repack})`, async () => {
+      const source = path.join(tempRoot, 'source.apk');
+      const output = path.join(tempRoot, 'slim.apk');
+      const table = Buffer.from('resource-table '.repeat(4000));
+      await new Promise<void>((resolve, reject) => {
+        const zip = new YazlZipFile();
+        zip.outputStream
+          .pipe(fs.createWriteStream(source))
+          .once('error', reject)
+          .once('close', () => resolve());
+        zip.addBuffer(Buffer.from('bundle'), 'assets/index.android.bundle');
+        zip.addBuffer(table, 'resources.arsc', { compress: false });
+        zip.end();
+      });
+      await createSlimNativePackage(source, output, 'android', { repack });
+
+      const [before, after] = await Promise.all([
+        entryFacts(source),
+        entryFacts(output),
+      ]);
+      expect(before['resources.arsc'].method).toBe(0);
+      expect(after['resources.arsc'].method).toBe(8);
+      expect(after['resources.arsc'].crc).toBe(before['resources.arsc'].crc);
+      expect(after['resources.arsc'].usize).toBe(table.length);
+      expect(after['resources.arsc'].csize).toBeLessThan(table.length);
+      const files = await readZipFiles(output);
+      expect(files['resources.arsc'].equals(table)).toBe(true);
+    });
+  }
 });
