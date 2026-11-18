@@ -185,10 +185,12 @@ export default {
   installPackageRequired:
     '请指定要安装的包，例如 "{{scriptName}} install node-hdiffpatch"',
   installFailed: '安装 {{packages}} 失败: {{error}}',
+  allEndpointsUnreachable:
+    '本机无法连接任何一条 API 线路（已逐一探测），问题出在本机网络而非服务端。如果只有某条线路可用，可以用 RNU_API 环境变量指定，例如 RNU_API={{example}}',
   proxyNetworkError:
-    '网络连接异常，可能是代理/VPN 导致。请尝试关闭代理后重试。',
+    '网络连接异常，可能是 DNS、代理/VPN 或证书问题导致。请尝试关闭代理后重试。',
   proxyNetworkErrorTips:
-    '常见解决方法：\n1. 关闭系统代理或 VPN\n2. 检查 HTTP_PROXY / HTTPS_PROXY 环境变量\n3. 检查 .npmrc 中的 proxy 配置',
+    '常见解决方法：\n1. 关闭系统代理或 VPN（或将本服务的域名设为直连）\n2. 检查 HTTP_PROXY / HTTPS_PROXY 环境变量\n3. 检查 .npmrc 中的 proxy 配置\n4. 公司网络会替换 HTTPS 证书时，用 NODE_EXTRA_CA_CERTS 指定公司根证书',
   invalidId: '无效的 id：{{id}}',
   outputPathRequired: '必须指定输出路径。',
   unsupportedFileType: '不支持的文件类型：{{fileType}}',

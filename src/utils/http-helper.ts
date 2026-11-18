@@ -31,15 +31,15 @@ const HEDGE_DELAY_MS = 250;
 // Hedged race instead of pinging every endpoint at once: the preferred (first)
 // url is tried immediately, each following one only after HEDGE_DELAY_MS of
 // silence (or immediately when a previous ping failed). The first success wins
-// and the losing pings are aborted. Falls back to urls[0] when all fail.
-export const testUrls = async (
-  urls?: string[],
+// and the losing pings are aborted. Resolves null when every ping fails.
+export const pickReachableUrl = (
+  urls: string[],
   hedgeDelayMs: number = HEDGE_DELAY_MS,
 ) => {
-  if (!urls?.length) {
-    return null;
+  if (!urls.length) {
+    return Promise.resolve(null);
   }
-  return new Promise<string>((resolve) => {
+  return new Promise<string | null>((resolve) => {
     const controllers: AbortController[] = [];
     let nextIndex = 0;
     let pending = 0;
@@ -62,7 +62,7 @@ export const testUrls = async (
           controller.abort();
         }
       }
-      resolve(winner ?? urls[0]);
+      resolve(winner);
     };
 
     const launchNext = () => {
@@ -101,20 +101,41 @@ export const testUrls = async (
   });
 };
 
+/** Like pickReachableUrl, but falls back to urls[0] when all fail. */
+export const testUrls = async (
+  urls?: string[],
+  hedgeDelayMs: number = HEDGE_DELAY_MS,
+) => {
+  if (!urls?.length) {
+    return null;
+  }
+  return (await pickReachableUrl(urls, hedgeDelayMs)) ?? urls[0];
+};
+
 let baseUrlPromise: Promise<string> | undefined;
+let noEndpointReachable = false;
+
+/**
+ * True when no default endpoint answered the ping and the API base url is the
+ * unverified fallback (defaultEndpoints[0]): a request failing there means the
+ * machine reaches none of the endpoints, not that this one host is down.
+ */
+export const isBaseUrlUnreachableFallback = () => noEndpointReachable;
 
 async function resolveBaseUrl(): Promise<string> {
   const testEndpoint = process.env.PUSHY_REGISTRY || process.env.RNU_API;
   if (testEndpoint) {
     return testEndpoint;
   }
-  const ret = await testUrls(defaultEndpoints.map((url) => `${url}/status`));
-  let baseUrl = defaultEndpoints[0];
-  if (ret) {
-    // remove /status
-    baseUrl = ret.replace('/status', '');
+  const ret = await pickReachableUrl(
+    defaultEndpoints.map((url) => `${url}/status`),
+  );
+  if (!ret) {
+    noEndpointReachable = true;
+    return defaultEndpoints[0];
   }
-  return baseUrl;
+  // remove /status
+  return ret.replace('/status', '');
 }
 
 /**

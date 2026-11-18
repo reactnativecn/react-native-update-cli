@@ -10,6 +10,7 @@ import {
 import fs from 'fs';
 import {
   closeSession,
+  describeNetworkCause,
   get,
   getApiToken,
   getSession,
@@ -21,6 +22,8 @@ import {
   setApiToken,
   uploadTimeoutMs,
 } from '../src/api';
+import * as httpHelper from '../src/utils/http-helper';
+import { t } from '../src/utils/i18n';
 import * as runtime from '../src/utils/runtime';
 
 describe('api.ts session management', () => {
@@ -298,5 +301,99 @@ describe('api.ts error helpers', () => {
     expect(uploadTimeoutMs(100 * mb)).toBe(530_000);
     // a partial megabyte counts as a whole one
     expect(uploadTimeoutMs(100 * mb + 1)).toBe(535_000);
+  });
+});
+
+describe('network failure diagnostics', () => {
+  let runtimeFetchSpy: ReturnType<typeof spyOn> | undefined;
+  let fallbackSpy: ReturnType<typeof spyOn> | undefined;
+
+  afterEach(() => {
+    runtimeFetchSpy?.mockRestore();
+    fallbackSpy?.mockRestore();
+  });
+
+  const coded = (message: string, code: string, name = 'Error') =>
+    Object.assign(new Error(message), { code, name });
+
+  test('describeNetworkCause surfaces the code hidden behind "fetch failed"', () => {
+    const dns = coded('getaddrinfo ENOTFOUND 1.rnupdate.online', 'ENOTFOUND');
+    expect(
+      describeNetworkCause(new Error('fetch failed', { cause: dns })),
+    ).toBe('getaddrinfo ENOTFOUND 1.rnupdate.online');
+
+    const tls = coded(
+      'unable to get local issuer certificate',
+      'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+    );
+    expect(
+      describeNetworkCause(new Error('fetch failed', { cause: tls })),
+    ).toBe(
+      'UNABLE_TO_GET_ISSUER_CERT_LOCALLY: unable to get local issuer certificate',
+    );
+  });
+
+  test('describeNetworkCause reads the first error of an AggregateError', () => {
+    const aggregate = new AggregateError(
+      [coded('connect ECONNREFUSED 1.2.3.4:443', 'ECONNREFUSED')],
+      '',
+    );
+    expect(
+      describeNetworkCause(new Error('fetch failed', { cause: aggregate })),
+    ).toBe('connect ECONNREFUSED 1.2.3.4:443');
+  });
+
+  test('describeNetworkCause returns undefined without a useful cause', () => {
+    expect(describeNetworkCause(new Error('boom'))).toBeUndefined();
+    expect(
+      describeNetworkCause(
+        new Error('fetch failed', { cause: new Error('fetch failed') }),
+      ),
+    ).toBeUndefined();
+  });
+
+  async function failingGet(cause: Error, unreachable: boolean) {
+    runtimeFetchSpy = spyOn(runtime, 'runtimeFetch').mockRejectedValue(
+      new Error('fetch failed', { cause }),
+    );
+    fallbackSpy = spyOn(
+      httpHelper,
+      'isBaseUrlUnreachableFallback',
+    ).mockReturnValue(unreachable);
+    try {
+      await get('/user/login');
+    } catch (e) {
+      return e as Error;
+    }
+    throw new Error('expected get to fail');
+  }
+
+  test('connect timeouts get the cause and the network hints', async () => {
+    const error = await failingGet(
+      coded(
+        'Connect Timeout Error (attempted address: 1.rnupdate.online:443, timeout: 10000ms)',
+        'UND_ERR_CONNECT_TIMEOUT',
+        'ConnectTimeoutError',
+      ),
+      false,
+    );
+    expect(error.message).toContain(
+      'fetch failed (UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error',
+    );
+    expect(error.message).toContain(t('proxyNetworkError'));
+    expect(error.message).not.toContain(
+      t('allEndpointsUnreachable', { example: '' }).slice(0, 10),
+    );
+  });
+
+  test('says so when no endpoint answered the ping', async () => {
+    const error = await failingGet(
+      coded('getaddrinfo ENOTFOUND 1.rnupdate.online', 'ENOTFOUND'),
+      true,
+    );
+    expect(error.message).toContain('RNU_API=');
+    expect(error.message).toContain(
+      t('allEndpointsUnreachable', { example: '' }).slice(0, 10),
+    );
   });
 });

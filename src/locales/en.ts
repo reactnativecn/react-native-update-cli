@@ -201,10 +201,12 @@ This can reduce the risk of inconsistent dependencies and supply chain attacks.
   installPackageRequired:
     'Please specify the package to install, e.g. "{{scriptName}} install node-hdiffpatch"',
   installFailed: 'Failed to install {{packages}}: {{error}}',
+  allEndpointsUnreachable:
+    'None of the API endpoints is reachable from this machine (each was probed), so the problem is in the local network rather than the server. If only one endpoint works for you, pin it with the RNU_API environment variable, e.g. RNU_API={{example}}',
   proxyNetworkError:
-    'Network error — likely caused by a proxy/VPN. Please try disabling your proxy and retry.',
+    'Network error — likely caused by DNS, a proxy/VPN or a certificate problem. Please try disabling your proxy and retry.',
   proxyNetworkErrorTips:
-    'Common fixes:\n1. Disable system proxy or VPN\n2. Check HTTP_PROXY / HTTPS_PROXY environment variables\n3. Check proxy settings in .npmrc',
+    "Common fixes:\n1. Disable system proxy or VPN (or let this service's domains bypass it)\n2. Check HTTP_PROXY / HTTPS_PROXY environment variables\n3. Check proxy settings in .npmrc\n4. If your network re-signs HTTPS certificates, point NODE_EXTRA_CA_CERTS at its root certificate",
   invalidId: 'Invalid id: {{id}}',
   outputPathRequired: 'Output path is required.',
   unsupportedFileType: 'Unsupported file type: {{fileType}}',

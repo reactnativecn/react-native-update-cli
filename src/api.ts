@@ -4,9 +4,14 @@ import path from 'path';
 import type ProgressBar from 'progress';
 import packageJson from '../package.json';
 import type { Package, Session } from './types';
-import { credentialFile, IS_CRESC, pricingPageUrl } from './utils/constants';
+import {
+  credentialFile,
+  defaultEndpoints,
+  IS_CRESC,
+  pricingPageUrl,
+} from './utils/constants';
 import type { HermesBaseServerRecord } from './utils/hermes-base';
-import { getBaseUrl } from './utils/http-helper';
+import { getBaseUrl, isBaseUrlUnreachableFallback } from './utils/http-helper';
 import { t } from './utils/i18n';
 import {
   measureTcpLatency,
@@ -109,13 +114,15 @@ function createRequestError(
   error: unknown,
   requestUrl: string,
   status?: number,
+  detail?: string,
 ) {
-  const message =
+  const baseMessage =
     typeof error === 'string'
       ? error
       : error instanceof Error
         ? error.message
         : String(error);
+  const message = detail ? `${baseMessage} (${detail})` : baseMessage;
   const cause =
     error instanceof Error || (typeof error === 'object' && error !== null)
       ? error
@@ -142,39 +149,120 @@ const PROXY_ERROR_PATTERNS = [
   'ETIMEDOUT',
   'EHOSTUNREACH',
   'ENETUNREACH',
+  // DNS: offline, or a proxy/VPN that hijacks name resolution
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  // undici's own connect/socket failures (Node's fetch)
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+  // a TLS-inspecting corporate proxy re-signing with an untrusted root
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'SELF_SIGNED_CERT_IN_CHAIN',
 ];
 
-function isProxyRelatedError(error: unknown): boolean {
-  const seen = new Set<unknown>();
-  const parts: string[] = [];
+/** The error chain from `error` down through its causes, without cycles. */
+function errorChain(error: unknown): unknown[] {
+  const chain: unknown[] = [];
   let current = error;
-  while (current !== undefined && current !== null && !seen.has(current)) {
-    seen.add(current);
-    if (current instanceof Error) {
-      const code = (current as NodeJS.ErrnoException).code;
-      parts.push(`${current.name} ${code ?? ''} ${current.message}`);
-    } else {
-      parts.push(String(current));
-    }
+  while (
+    current !== undefined &&
+    current !== null &&
+    !chain.includes(current)
+  ) {
+    chain.push(current);
     current =
       typeof current === 'object'
         ? (current as { cause?: unknown }).cause
         : undefined;
+  }
+  return chain;
+}
+
+/**
+ * The underlying reason of a network failure, e.g.
+ * `ENOTFOUND: getaddrinfo ENOTFOUND 1.rnupdate.online`. Node's fetch only says
+ * "fetch failed" and keeps the reason in `cause`, which is otherwise printed
+ * only under RNU_DEBUG=1.
+ */
+export function describeNetworkCause(error: unknown): string | undefined {
+  const top = error instanceof Error ? error.message : String(error);
+  for (const item of errorChain(error).slice(1).reverse()) {
+    if (!(item instanceof Error)) {
+      continue;
+    }
+    // happy-eyeballs connects fail with an AggregateError of per-address errors
+    const inner =
+      !(item as NodeJS.ErrnoException).code &&
+      item instanceof AggregateError &&
+      item.errors[0] instanceof Error
+        ? item.errors[0]
+        : item;
+    const code = (inner as NodeJS.ErrnoException).code;
+    const message = inner.message || item.message;
+    if (!code && (!message || message === top)) {
+      continue;
+    }
+    if (!code) {
+      return message;
+    }
+    return message && !message.includes(code)
+      ? `${code}: ${message}`
+      : message || code;
+  }
+  return undefined;
+}
+
+function isProxyRelatedError(error: unknown): boolean {
+  const parts: string[] = [];
+  for (const current of errorChain(error)) {
+    if (current instanceof Error) {
+      const code = (current as NodeJS.ErrnoException).code;
+      parts.push(`${current.name} ${code ?? ''} ${current.message}`);
+      if (current instanceof AggregateError) {
+        for (const inner of current.errors) {
+          if (inner instanceof Error) {
+            const innerCode = (inner as NodeJS.ErrnoException).code;
+            parts.push(`${inner.name} ${innerCode ?? ''} ${inner.message}`);
+          }
+        }
+      }
+    } else {
+      parts.push(String(current));
+    }
   }
   const lower = parts.join('\n').toLowerCase();
   return PROXY_ERROR_PATTERNS.some((p) => lower.includes(p.toLowerCase()));
 }
 
 /** A request error for `url`, with the proxy hints when a proxy is the likely cause. */
-function networkError(error: unknown, url: string): Error {
-  const baseError = createRequestError(error, url);
-  if (isProxyRelatedError(error)) {
-    return new Error(
-      `${baseError.message}\n\n${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`,
-      { cause: baseError },
+function networkError(
+  error: unknown,
+  url: string,
+  { apiRequest = false }: { apiRequest?: boolean } = {},
+): Error {
+  const baseError = createRequestError(
+    error,
+    url,
+    undefined,
+    describeNetworkCause(error),
+  );
+  const hints: string[] = [];
+  if (apiRequest && isBaseUrlUnreachableFallback()) {
+    hints.push(
+      t('allEndpointsUnreachable', {
+        example: defaultEndpoints[defaultEndpoints.length - 1],
+      }),
     );
   }
-  return baseError;
+  if (isProxyRelatedError(error)) {
+    hints.push(`${t('proxyNetworkError')}\n${t('proxyNetworkErrorTips')}`);
+  }
+  if (!hints.length) {
+    return baseError;
+  }
+  return new Error(`${baseError.message}\n\n${hints.join('\n\n')}`, {
+    cause: baseError,
+  });
 }
 
 async function query(url: string, options: RuntimeRequestInit) {
@@ -184,7 +272,7 @@ async function query(url: string, options: RuntimeRequestInit) {
   try {
     resp = await runtimeFetch(fullUrl, options);
   } catch (error) {
-    throw networkError(error, fullUrl);
+    throw networkError(error, fullUrl, { apiRequest: true });
   }
   const text = await resp.text();
   let json: any;

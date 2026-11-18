@@ -5,7 +5,7 @@ mock.module('../src/utils/runtime', () => ({
   runtimeFetch: runtimeFetchMock,
 }));
 
-import { testUrls } from '../src/utils/http-helper';
+import { pickReachableUrl, testUrls } from '../src/utils/http-helper';
 
 describe('testUrls', () => {
   test('returns null for empty array', async () => {
@@ -112,6 +112,18 @@ describe('testUrls edge cases', () => {
 
     const result = await testUrls(['http://fail1.local', 'http://fail2.local']);
     expect(result).toBe('http://fail1.local');
+  });
+
+  test('pickReachableUrl resolves null when every ping fails', async () => {
+    runtimeFetchMock.mockImplementation(() =>
+      Promise.reject(new Error('fetch failed')),
+    );
+
+    const result = await pickReachableUrl(
+      ['http://fail1.local', 'http://fail2.local'],
+      10,
+    );
+    expect(result).toBeNull();
   });
 
   test('Handles array containing empty strings or malformed URLs', async () => {
