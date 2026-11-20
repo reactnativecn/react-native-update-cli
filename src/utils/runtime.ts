@@ -7,8 +7,9 @@ import {
 } from 'child_process';
 import fs from 'fs';
 import type { Agent as HttpAgent } from 'http';
-import { createConnection } from 'net';
+import { createConnection, isIP } from 'net';
 import path from 'path';
+import { connect as tlsConnect } from 'tls';
 import type { Dispatcher } from 'undici';
 
 export type RuntimeRequestInit = {
@@ -193,10 +194,15 @@ function measureTcpConnectOnce(
   host: string,
   port: number,
   timeout: number,
+  family?: 4 | 6,
 ): Promise<number> {
   return new Promise((resolve) => {
     const startedAt = Date.now();
-    const socket = createConnection({ host, port });
+    const socket = createConnection({
+      host,
+      port,
+      ...(family ? { family } : {}),
+    });
 
     const finish = (latency: number) => {
       socket.removeAllListeners();
@@ -240,6 +246,102 @@ export async function measureTcpLatency(
   return (
     latencies.reduce((sum, latency) => sum + latency, 0) / latencies.length
   );
+}
+
+export type AddressFamily = 4 | 6;
+
+function measureTlsHandshakeOnce(
+  host: string,
+  port: number,
+  timeout: number,
+  family?: AddressFamily,
+): Promise<number> {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    // SNI must be a name: Node refuses an IP literal as servername
+    const socket = tlsConnect({
+      host,
+      port,
+      // a name without an address of this family fails the lookup at once
+      ...(family ? { family } : {}),
+      ...(isIP(host) ? {} : { servername: host }),
+    });
+
+    const finish = (latency: number) => {
+      socket.removeAllListeners();
+      // a late error after destroy must not surface as an unhandled event
+      socket.on('error', () => {});
+      socket.destroy();
+      resolve(latency);
+    };
+
+    socket.setTimeout(timeout);
+    socket.once('secureConnect', () => {
+      finish(Date.now() - startedAt);
+    });
+    socket.once('timeout', () => {
+      finish(Number.POSITIVE_INFINITY);
+    });
+    socket.once('error', () => {
+      finish(Number.POSITIVE_INFINITY);
+    });
+  });
+}
+
+/**
+ * Time to a finished TLS handshake with the host of `input`, the best of
+ * `attempts`; Infinity when none completes (unreachable, or a certificate that
+ * does not verify). Unlike a TCP connect, the handshake is answered by whoever
+ * terminates TLS, so an address fronted by a forwarding entry is timed over
+ * its whole path and not just to the entry. Plain http falls back to the TCP
+ * connect time.
+ */
+export async function measureTlsLatency(
+  input: string,
+  {
+    attempts = 2,
+    timeout = 3000,
+    family,
+  }: {
+    attempts?: number;
+    timeout?: number;
+    family?: AddressFamily;
+  } = {},
+): Promise<number> {
+  let secure = true;
+  try {
+    secure = new URL(input).protocol !== 'http:';
+  } catch {}
+  const { host, port } = resolveTcpTarget(input);
+  const results = await Promise.all(
+    Array.from({ length: attempts }, () =>
+      secure
+        ? measureTlsHandshakeOnce(host, port, timeout, family)
+        : measureTcpConnectOnce(host, port, timeout, family),
+    ),
+  );
+  return Math.min(...results, Number.POSITIVE_INFINITY);
+}
+
+/**
+ * measureTlsLatency over IPv4 and over IPv6 at once, with the family that won.
+ * The two can lead to different places: an edge network may answer AAAA
+ * queries with an address on another continent while its A records are near,
+ * and a client that prefers IPv6 would then take the far path for the whole
+ * upload. A tie goes to IPv4. No family when neither completes.
+ */
+export async function measureTlsLatencyByFamily(
+  input: string,
+  options: { attempts?: number; timeout?: number } = {},
+): Promise<{ latency: number; family?: AddressFamily }> {
+  const [v4, v6] = await Promise.all([
+    measureTlsLatency(input, { ...options, family: 4 }),
+    measureTlsLatency(input, { ...options, family: 6 }),
+  ]);
+  if (!Number.isFinite(v4) && !Number.isFinite(v6)) {
+    return { latency: Number.POSITIVE_INFINITY };
+  }
+  return v6 < v4 ? { latency: v6, family: 6 } : { latency: v4, family: 4 };
 }
 
 export function detectPackageManager(

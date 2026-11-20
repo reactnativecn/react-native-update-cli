@@ -95,7 +95,13 @@ export function multipartRequest(
 export function sendUploadRequest(
   url: string,
   request: UploadRequest,
-  options: { agent?: HttpAgent; signal?: AbortSignal; userAgent?: string },
+  options: {
+    agent?: HttpAgent;
+    signal?: AbortSignal;
+    userAgent?: string;
+    /** Connect over this address family only (no effect through a proxy). */
+    family?: 4 | 6;
+  },
 ): Promise<UploadResponse> {
   const { request: send } = url.startsWith('https:')
     ? (require('https') as typeof import('https'))
@@ -109,6 +115,7 @@ export function sendUploadRequest(
         ...request.headers,
       },
       agent: options.agent,
+      ...(options.family && !options.agent ? { family: options.family } : {}),
     });
     const fail = (error: unknown) => {
       request.body.destroy();

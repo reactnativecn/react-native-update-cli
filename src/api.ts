@@ -14,7 +14,9 @@ import type { HermesBaseServerRecord } from './utils/hermes-base';
 import { getBaseUrl, isBaseUrlUnreachableFallback } from './utils/http-helper';
 import { t } from './utils/i18n';
 import {
+  type AddressFamily,
   measureTcpLatency,
+  measureTlsLatencyByFamily,
   proxyAgentFor,
   type RuntimeRequestInit,
   type RuntimeResponse,
@@ -393,6 +395,7 @@ async function sendUpload(
   bar: ProgressBar,
   buildRequest: (fileStream: fs.ReadStream) => UploadRequest,
   slice: UploadSlice = { start: 0, end: fileSize, retries: UPLOAD_MAX_RETRIES },
+  family?: AddressFamily,
 ): Promise<UploadResponse> {
   const timeoutMs = uploadTimeoutMs(slice.end - slice.start);
   // HTTP(S)_PROXY / NO_PROXY, like every other request of the CLI
@@ -419,6 +422,7 @@ async function sendUpload(
         agent,
         signal: controller.signal,
         userAgent,
+        family,
       });
     } catch (rawError) {
       fileStream.destroy();
@@ -504,6 +508,98 @@ async function sendChunks(
   }
 }
 
+/** Above this TCP connect time the primary address counts as far away. */
+const UPLOAD_PRIMARY_MAX_LATENCY_MS = 150;
+
+/** An address to post the upload form to, and the family that probed best. */
+export interface UploadTarget {
+  url: string;
+  family?: AddressFamily;
+}
+
+/**
+ * The addresses to post the upload form to, best first; every one of them
+ * accepts the same form. `backupUrls` (newer servers) lists all alternatives
+ * to `url`, `backupUrl` (older ones) names a single one.
+ *
+ * The primary stays first while it is near: the alternatives are accelerated
+ * endpoints, worth a detour only when the direct path is poor.
+ * When it is far or unreachable, the alternatives are timed by TLS handshake,
+ * over IPv4 and IPv6 apart, and tried fastest first with the family that won;
+ * the primary goes last.
+ */
+export async function chooseUploadUrls(instruction: {
+  url: string;
+  backupUrl?: string;
+  backupUrls?: string[];
+}): Promise<UploadTarget[]> {
+  const urls = (items: string[]) => items.map((item) => ({ url: item }));
+  const { url, backupUrl } = instruction;
+  const listed = Array.isArray(instruction.backupUrls)
+    ? instruction.backupUrls.filter((item) => typeof item === 'string' && item)
+    : [];
+  const backups = [
+    ...new Set([...(backupUrl ? [backupUrl] : []), ...listed]),
+    // GCS hands out the same url twice: nothing to switch to, no probe needed
+  ].filter((item) => item !== url);
+  if (backups.length === 0) {
+    return urls([url]);
+  }
+  if (global.USE_ACC_OSS) {
+    return urls([...backups, url]);
+  }
+  if (resolveProxy(url)) {
+    // a direct probe says nothing about the path through a proxy (and
+    // usually cannot connect at all): the primary url stays in that case
+    return urls([url, ...backups]);
+  }
+  const latency = await measureTcpLatency(url, {
+    attempts: 4,
+    timeout: 1000,
+  });
+  if (Number.isFinite(latency) && latency <= UPLOAD_PRIMARY_MAX_LATENCY_MS) {
+    return urls([url, ...backups]);
+  }
+  if (backups.length === 1) {
+    return urls([backups[0], url]);
+  }
+  const timed = await Promise.all(
+    backups.map(async (item) => ({
+      url: item,
+      ...(await measureTlsLatencyByFamily(item)),
+    })),
+  );
+  // Array.prototype.sort is stable: ties keep the server's order
+  timed.sort((a, b) =>
+    a.latency === b.latency ? 0 : a.latency < b.latency ? -1 : 1,
+  );
+  return [
+    ...timed.map(({ url: item, family }) => ({
+      url: item,
+      ...(family ? { family } : {}),
+    })),
+    { url },
+  ];
+}
+
+/**
+ * An answer worth trying the next address for: whatever fronts the store is
+ * failing (5xx), turned the request away (403/410) or caps uploads below the
+ * store's own limit (413). A store that refuses the form itself answers the
+ * same everywhere, which costs one more short request.
+ */
+function uploadAnswerIsRetriableElsewhere(status: number): boolean {
+  return status >= 500 || status === 403 || status === 410 || status === 413;
+}
+
+function uploadHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
 export async function uploadFile(fn: string, appId?: string | number) {
   const fileSize = fs.statSync(fn).size;
   // appId 用于服务端路由:绑定了自托管节点(rnu-node)的应用,
@@ -515,24 +611,9 @@ export async function uploadFile(fn: string, appId?: string | number) {
     chunked: true,
     size: fileSize,
   });
-  const { url, backupUrl, formData, maxSize } = resp;
-  let realUrl = url;
-  // GCS hands out the same url twice: nothing to switch to, no probe needed
-  if (backupUrl && backupUrl !== url) {
-    if (global.USE_ACC_OSS) {
-      realUrl = backupUrl;
-    } else if (!resolveProxy(url)) {
-      // a direct TCP probe says nothing about the path through a proxy (and
-      // usually cannot connect at all): the primary url stays in that case
-      const latency = await measureTcpLatency(url, {
-        attempts: 4,
-        timeout: 1000,
-      });
-      if (!Number.isFinite(latency) || latency > 150) {
-        realUrl = backupUrl;
-      }
-    }
-  }
+  const { formData, maxSize } = resp;
+  const uploadTargets = await chooseUploadUrls(resp);
+  let realUrl = uploadTargets[0].url;
 
   if (maxSize && fileSize > filesizeParser(maxSize)) {
     const readableFileSize = `${(fileSize / 1048576).toFixed(1)}m`;
@@ -609,17 +690,41 @@ export async function uploadFile(fn: string, appId?: string | number) {
     return { hash: resp.chunked.key as string };
   }
 
-  let res: UploadResponse;
-  try {
-    res = await sendUpload(
-      fn,
-      realUrl,
-      fileSize,
-      bar,
-      postForm(formData, fileSize),
+  // Only the plain form upload has alternatives: a presigned PUT and the parts
+  // of a chunked upload are bound to the address they were issued for.
+  let res: UploadResponse | undefined;
+  for (const [index, target] of uploadTargets.entries()) {
+    realUrl = target.url;
+    const next = uploadTargets[index + 1]?.url;
+    let reason: string;
+    try {
+      res = await sendUpload(
+        fn,
+        target.url,
+        fileSize,
+        bar,
+        postForm(formData, fileSize),
+        undefined,
+        target.family,
+      );
+      if (!next || !uploadAnswerIsRetriableElsewhere(res.status)) {
+        break;
+      }
+      reason = `${res.status}`;
+    } catch (error) {
+      if (!next) {
+        return rethrowUploadError(error);
+      }
+      reason = error instanceof Error ? error.message : String(error);
+    }
+    console.warn(
+      `\nUpload via ${uploadHost(target.url)} failed (${reason}), trying ${uploadHost(next)}...`,
     );
-  } catch (error) {
-    return rethrowUploadError(error);
+    bar.curr = 0;
+  }
+  if (!res) {
+    // unreachable: the last address either answers or throws above
+    throw createRequestError('Upload failed', realUrl);
   }
 
   if (res.status > 299) {
