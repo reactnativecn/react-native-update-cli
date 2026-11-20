@@ -132,6 +132,23 @@ describe('upload address selection', () => {
     ]);
   });
 
+  test('a primary slow over its preferred family competes with its fastest one', async () => {
+    // the default upload address on an edge network whose AAAA answer is far
+    const esa = 'https://up.example';
+    setup({}, 180, { [esa]: { v4: 8, v6: 360 }, [acc]: 11, [oss]: 560 });
+    expect(
+      await chooseUploadUrls({
+        url: esa,
+        backupUrl: acc,
+        backupUrls: [acc, oss],
+      }),
+    ).toEqual([
+      { url: esa, family: 4 },
+      { url: acc, family: 4 },
+      { url: oss, family: 4 },
+    ]);
+  });
+
   test('a tie between the families goes to IPv4', async () => {
     setup({}, 320, { [acc]: 180, [node]: { v4: 20, v6: 20 } });
     expect(
@@ -145,11 +162,12 @@ describe('upload address selection', () => {
 
   test('alternatives that do not answer go behind those that do', async () => {
     setup({}, Number.POSITIVE_INFINITY, { [acc]: 200 });
+    // the primary keeps its place among those that do not answer
     expect(await order({ url: oss, backupUrls: [node, acc, entry] })).toEqual([
       acc,
+      oss,
       node,
       entry,
-      oss,
     ]);
   });
 

@@ -522,11 +522,13 @@ export interface UploadTarget {
  * accepts the same form. `backupUrls` (newer servers) lists all alternatives
  * to `url`, `backupUrl` (older ones) names a single one.
  *
- * The primary stays first while it is near: the alternatives are accelerated
- * endpoints, worth a detour only when the direct path is poor.
- * When it is far or unreachable, the alternatives are timed by TLS handshake,
- * over IPv4 and IPv6 apart, and tried fastest first with the family that won;
- * the primary goes last.
+ * The primary stays first while its TCP connect takes at most 150 ms, unprobed
+ * further. When it is far or unreachable, every address, the primary
+ * included, is timed by TLS handshake over IPv4 and IPv6 apart and tried
+ * fastest first with the family that won; ties keep the server's order. The
+ * family matters: an edge network may answer AAAA queries with an address on
+ * another continent while its A records are near, and the TCP probe above
+ * takes whichever family the system prefers.
  */
 export async function chooseUploadUrls(instruction: {
   url: string;
@@ -560,11 +562,12 @@ export async function chooseUploadUrls(instruction: {
   if (Number.isFinite(latency) && latency <= UPLOAD_PRIMARY_MAX_LATENCY_MS) {
     return urls([url, ...backups]);
   }
-  if (backups.length === 1) {
-    return urls([backups[0], url]);
+  if (!Array.isArray(instruction.backupUrls)) {
+    // an older server: one backup, chosen on the primary's probe alone
+    return urls([...backups, url]);
   }
   const timed = await Promise.all(
-    backups.map(async (item) => ({
+    [url, ...backups].map(async (item) => ({
       url: item,
       ...(await measureTlsLatencyByFamily(item)),
     })),
@@ -573,13 +576,10 @@ export async function chooseUploadUrls(instruction: {
   timed.sort((a, b) =>
     a.latency === b.latency ? 0 : a.latency < b.latency ? -1 : 1,
   );
-  return [
-    ...timed.map(({ url: item, family }) => ({
-      url: item,
-      ...(family ? { family } : {}),
-    })),
-    { url },
-  ];
+  return timed.map(({ url: item, family }) => ({
+    url: item,
+    ...(family ? { family } : {}),
+  }));
 }
 
 /**
