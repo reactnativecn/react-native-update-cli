@@ -496,9 +496,10 @@ export interface VersionCheck {
  * network.
  *
  * With `wait: true` (the `-v`/`version` command) the registry is queried
- * first and the latest versions are printed inline. Otherwise the registry
- * check runs in the background and the returned `printHints` shows what is
- * newer once the command is done — the command itself is never delayed by it.
+ * first and the latest versions are printed inline. Otherwise a fresh cached
+ * answer is printed inline too; without one the registry check runs in the
+ * background and the returned `printHints` shows what is newer once the
+ * command is done — the command itself is never delayed by it.
  */
 export async function printVersionCommand({
   wait = true,
@@ -514,6 +515,14 @@ export async function printVersionCommand({
   });
   if (wait) {
     await check;
+  } else {
+    // A fresh cache answers synchronously (only promise ticks), so yield one
+    // macrotask: on a cache hit the latest versions go on the startup lines
+    // and no second hint is printed at the end; a cold cache never waits here.
+    await Promise.race([
+      check,
+      new Promise<void>((resolve) => setImmediate(resolve)),
+    ]);
   }
   const [latestCliVersion, latestRnuVersion] = latest ?? [];
 
@@ -573,7 +582,7 @@ export async function printVersionCommand({
     console.log(t('rnuVersionNotFound'));
   }
 
-  let hinted = wait; // inline tags already shown
+  let hinted = latest !== undefined; // inline tags already shown
   const printHints = () => {
     if (hinted || !latest) {
       return;
