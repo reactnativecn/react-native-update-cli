@@ -36,7 +36,8 @@ type NormalizedBundleOptions = {
   taro: boolean;
   expo: boolean;
   rncli: boolean;
-  hermes: boolean;
+  /** undefined = platform default (harmony compiles Hermes, others detect) */
+  hermes?: boolean;
   hermesBase: string;
   verifyHermesBase: boolean;
   resetCache: boolean;
@@ -132,7 +133,14 @@ export function normalizeBundleOptions(
     taro: getBooleanOption(translatedOptions, 'taro', false),
     expo: getBooleanOption(translatedOptions, 'expo', false),
     rncli: getBooleanOption(translatedOptions, 'rncli', false),
-    hermes: getBooleanOption(translatedOptions, 'hermes', false),
+    // Keep "not given" distinct from false: harmony compiles Hermes unless
+    // the user opts out with `--no-hermes`, see
+    // runReactNativeBundleCommand.
+    hermes: isClearedFlag(translatedOptions, 'hermes')
+      ? false
+      : translatedOptions.hermes === undefined
+        ? undefined
+        : getBooleanOption(translatedOptions, 'hermes', false),
     hermesBase: getStringOption(translatedOptions, 'hermesBase', 'auto'),
     verifyHermesBase: getBooleanOption(
       translatedOptions,

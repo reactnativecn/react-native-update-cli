@@ -90,7 +90,8 @@ export class CLIProviderImpl implements CLIProvider {
           taro: options.taro || false,
           expo: options.expo || false,
           rncli: options.rncli || false,
-          hermes: options.hermes || false,
+          // omitted when unset: a present-but-undefined key reads as --no-hermes
+          ...(options.hermes !== undefined && { hermes: options.hermes }),
           hermesBase: options.hermesBase || 'auto',
           verifyHermesBase: options.verifyHermesBase ?? true,
           resetCache: options.resetCache ?? true,

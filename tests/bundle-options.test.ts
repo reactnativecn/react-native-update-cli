@@ -74,6 +74,19 @@ describe('normalizeBundleOptions', () => {
       normalizeBundleOptions({ sourcemap: true }, 'android').sourcemap,
     ).toBe(true);
   });
+  test('hermes stays unset unless given, so harmony can default it on', () => {
+    expect(normalizeBundleOptions({}, 'harmony').hermes).toBeUndefined();
+    expect(normalizeBundleOptions({ hermes: true }, 'harmony').hermes).toBe(
+      true,
+    );
+    // --no-hermes: cli-arguments keeps the key with an undefined value
+    expect(
+      normalizeBundleOptions({ hermes: undefined }, 'harmony').hermes,
+    ).toBe(false);
+    expect(normalizeBundleOptions({ hermes: false }, 'harmony').hermes).toBe(
+      false,
+    );
+  });
 });
 
 describe('bundleCommands.bundle arguments', () => {
