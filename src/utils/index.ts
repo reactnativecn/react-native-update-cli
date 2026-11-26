@@ -151,9 +151,18 @@ function requireBundle(
   return bundleFile;
 }
 
+// Android and Harmony stamp debug builds with "0" on purpose (a debug rebuild
+// must not look like a new binary), so a present-but-zero value means a debug
+// package, not an outdated react-native-update.
 function requireBuildTime(value: unknown): number {
-  const buildTime = Number(value);
-  if (!Number.isFinite(buildTime) || buildTime === 0) {
+  const buildTime =
+    value === undefined || value === null || value === ''
+      ? Number.NaN
+      : Number(value);
+  if (buildTime === 0) {
+    throw new Error(t('buildTimeIsDebug'));
+  }
+  if (!Number.isFinite(buildTime)) {
     throw new Error(t('buildTimeNotFound'));
   }
   return buildTime;
@@ -304,7 +313,7 @@ export async function getAabInfo(fn: string) {
     }
   }
 
-  let buildTime = 0;
+  let buildTime: unknown;
   const appCredential = {};
 
   // Find application node
@@ -346,13 +355,9 @@ export async function getAabInfo(fn: string) {
             value = resolvedValue;
           }
         }
-        buildTime = Number(value);
+        buildTime = value;
       }
     }
-  }
-
-  if (!Number.isFinite(buildTime) || buildTime === 0) {
-    throw new Error(t('buildTimeNotFound'));
   }
 
   // The JS bundle lives in the base module; these are the same bytes the
@@ -371,7 +376,7 @@ export async function getAabInfo(fn: string) {
 
   return {
     versionName,
-    buildTime,
+    buildTime: requireBuildTime(buildTime),
     ...(bundleHash ? { bundleHash } : {}),
     ...appCredential,
   };

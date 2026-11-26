@@ -38,6 +38,8 @@ export default {
   apkUploadSuccess:
     '已成功上传apk原生包（id: {{id}}, version: {{version}}, buildTime: {{buildTime}}）',
   boundTo: ', 已绑定：{{name}} ({{id}})',
+  buildTimeIsDebug:
+    '此包的编译时间戳为 0，说明它是 debug 构建。请用 release 构建打包后再上传。',
   buildTimeNotFound:
     '无法获取此包的编译时间戳。请更新 `react-native-update` 到最新版本后重新打包上传。',
   bundleCommandError: '"react-native bundle" 命令退出，代码为 {{code}}。',

@@ -220,6 +220,30 @@ describe('packageCommands parse*', () => {
       appKey: 'k',
     });
   });
+
+  test('reports a debug build when the build timestamp is 0', async () => {
+    const appPath = path.join(tempDir, 'debug.app');
+    await createZip(appPath, {
+      'resources/rawfile/bundle.harmony.js': 'console.log("hi");',
+      'resources/rawfile/meta.json': JSON.stringify({
+        versionName: '1.2.3',
+        pushy_build_time: '0',
+      }),
+    });
+
+    await expect(utils.getAppInfo(appPath)).rejects.toThrow(/debug/);
+  });
+
+  test('reports a missing build timestamp when meta.json is absent', async () => {
+    const appPath = path.join(tempDir, 'nometa.app');
+    await createZip(appPath, {
+      'resources/rawfile/bundle.harmony.js': 'console.log("hi");',
+    });
+
+    const error = await utils.getAppInfo(appPath).catch((e: Error) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toMatch(/debug/);
+  });
 });
 
 describe('choosePackage', () => {

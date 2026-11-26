@@ -39,6 +39,8 @@ export default {
   apkUploadSuccess:
     'Successfully uploaded APK native package (id: {{id}}, version: {{version}}, buildTime: {{buildTime}})',
   boundTo: ', bound to: {{name}} ({{id}})',
+  buildTimeIsDebug:
+    'The build timestamp of this package is 0, which means it is a debug build. Please build it in release mode and upload again.',
   buildTimeNotFound:
     'Cannot get the build timestamp of this package. Please update `react-native-update` to the latest version and re-package and upload.',
   bundleCommandError:
